@@ -39,7 +39,7 @@ namespace Optimisation_Tool
                 ["Reglages"]  = new Lazy<UserControl>(() => new PageReglages(this)),
             };
 
-            Loaded += async (_, _) =>
+            Loaded += (_, _) =>
             {
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
@@ -134,12 +134,6 @@ namespace Optimisation_Tool
                 TaskbarInfo.ProgressState = TaskbarItemProgressState.Normal;
                 TaskbarInfo.ProgressValue = Math.Max(0, Math.Min(1, pct / 100.0));
             });
-        }
-
-        public void SetTaskbarIndeterminate()
-        {
-            Dispatcher.BeginInvoke(() =>
-                TaskbarInfo.ProgressState = TaskbarItemProgressState.Indeterminate);
         }
 
         public void ClearTaskbarProgress()

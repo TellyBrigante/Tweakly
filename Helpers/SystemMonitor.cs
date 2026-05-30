@@ -76,11 +76,28 @@ namespace Optimisation_Tool.Helpers
         }
 
         // ── Processus : compte + plus gros consommateurs CPU & RAM ────────────
+        // Le balayage de TOUS les process (WorkingSet64 + TotalProcessorTime) est
+        // l'opération la plus coûteuse → on la rafraîchit toutes les ~2 s seulement
+        // (le compte/top n'a pas besoin d'une granularité 1 s) ; entre-temps : cache.
         private static System.Collections.Generic.Dictionary<int, TimeSpan> _prevCpu = new();
         private static DateTime _prevStamp;
+        private static DateTime _procCacheTime;
+        private static (int procs, string topCpu, double topCpuPct, string topRam, double topRamMB) _procCache;
 
         private static void CollectProcesses(MonSnapshot s)
         {
+            // Réutiliser le cache si le dernier balayage date de moins de 1,8 s
+            if (_procCacheTime != default &&
+                (DateTime.UtcNow - _procCacheTime).TotalMilliseconds < 1800)
+            {
+                s.Processes  = _procCache.procs;
+                s.TopCpuName = _procCache.topCpu;
+                s.TopCpuPct  = _procCache.topCpuPct;
+                s.TopRamName = _procCache.topRam;
+                s.TopRamMB   = _procCache.topRamMB;
+                return;
+            }
+
             try
             {
                 var procs = Process.GetProcesses();
@@ -124,6 +141,10 @@ namespace Optimisation_Tool.Helpers
                 s.TopCpuPct  = Math.Max(0, Math.Min(100, bestCpu));
                 s.TopRamName = Short(bestRamName);
                 s.TopRamMB   = bestRam / (1024.0 * 1024.0);
+
+                // Mémoriser pour les ticks intermédiaires
+                _procCache = (s.Processes, s.TopCpuName, s.TopCpuPct, s.TopRamName, s.TopRamMB);
+                _procCacheTime = DateTime.UtcNow;
             }
             catch { }
         }
@@ -220,8 +241,9 @@ namespace Optimisation_Tool.Helpers
                     _ramSticks++;
                     if (o["Capacity"] != null) totalBytes += Convert.ToUInt64(o["Capacity"]);
                     if (_ramSpeed == 0 && o["Speed"] != null) _ramSpeed = Convert.ToInt32(o["Speed"]);
-                    if (_ramType.Length == 0)
-                        typeMap.TryGetValue(Convert.ToInt32(o["SMBIOSMemoryType"] ?? 0), out _ramType);
+                    if (_ramType.Length == 0 &&
+                        typeMap.TryGetValue(Convert.ToInt32(o["SMBIOSMemoryType"] ?? 0), out var tname))
+                        _ramType = tname;
                     o.Dispose();
                 }
                 _ramInstalledGB = totalBytes / (1024.0 * 1024.0 * 1024.0);
@@ -252,8 +274,21 @@ namespace Optimisation_Tool.Helpers
             catch { }
         }
 
+        // nvidia-smi spawn un process à chaque appel → rafraîchi toutes les ~2 s (cache entre-temps)
+        private static DateTime _gpuCacheTime;
+        private static (bool ok, string name, double usage, double vu, double vt, double temp, double watts, double mhz) _gpuCache;
+
         private static void CollectGpu(MonSnapshot s)
         {
+            if (_gpuCacheTime != default &&
+                (DateTime.UtcNow - _gpuCacheTime).TotalMilliseconds < 1800)
+            {
+                s.GpuOk = _gpuCache.ok; s.GpuName = _gpuCache.name; s.GpuUsage = _gpuCache.usage;
+                s.GpuVramUsedMB = _gpuCache.vu; s.GpuVramTotalMB = _gpuCache.vt;
+                s.GpuTemp = _gpuCache.temp; s.GpuWatts = _gpuCache.watts; s.GpuMHz = _gpuCache.mhz;
+                return;
+            }
+
             try
             {
                 using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
@@ -288,6 +323,10 @@ namespace Optimisation_Tool.Helpers
                 s.GpuWatts       = D(parts[5]);
                 s.GpuMHz         = D(parts[6]);
                 s.GpuOk          = true;
+
+                _gpuCache = (s.GpuOk, s.GpuName, s.GpuUsage, s.GpuVramUsedMB,
+                             s.GpuVramTotalMB, s.GpuTemp, s.GpuWatts, s.GpuMHz);
+                _gpuCacheTime = DateTime.UtcNow;
             }
             catch { s.GpuOk = false; }
         }
