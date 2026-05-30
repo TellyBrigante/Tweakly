@@ -58,10 +58,13 @@ namespace Optimisation_Tool
                 NavigateTo(BtnNavNettoyage);
 
 #if !DEBUG
-                // Vérification silencieuse des MAJ au démarrage (uniquement en build distribué)
+                // MAJ : vérification au démarrage + périodique (uniquement en build distribué).
                 // En DEBUG (développement), on ne vérifie jamais : c'est nous la version de référence.
                 if (Settings.AutoUpdate)
+                {
                     _ = CheckUpdateSilentAsync();
+                    StartUpdateWatcher();   // re-vérifie toutes les 30 min pendant que l'app tourne
+                }
 #endif
             };
         }
@@ -69,12 +72,35 @@ namespace Optimisation_Tool
         // ── Mise à jour : overlay plein écran ─────────────────────────────────
 
         private string? _pendingBat;
+        private System.Windows.Threading.DispatcherTimer? _updateWatcher;
 
         private async Task CheckUpdateSilentAsync()
         {
             try
             {
                 await Task.Delay(2500);   // laisser l'UI charger d'abord
+                await TryOfferUpdateAsync();
+            }
+            catch (Exception ex) { Log($"MAJ auto : erreur — {ex.Message}"); }
+        }
+
+        // Vérification périodique « en direct » pendant que l'app reste ouverte
+        private void StartUpdateWatcher()
+        {
+            _updateWatcher = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(30)
+            };
+            _updateWatcher.Tick += async (_, _) => await TryOfferUpdateAsync();
+            _updateWatcher.Start();
+        }
+
+        private async Task TryOfferUpdateAsync()
+        {
+            if (!Settings.AutoUpdate) return;
+            if (UpdateOverlay.Visibility == Visibility.Visible) return; // déjà en cours
+            try
+            {
                 var (hasUpdate, tag, _, assetUrl) = await PageReglages.CheckForUpdateAsync();
                 if (hasUpdate && !string.IsNullOrEmpty(assetUrl))
                 {
