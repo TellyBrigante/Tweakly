@@ -89,6 +89,42 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
+            <!-- ══ Sous-onglets : Spécifications / Compatibilité ══════════════ -->
+            <Border Background="{DynamicResource ThBg}"
+                    BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                    CornerRadius="10" Padding="4"
+                    HorizontalAlignment="Left" Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnTabSpecs" Click="BtnTabSpecs_Click" Cursor="Hand" Height="32" Width="150">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" CornerRadius="7" Background="Transparent">
+                                    <TextBlock x:Name="Lbl" Text="Sp&#233;cifications"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="12" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="BtnTabCompat" Click="BtnTabCompat_Click" Cursor="Hand" Height="32" Width="190">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" CornerRadius="7" Background="Transparent">
+                                    <TextBlock x:Name="Lbl" Text="Compatibilit&#233; PCIe / M.2"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="12" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- ══════════════════ PANNEAU SPÉCIFICATIONS ════════════════════ -->
+            <StackPanel x:Name="PanelSpecs">
+
             <!-- ══ Score d'optimisation — carte moderne ══════════════════════ -->
             <Border BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="14" Padding="22,18">
                 <Border.Background>
@@ -296,6 +332,79 @@
                 </Border>
 
             </Grid>
+
+            </StackPanel><!-- fin PanelSpecs -->
+
+            <!-- ══════════════════ PANNEAU COMPATIBILITÉ ═════════════════════ -->
+            <StackPanel x:Name="PanelCompat" Visibility="Collapsed">
+
+                <!-- Tuile GPU — Compatibilité PCIe -->
+                <Border Style="{StaticResource TileStyle}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="COMPATIBILIT&#201; PCIe — CARTE GRAPHIQUE" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtCompatGpuName" Text="Analyse&#8230;"
+                                   Foreground="{DynamicResource ThTextBody}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtCompatGpuGen" Text=""
+                                   Foreground="{DynamicResource ThTextSub}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,6,0,0"/>
+                        <TextBlock x:Name="TxtCompatGpuBw" Text=""
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,2,0,0"/>
+
+                        <!-- Barre bande passante -->
+                        <Grid Height="8" Margin="0,12,0,6">
+                            <Border Background="{DynamicResource ThTrack}" CornerRadius="4"/>
+                            <Grid x:Name="CompatGpuBar" ClipToBounds="True">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="CompatGpuFill" Grid.Column="0" Background="#2EC46A" CornerRadius="4"/>
+                            </Grid>
+                        </Grid>
+                        <TextBlock x:Name="TxtCompatGpuStatus" Text=""
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5" FontWeight="SemiBold"
+                                   Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Tuile NVMe — Compatibilité M.2 -->
+                <Border Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="COMPATIBILIT&#201; M.2 — STOCKAGE NVMe" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtCompatNvmeEmpty" Text="Analyse&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,2,0,0"/>
+                        <ItemsControl x:Name="CompatNvmeList" Margin="0,4,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,6,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0">
+                                            <TextBlock Text="{Binding Name}"
+                                                       Foreground="{DynamicResource ThTextBody}"
+                                                       FontFamily="{StaticResource AppFont}" FontSize="12.5" FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Info}"
+                                                       Foreground="{DynamicResource ThTextDim}"
+                                                       FontFamily="{StaticResource AppFont}" FontSize="11" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Background="{DynamicResource ThPill}"
+                                                CornerRadius="7" Padding="10,4" VerticalAlignment="Center" Margin="10,0,0,0">
+                                            <TextBlock Text="{Binding Badge}" Foreground="{Binding BadgeColor}"
+                                                       FontFamily="Consolas" FontSize="11.5" FontWeight="Bold"/>
+                                        </Border>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel><!-- fin PanelCompat -->
 
         </StackPanel>
     </ScrollViewer>

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -12,10 +14,20 @@ using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
+    // Ligne d'un disque NVMe dans l'onglet Compatibilité
+    public sealed class NvmeItem
+    {
+        public string Name      { get; set; } = "";
+        public string Info      { get; set; } = "";
+        public string Badge     { get; set; } = "";
+        public Brush  BadgeColor { get; set; } = Brushes.Gray;
+    }
+
     public partial class PageSpecs : UserControl
     {
         private readonly MainWindow _main;
         private bool   _loaded   = false;
+        private bool   _compatLoaded = false;
         private string _biosMfr  = "";
         private string _biosModel = "";
 
@@ -25,12 +37,43 @@ namespace Optimisation_Tool.Pages
             InitializeComponent();
         }
 
+        // ── Sous-onglets Spécifications / Compatibilité ─────────────────────────
+
+        private void BtnTabSpecs_Click(object sender, RoutedEventArgs e)
+        {
+            PanelSpecs.Visibility  = Visibility.Visible;
+            PanelCompat.Visibility = Visibility.Collapsed;
+            StyleTab(BtnTabSpecs, true);
+            StyleTab(BtnTabCompat, false);
+        }
+
+        private void BtnTabCompat_Click(object sender, RoutedEventArgs e)
+        {
+            PanelSpecs.Visibility  = Visibility.Collapsed;
+            PanelCompat.Visibility = Visibility.Visible;
+            StyleTab(BtnTabSpecs, false);
+            StyleTab(BtnTabCompat, true);
+            if (!_compatLoaded) { _compatLoaded = true; _ = LoadCompatAsync(); }
+        }
+
+        private static void StyleTab(Button btn, bool active)
+        {
+            if (btn.Template.FindName("Bg",  btn) is not Border bg)     return;
+            if (btn.Template.FindName("Lbl", btn) is not TextBlock lbl) return;
+            bg.Background  = active ? new SolidColorBrush(Color.FromRgb(0x25, 0x4E, 0x8C))
+                                    : new SolidColorBrush(Colors.Transparent);
+            lbl.Foreground = active ? new SolidColorBrush(Colors.White)
+                                    : ThemeManager.Brush("ThTextDim");
+        }
+
         // ── Chargement ────────────────────────────────────────────────────────
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
             if (_loaded) return;
             _loaded = true;
+
+            StyleTab(BtnTabSpecs, true);   // onglet Spécifications actif par défaut
 
             // Matériel + score en parallèle au premier affichage
             await Task.WhenAll(LoadHardwareAsync(), LoadScoreAsync());
@@ -773,6 +816,205 @@ namespace Optimisation_Tool.Pages
             ScoreProgressBar.ColumnDefinitions[1].Width = new GridLength(100, GridUnitType.Star);
             await LoadScoreAsync();
             BtnRefreshScore.IsEnabled = true;
+        }
+
+        // ── Compatibilité PCIe / M.2 ────────────────────────────────────────────
+
+        private static readonly Dictionary<int, string> GenName = new()
+            { {1,"PCIe 1.0"}, {2,"PCIe 2.0"}, {3,"PCIe 3.0"}, {4,"PCIe 4.0"}, {5,"PCIe 5.0"} };
+        private static readonly Dictionary<int, double> BwLane = new()
+            { {1,0.25}, {2,0.50}, {3,0.985}, {4,1.969}, {5,3.938} };  // Go/s par voie
+
+        // Table de specs constructeur des SSD NVMe courants (regex → gen, voies)
+        private static readonly (string pat, int gen, int w)[] NvmeLut =
+        {
+            ("990 ?PRO",4,4), ("980 ?PRO",4,4), ("970 ?EVO ?Plus",3,4), ("970 ?EVO",3,4),
+            ("970 ?PRO",3,4), ("Samsung.*980",3,4),
+            ("SN850X",4,4), ("SN850",4,4), ("SN770",4,4), ("SN750",3,4), ("SN570",3,4), ("SN530",3,4),
+            ("CS3030",3,4), ("CS2230",3,4), ("CS1030",3,4),
+            ("FireCuda 530",4,4), ("FireCuda 520",4,4), ("FireCuda 510",3,4),
+            ("T700",5,4), ("T500",4,4), ("P5 ?Plus",4,4), ("P3 ?Plus",4,4), ("P5",3,4), ("P3",3,4), ("P2",3,4),
+            ("Platinum P41",4,4), ("Gold P31",3,4), ("P41",4,4), ("P31",3,4),
+            ("S70",4,4), ("S50 ?Lite",4,4), ("S50",4,4), ("S40G",3,4),
+            ("Rocket 4 ?Plus",4,4), ("Rocket 4",4,4), ("Rocket ?Plus",4,4), ("Rocket",3,4),
+            ("MP700",5,4), ("MP600",4,4), ("MP510",3,4),
+            ("Kioxia",3,4), ("Lexar NM790",4,4), ("Lexar",4,4), ("VP4300",4,4), ("US70",4,4),
+        };
+
+        private async Task LoadCompatAsync()
+        {
+            // ── GPU PCIe (nvidia-smi) ──
+            var g = await Task.Run(GetGpuPcie);
+            TxtCompatGpuName.Text = string.IsNullOrEmpty(g.name) ? "Aucune carte graphique détectée" : g.name;
+
+            if (g.maxGen > 0 && g.curGen > 0)
+            {
+                double maxBw = Math.Round(BwLane.GetValueOrDefault(g.maxGen) * g.maxWidth, 1);
+                double curBw = Math.Round(BwLane.GetValueOrDefault(g.curGen) * g.curWidth, 1);
+                double pct   = maxBw > 0 ? Math.Min(100, curBw / maxBw * 100) : 0;
+
+                TxtCompatGpuGen.Text = $"Actuel : {GenName[g.curGen]} x{g.curWidth}     •     GPU max : {GenName[g.maxGen]} x{g.maxWidth}";
+                TxtCompatGpuBw.Text  = $"Bande passante : {curBw} Go/s  /  max théorique {maxBw} Go/s";
+                SetBarPct(CompatGpuBar, pct);
+
+                Color col; string status;
+                if (g.curGen == g.maxGen && g.curWidth == g.maxWidth)
+                {
+                    col = Color.FromRgb(0x2E, 0xC4, 0x6A);
+                    status = $"OPTIMAL — le GPU tourne à pleine vitesse ({pct:F0} %)";
+                }
+                else if (g.curGen < g.maxGen)
+                {
+                    col = Color.FromRgb(0xE0, 0x9A, 0x28);
+                    status = $"SLOT LIMITÉ — actuel {GenName[g.curGen]} x{g.curWidth}, le GPU supporte {GenName[g.maxGen]} x{g.maxWidth} ({pct:F0} %)";
+                }
+                else
+                {
+                    col = Color.FromRgb(0xE0, 0x9A, 0x28);
+                    status = $"VOIES RÉDUITES — x{g.curWidth} actuel / max x{g.maxWidth} ({pct:F0} %)";
+                }
+                CompatGpuFill.Background = new SolidColorBrush(col);
+                TxtCompatGpuStatus.Foreground = new SolidColorBrush(col);
+                TxtCompatGpuStatus.Text = status;
+            }
+            else
+            {
+                TxtCompatGpuGen.Text = "Données PCIe indisponibles (GPU NVIDIA + pilotes requis).";
+                TxtCompatGpuBw.Text  = "";
+                TxtCompatGpuStatus.Text = "";
+                SetBarPct(CompatGpuBar, 0);
+            }
+
+            // ── NVMe (WMI + table de specs) ──
+            var disks = await Task.Run(GetNvmeCompat);
+            if (disks.Count == 0)
+            {
+                TxtCompatNvmeEmpty.Text = "Aucun disque NVMe détecté.";
+                TxtCompatNvmeEmpty.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                TxtCompatNvmeEmpty.Visibility = Visibility.Collapsed;
+                CompatNvmeList.ItemsSource = disks;
+            }
+        }
+
+        private static void SetBarPct(Grid bar, double pct)
+        {
+            pct = Math.Max(0, Math.Min(100, pct));
+            bar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
+            bar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
+        }
+
+        // GPU PCIe via nvidia-smi (name + gen/width max & current)
+        private static (string name, int maxGen, int curGen, int maxWidth, int curWidth) GetGpuPcie()
+        {
+            try
+            {
+                foreach (var genField in new[] { "pcie.link.gen.gpumax", "pcie.link.gen.max" })
+                {
+                    var args = $"--query-gpu=name,{genField},pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current " +
+                               "--format=csv,noheader,nounits";
+                    using var p = Process.Start(new ProcessStartInfo("nvidia-smi", args)
+                    {
+                        UseShellExecute = false, CreateNoWindow = true,
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                    });
+                    if (p == null) continue;
+                    var line = p.StandardOutput.ReadLine();
+                    p.WaitForExit(4000);
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    var parts = line.Split(',');
+                    if (parts.Length < 5) continue;
+                    int I(string v) => int.TryParse(v.Trim(), out var n) ? n : 0;
+                    var name = parts[0].Trim();
+                    var maxGen = I(parts[1]); var curGen = I(parts[2]);
+                    var maxW = I(parts[3]);   var curW = I(parts[4]);
+                    if (maxGen > 0 && curGen > 0)
+                        return (name, maxGen, curGen, maxW, curW);
+                    // nom récupéré mais gen=0 → tenter l'autre champ
+                    if (genField == "pcie.link.gen.max") return (name, 0, 0, 0, 0);
+                }
+            }
+            catch { }
+            return ("", 0, 0, 0, 0);
+        }
+
+        // Brush figé → utilisable depuis un thread de fond (cross-thread safe)
+        private static Brush FrozenBrush(Color c)
+        {
+            var b = new SolidColorBrush(c);
+            b.Freeze();
+            return b;
+        }
+
+        // Disques NVMe + correspondance table de specs
+        private static List<NvmeItem> GetNvmeCompat()
+        {
+            var list  = new List<NvmeItem>();
+            var names = new List<string>();
+            try
+            {
+                using var q = new ManagementObjectSearcher(
+                    @"root\Microsoft\Windows\Storage",
+                    "SELECT FriendlyName, BusType FROM MSFT_PhysicalDisk");
+                foreach (ManagementObject o in q.Get())
+                {
+                    // BusType 17 = NVMe
+                    if (Convert.ToInt32(o["BusType"] ?? 0) == 17)
+                    {
+                        var n = o["FriendlyName"]?.ToString()?.Trim();
+                        if (!string.IsNullOrEmpty(n)) names.Add(n);
+                    }
+                    o.Dispose();
+                }
+            }
+            catch { }
+
+            // Fallback : Win32_DiskDrive si MSFT_PhysicalDisk indispo
+            if (names.Count == 0)
+            {
+                try
+                {
+                    using var q = new ManagementObjectSearcher("SELECT Model FROM Win32_DiskDrive");
+                    foreach (ManagementObject o in q.Get())
+                    {
+                        var m = o["Model"]?.ToString()?.Trim();
+                        if (!string.IsNullOrEmpty(m) && Regex.IsMatch(m, "NVMe|NVM", RegexOptions.IgnoreCase))
+                            names.Add(m);
+                        o.Dispose();
+                    }
+                }
+                catch { }
+            }
+
+            foreach (var name in names.Take(4))
+            {
+                var item = new NvmeItem { Name = name };
+                var spec = NvmeLut.FirstOrDefault(e => Regex.IsMatch(name, e.pat, RegexOptions.IgnoreCase));
+                if (spec.gen > 0)
+                {
+                    double bw = Math.Round(BwLane.GetValueOrDefault(spec.gen) * spec.w, 1);
+                    item.Info  = $"Spec constructeur : {GenName[spec.gen]} x{spec.w}  ({bw} Go/s théorique)";
+                    item.Badge = $"{GenName[spec.gen]} x{spec.w}";
+                    item.BadgeColor = FrozenBrush(spec.gen switch
+                    {
+                        5 => Color.FromRgb(0xFF, 0xC8, 0x00),
+                        4 => Color.FromRgb(0x2E, 0xC4, 0x6A),
+                        3 => Color.FromRgb(0x3B, 0x82, 0xE0),
+                        _ => Color.FromRgb(0x9C, 0xA3, 0xCC),
+                    });
+                }
+                else
+                {
+                    item.Info  = "Modèle non répertorié — consulter les specs du fabricant";
+                    item.Badge = "?";
+                    item.BadgeColor = FrozenBrush(Color.FromRgb(0x9C, 0xA3, 0xCC));
+                }
+                list.Add(item);
+            }
+            return list;
         }
     }
 }
