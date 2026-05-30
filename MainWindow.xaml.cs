@@ -228,9 +228,18 @@ namespace Optimisation_Tool
             Settings.Theme = mode == ThemeManager.Mode.Dark ? "Dark" : "Light";
             Settings.Save();
 
-            // Texte du bouton sidebar : mode courant
-            if (BtnTheme.Template.FindName("ThemeIcon", BtnTheme) is System.Windows.Controls.TextBlock icon)
-                icon.Text = mode == ThemeManager.Mode.Dark ? "Sombre" : "Clair";
+            // Le bouton affiche le mode CIBLE (l'inverse du mode courant)
+            // Mode sombre actif → bouton "Mode clair" + soleil. Mode clair → "Mode sombre" + lune.
+            bool goingToLight = mode == ThemeManager.Mode.Dark;
+            if (BtnTheme.Template.FindName("ThemeIcon", BtnTheme) is System.Windows.Controls.TextBlock ico)
+            {
+                ico.Text = goingToLight ? "\uE706" : "\uE708";   // E706 soleil, E708 lune (MDL2)
+                ico.Foreground = new SolidColorBrush(goingToLight
+                    ? Color.FromRgb(0xF5, 0xC2, 0x4A)            // soleil doré
+                    : Color.FromRgb(0xAE, 0xB8, 0xE8));          // lune bleu clair
+            }
+            if (BtnTheme.Template.FindName("ThemeLbl", BtnTheme) is System.Windows.Controls.TextBlock lbl)
+                lbl.Text = goingToLight ? "Mode clair" : "Mode sombre";
 
             // Rafraîchir les couleurs des boutons nav posées en code
             if (_selectedNav != null)
