@@ -66,18 +66,63 @@ namespace Optimisation_Tool
             };
         }
 
-        // ── Vérification MAJ silencieuse au démarrage ─────────────────────────
+        // ── Mise à jour : overlay plein écran ─────────────────────────────────
+
+        private string? _pendingBat;
 
         private async Task CheckUpdateSilentAsync()
         {
             try
             {
-                await Task.Delay(3000);   // laisser l'UI charger d'abord
-                var (hasUpdate, tag, _, _) = await PageReglages.CheckForUpdateAsync();
-                if (hasUpdate)
-                    Log($"Mise à jour disponible : {tag} — va dans Réglages pour télécharger.");
+                await Task.Delay(2500);   // laisser l'UI charger d'abord
+                var (hasUpdate, tag, _, assetUrl) = await PageReglages.CheckForUpdateAsync();
+                if (hasUpdate && !string.IsNullOrEmpty(assetUrl))
+                {
+                    Log($"Mise à jour disponible : {tag}.");
+                    StartUpdate(assetUrl, tag);   // overlay + téléchargement direct
+                }
             }
-            catch { }
+            catch (Exception ex) { Log($"MAJ auto : erreur — {ex.Message}"); }
+        }
+
+        /// <summary>Affiche l'overlay, télécharge la MAJ avec progression, puis propose CONTINUER.</summary>
+        public async void StartUpdate(string assetUrl, string tag)
+        {
+            UpdateOverlay.Visibility  = Visibility.Visible;
+            TxtUpdTitle.Text          = $"Mise à jour {tag}";
+            TxtUpdStatus.Text         = "Téléchargement de la mise à jour…";
+            BtnUpdContinue.Visibility = Visibility.Collapsed;
+            SetUpdateBar(0);
+
+            try
+            {
+                var progress = new Progress<double>(SetUpdateBar);
+                _pendingBat = await PageReglages.PrepareUpdateAsync(assetUrl, progress);
+
+                SetUpdateBar(100);
+                TxtUpdStatus.Text         = "Téléchargement terminé. Clique sur CONTINUER pour redémarrer.";
+                BtnUpdContinue.Visibility = Visibility.Visible;
+                Log($"Mise à jour {tag} téléchargée — en attente de redémarrage.");
+            }
+            catch (Exception ex)
+            {
+                TxtUpdStatus.Text = $"Échec du téléchargement : {ex.Message}";
+                Log($"MAJ : erreur téléchargement — {ex.Message}");
+            }
+        }
+
+        private void SetUpdateBar(double pct)
+        {
+            pct = Math.Max(0, Math.Min(100, pct));
+            UpdBar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
+            UpdBar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
+            TxtUpdPct.Text = $"{pct:F0} %";
+        }
+
+        private void BtnUpdContinue_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_pendingBat))
+                PageReglages.LaunchUpdaterAndExit(_pendingBat);
         }
 
         // ── Barre de progression dans la barre des tâches Windows ─────────────

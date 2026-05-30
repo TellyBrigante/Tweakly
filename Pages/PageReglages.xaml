@@ -68,7 +68,7 @@
                                        Foreground="{DynamicResource ThTextBody}"
                                        FontFamily="{StaticResource AppFont}"
                                        FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock Text="V&#233;rification silencieuse &#224; chaque lancement."
+                            <TextBlock Text="Propose d'installer la MAJ au d&#233;marrage."
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}"
                                        FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>

@@ -189,7 +189,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.0.3"
+                            <TextBlock x:Name="TxtVersion" Text="v1.0.4"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -361,5 +361,55 @@
 
             </Grid><!-- fin colonne droite -->
         </Grid><!-- fin corps (sidebar + contenu) -->
+
+        <!-- ══ OVERLAY DE MISE À JOUR (couvre toute la fenêtre) ══════════════ -->
+        <Border x:Name="UpdateOverlay" Grid.Row="0" Grid.RowSpan="2"
+                Panel.ZIndex="100" Visibility="Collapsed"
+                Background="{DynamicResource ThBg}">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="460">
+                <!-- Logo -->
+                <TextBlock HorizontalAlignment="Center" FontSize="34" FontWeight="Bold"
+                           FontFamily="{StaticResource AppFont}">
+                    <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/>
+                </TextBlock>
+                <TextBlock x:Name="TxtUpdTitle" Text="Mise &#224; jour"
+                           HorizontalAlignment="Center" Margin="0,20,0,4"
+                           Foreground="{DynamicResource ThTextTitle}"
+                           FontFamily="{StaticResource AppFont}" FontSize="17" FontWeight="SemiBold"/>
+                <TextBlock x:Name="TxtUpdStatus" Text="T&#233;l&#233;chargement&#8230;"
+                           HorizontalAlignment="Center" Margin="0,0,0,22"
+                           Foreground="{DynamicResource ThTextDim}"
+                           FontFamily="{StaticResource AppFont}" FontSize="12.5"/>
+
+                <!-- Barre de progression -->
+                <Grid Height="10">
+                    <Border Background="{DynamicResource ThTrack}" CornerRadius="5"/>
+                    <Grid x:Name="UpdBar" ClipToBounds="True">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="0*"/>
+                            <ColumnDefinition Width="100*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" CornerRadius="5">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Color="#3B82E0" Offset="0"/>
+                                    <GradientStop Color="#5BA0FF" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                    </Grid>
+                </Grid>
+                <TextBlock x:Name="TxtUpdPct" Text="0 %" HorizontalAlignment="Center"
+                           Margin="0,9,0,0" Foreground="{DynamicResource ThTextNav}"
+                           FontFamily="Consolas" FontSize="11.5"/>
+
+                <!-- Bouton Continuer (apparaît après téléchargement) -->
+                <Button x:Name="BtnUpdContinue" Content="CONTINUER"
+                        Visibility="Collapsed"
+                        Style="{StaticResource PrimaryBtnStyle}"
+                        HorizontalAlignment="Center" Margin="0,24,0,0" Padding="34,10"
+                        Click="BtnUpdContinue_Click"/>
+            </StackPanel>
+        </Border>
     </Grid><!-- fin grille principale -->
 </Window>

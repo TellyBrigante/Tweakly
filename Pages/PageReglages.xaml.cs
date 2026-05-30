@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -19,13 +19,14 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.0.3";
+        public const string AppVersion = "1.0.4";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
 
         private string _updateUrl = "";   // page de la release (fallback)
         private string _assetUrl  = "";   // .zip à télécharger
+        private string _lastTag   = "";   // tag de la dernière MAJ détectée
 
         private static readonly HttpClient Http = new();
 
@@ -136,6 +137,7 @@ namespace Optimisation_Tool.Pages
                 {
                     _updateUrl = url;
                     _assetUrl  = assetUrl;
+                    _lastTag   = tag;
                     TxtUpdateStatus.Text = $"Mise à jour disponible : {tag}  —  vous avez v{AppVersion}";
                     BtnDownloadUpdate.Visibility = Visibility.Visible;
                     _main.Log($"Réglages : mise à jour disponible — {tag}.");
@@ -154,7 +156,7 @@ namespace Optimisation_Tool.Pages
             finally { BtnCheckUpdate.IsEnabled = true; }
         }
 
-        private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
+        private void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
         {
             // Pas d'asset .zip → fallback navigateur
             if (string.IsNullOrEmpty(_assetUrl))
@@ -162,78 +164,75 @@ namespace Optimisation_Tool.Pages
                 OpenUrl(string.IsNullOrEmpty(_updateUrl) ? RepoUrl : _updateUrl);
                 return;
             }
+            // Délègue à l'overlay plein écran de MainWindow
+            _main.StartUpdate(_assetUrl, _lastTag);
+        }
 
-            BtnDownloadUpdate.IsEnabled = false;
-            BtnCheckUpdate.IsEnabled    = false;
+        /// <summary>
+        /// Télécharge le ZIP (avec progression %), l'extrait et écrit le script de
+        /// remplacement. Ne redémarre PAS — retourne le chemin du script à lancer.
+        /// </summary>
+        public static async Task<string> PrepareUpdateAsync(string assetUrl, IProgress<double> progress)
+        {
+            var tmp = Path.Combine(Path.GetTempPath(), "Tweakly_update");
+            if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+            Directory.CreateDirectory(tmp);
+            var zipPath = Path.Combine(tmp, "update.zip");
 
-            try
+            // Téléchargement avec progression
+            using (var req = new HttpRequestMessage(HttpMethod.Get, assetUrl))
             {
-                var tmp = Path.Combine(Path.GetTempPath(), "Tweakly_update");
-                if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
-                Directory.CreateDirectory(tmp);
-                var zipPath = Path.Combine(tmp, "update.zip");
-
-                // 1. Téléchargement du ZIP
-                TxtUpdateStatus.Text = "Téléchargement de la mise à jour…";
-                _main.Log("Réglages : téléchargement de la mise à jour…");
-                using (var req = new HttpRequestMessage(HttpMethod.Get, _assetUrl))
+                req.Headers.UserAgent.ParseAdd("Tweakly-Updater");
+                using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+                resp.EnsureSuccessStatusCode();
+                var total = resp.Content.Headers.ContentLength ?? -1L;
+                using var stream = await resp.Content.ReadAsStreamAsync();
+                using var fs = File.Create(zipPath);
+                var buffer = new byte[81920];
+                long readTotal = 0; int n;
+                while ((n = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                 {
-                    req.Headers.UserAgent.ParseAdd("Tweakly-Updater");
-                    using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
-                    resp.EnsureSuccessStatusCode();
-                    using var fs = File.Create(zipPath);
-                    await resp.Content.CopyToAsync(fs);
+                    await fs.WriteAsync(buffer, 0, n);
+                    readTotal += n;
+                    if (total > 0) progress.Report((double)readTotal / total * 100.0);
                 }
-
-                // 2. Extraction
-                TxtUpdateStatus.Text = "Installation…";
-                var extractDir = Path.Combine(tmp, "extracted");
-                ZipFile.ExtractToDirectory(zipPath, extractDir);
-
-                // 3. Trouver le dossier contenant Tweakly.exe (le ZIP a un dossier Tweakly/)
-                var srcDir = FindExeDir(extractDir);
-                if (srcDir == null)
-                {
-                    TxtUpdateStatus.Text = "Mise à jour invalide (Tweakly.exe introuvable).";
-                    BtnDownloadUpdate.IsEnabled = BtnCheckUpdate.IsEnabled = true;
-                    return;
-                }
-
-                var exePath    = Process.GetCurrentProcess().MainModule!.FileName;
-                var installDir = Path.GetDirectoryName(exePath)!;
-
-                // 4. Script qui attend la fermeture, remplace les fichiers, relance
-                var bat = Path.Combine(tmp, "update.bat");
-                var script =
-                    "@echo off\r\n" +
-                    ":wait\r\n" +
-                    "tasklist /fi \"imagename eq Tweakly.exe\" 2>nul | find /i \"Tweakly.exe\" >nul\r\n" +
-                    "if not errorlevel 1 (\r\n" +
-                    "  timeout /t 1 /nobreak >nul\r\n" +
-                    "  goto wait\r\n" +
-                    ")\r\n" +
-                    $"xcopy /E /Y /I \"{srcDir}\\*\" \"{installDir}\\\" >nul\r\n" +
-                    $"start \"\" \"{exePath}\"\r\n" +
-                    "del \"%~f0\"\r\n";
-                File.WriteAllText(bat, script);
-
-                // 5. Lancer le script (caché) puis fermer l'app
-                TxtUpdateStatus.Text = "Redémarrage de Tweakly…";
-                _main.Log("Réglages : installation, redémarrage en cours…");
-                Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{bat}\"")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow  = true,
-                });
-
-                Application.Current.Shutdown();
+                progress.Report(100);
             }
-            catch (Exception ex)
+
+            // Extraction
+            var extractDir = Path.Combine(tmp, "extracted");
+            ZipFile.ExtractToDirectory(zipPath, extractDir);
+            var srcDir = FindExeDir(extractDir) ?? throw new Exception("Tweakly.exe introuvable dans l'archive.");
+
+            var exePath    = Process.GetCurrentProcess().MainModule!.FileName;
+            var installDir = Path.GetDirectoryName(exePath)!;
+
+            // Script : attend la fermeture, remplace les fichiers, relance
+            var bat = Path.Combine(tmp, "update.bat");
+            var script =
+                "@echo off\r\n" +
+                ":wait\r\n" +
+                "tasklist /fi \"imagename eq Tweakly.exe\" 2>nul | find /i \"Tweakly.exe\" >nul\r\n" +
+                "if not errorlevel 1 (\r\n" +
+                "  timeout /t 1 /nobreak >nul\r\n" +
+                "  goto wait\r\n" +
+                ")\r\n" +
+                $"xcopy /E /Y /I \"{srcDir}\\*\" \"{installDir}\\\" >nul\r\n" +
+                $"start \"\" \"{exePath}\"\r\n" +
+                "del \"%~f0\"\r\n";
+            File.WriteAllText(bat, script);
+            return bat;
+        }
+
+        /// <summary>Lance le script de mise à jour (caché) et ferme l'application.</summary>
+        public static void LaunchUpdaterAndExit(string batPath)
+        {
+            Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{batPath}\"")
             {
-                TxtUpdateStatus.Text = $"Échec de la mise à jour : {ex.Message}";
-                _main.Log($"Réglages : erreur mise à jour — {ex.Message}");
-                BtnDownloadUpdate.IsEnabled = BtnCheckUpdate.IsEnabled = true;
-            }
+                UseShellExecute = false,
+                CreateNoWindow  = true,
+            });
+            Application.Current.Shutdown();
         }
 
         // Cherche récursivement le dossier contenant Tweakly.exe
