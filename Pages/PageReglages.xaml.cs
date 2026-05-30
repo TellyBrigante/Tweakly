@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -18,12 +19,13 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.0.0";
+        public const string AppVersion = "1.0.1";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
 
-        private string _updateUrl = "";
+        private string _updateUrl = "";   // page de la release (fallback)
+        private string _assetUrl  = "";   // .zip à télécharger
 
         private static readonly HttpClient Http = new();
 
@@ -51,7 +53,7 @@ namespace Optimisation_Tool.Pages
 
         // ── Check de MAJ (appelé au démarrage + manuellement) ──────────────────
 
-        public static async Task<(bool hasUpdate, string tag, string url)> CheckForUpdateAsync()
+        public static async Task<(bool hasUpdate, string tag, string url, string assetUrl)> CheckForUpdateAsync()
         {
             try
             {
@@ -61,23 +63,39 @@ namespace Optimisation_Tool.Pages
                 req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var resp = await Http.SendAsync(req);
-                if (!resp.IsSuccessStatusCode) return (false, "", "");
+                if (!resp.IsSuccessStatusCode) return (false, "", "", "");
 
                 var json = await resp.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                var tag  = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
-                var url  = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? RepoUrl : RepoUrl;
+                var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+                var url = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? RepoUrl : RepoUrl;
+
+                // Trouver le 1er asset .zip
+                var assetUrl = "";
+                if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var a in assets.EnumerateArray())
+                    {
+                        var name = a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                        if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                            a.TryGetProperty("browser_download_url", out var d))
+                        {
+                            assetUrl = d.GetString() ?? "";
+                            break;
+                        }
+                    }
+                }
 
                 var remote = ParseVersion(tag);
                 var local  = ParseVersion(AppVersion);
 
                 if (remote != null && local != null && remote > local)
-                    return (true, tag, url);
+                    return (true, tag, url, assetUrl);
             }
             catch { }
-            return (false, "", "");
+            return (false, "", "", "");
         }
 
         // Colore le segment actif (fond accent) et grise l'inactif
@@ -112,11 +130,12 @@ namespace Optimisation_Tool.Pages
 
             try
             {
-                var (hasUpdate, tag, url) = await CheckForUpdateAsync();
+                var (hasUpdate, tag, url, assetUrl) = await CheckForUpdateAsync();
 
                 if (hasUpdate)
                 {
-                    _updateUrl           = url;
+                    _updateUrl = url;
+                    _assetUrl  = assetUrl;
                     TxtUpdateStatus.Text = $"Mise à jour disponible : {tag}  —  vous avez v{AppVersion}";
                     BtnDownloadUpdate.Visibility = Visibility.Visible;
                     _main.Log($"Réglages : mise à jour disponible — {tag}.");
@@ -135,8 +154,98 @@ namespace Optimisation_Tool.Pages
             finally { BtnCheckUpdate.IsEnabled = true; }
         }
 
-        private void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
-            => OpenUrl(string.IsNullOrEmpty(_updateUrl) ? RepoUrl : _updateUrl);
+        private async void BtnDownloadUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            // Pas d'asset .zip → fallback navigateur
+            if (string.IsNullOrEmpty(_assetUrl))
+            {
+                OpenUrl(string.IsNullOrEmpty(_updateUrl) ? RepoUrl : _updateUrl);
+                return;
+            }
+
+            BtnDownloadUpdate.IsEnabled = false;
+            BtnCheckUpdate.IsEnabled    = false;
+
+            try
+            {
+                var tmp = Path.Combine(Path.GetTempPath(), "Tweakly_update");
+                if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+                Directory.CreateDirectory(tmp);
+                var zipPath = Path.Combine(tmp, "update.zip");
+
+                // 1. Téléchargement du ZIP
+                TxtUpdateStatus.Text = "Téléchargement de la mise à jour…";
+                _main.Log("Réglages : téléchargement de la mise à jour…");
+                using (var req = new HttpRequestMessage(HttpMethod.Get, _assetUrl))
+                {
+                    req.Headers.UserAgent.ParseAdd("Tweakly-Updater");
+                    using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+                    resp.EnsureSuccessStatusCode();
+                    using var fs = File.Create(zipPath);
+                    await resp.Content.CopyToAsync(fs);
+                }
+
+                // 2. Extraction
+                TxtUpdateStatus.Text = "Installation…";
+                var extractDir = Path.Combine(tmp, "extracted");
+                ZipFile.ExtractToDirectory(zipPath, extractDir);
+
+                // 3. Trouver le dossier contenant Tweakly.exe (le ZIP a un dossier Tweakly/)
+                var srcDir = FindExeDir(extractDir);
+                if (srcDir == null)
+                {
+                    TxtUpdateStatus.Text = "Mise à jour invalide (Tweakly.exe introuvable).";
+                    BtnDownloadUpdate.IsEnabled = BtnCheckUpdate.IsEnabled = true;
+                    return;
+                }
+
+                var exePath    = Process.GetCurrentProcess().MainModule!.FileName;
+                var installDir = Path.GetDirectoryName(exePath)!;
+
+                // 4. Script qui attend la fermeture, remplace les fichiers, relance
+                var bat = Path.Combine(tmp, "update.bat");
+                var script =
+                    "@echo off\r\n" +
+                    ":wait\r\n" +
+                    "tasklist /fi \"imagename eq Tweakly.exe\" 2>nul | find /i \"Tweakly.exe\" >nul\r\n" +
+                    "if not errorlevel 1 (\r\n" +
+                    "  timeout /t 1 /nobreak >nul\r\n" +
+                    "  goto wait\r\n" +
+                    ")\r\n" +
+                    $"xcopy /E /Y /I \"{srcDir}\\*\" \"{installDir}\\\" >nul\r\n" +
+                    $"start \"\" \"{exePath}\"\r\n" +
+                    "del \"%~f0\"\r\n";
+                File.WriteAllText(bat, script);
+
+                // 5. Lancer le script (caché) puis fermer l'app
+                TxtUpdateStatus.Text = "Redémarrage de Tweakly…";
+                _main.Log("Réglages : installation, redémarrage en cours…");
+                Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{bat}\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow  = true,
+                });
+
+                Application.Current.Shutdown();
+            }
+            catch (Exception ex)
+            {
+                TxtUpdateStatus.Text = $"Échec de la mise à jour : {ex.Message}";
+                _main.Log($"Réglages : erreur mise à jour — {ex.Message}");
+                BtnDownloadUpdate.IsEnabled = BtnCheckUpdate.IsEnabled = true;
+            }
+        }
+
+        // Cherche récursivement le dossier contenant Tweakly.exe
+        private static string? FindExeDir(string root)
+        {
+            try
+            {
+                var exe = Directory.GetFiles(root, "Tweakly.exe", SearchOption.AllDirectories).FirstOrDefault();
+                return exe != null ? Path.GetDirectoryName(exe) : null;
+            }
+            catch { return null; }
+        }
 
         private static Version? ParseVersion(string tag)
         {

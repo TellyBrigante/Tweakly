@@ -68,7 +68,7 @@ namespace Optimisation_Tool
             try
             {
                 await Task.Delay(3000);   // laisser l'UI charger d'abord
-                var (hasUpdate, tag, url) = await PageReglages.CheckForUpdateAsync();
+                var (hasUpdate, tag, _, _) = await PageReglages.CheckForUpdateAsync();
                 if (hasUpdate)
                     Log($"Mise à jour disponible : {tag} — va dans Réglages pour télécharger.");
             }
@@ -242,12 +242,12 @@ namespace Optimisation_Tool
             if (WindowState == WindowState.Maximized)
             {
                 RootGrid.Margin     = new Thickness(7);
-                BtnMaximize.Content = "❐";   // restaurer
+                BtnMaximize.Content = "\uE923";   // MDL2 : restaurer
             }
             else
             {
                 RootGrid.Margin     = new Thickness(0);
-                BtnMaximize.Content = "□";   // agrandir
+                BtnMaximize.Content = "\uE922";   // MDL2 : agrandir
             }
         }
 

@@ -147,13 +147,16 @@
                            VerticalAlignment="Center" Margin="16,0,0,0"/>
                 <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center"
                             Orientation="Horizontal" Margin="0,0,6,0">
-                    <Button x:Name="BtnMinimize" Content="&#x2013;"
+                    <Button x:Name="BtnMinimize" Content="&#xE921;"
+                            FontFamily="Segoe MDL2 Assets" FontSize="10"
                             Style="{StaticResource WinBtnStyle}"
                             Click="BtnMinimize_Click"/>
-                    <Button x:Name="BtnMaximize" Content="&#x25A1;"
+                    <Button x:Name="BtnMaximize" Content="&#xE922;"
+                            FontFamily="Segoe MDL2 Assets" FontSize="10"
                             Style="{StaticResource WinBtnStyle}"
                             Click="BtnMaximize_Click"/>
-                    <Button x:Name="BtnClose" Content="&#x2715;"
+                    <Button x:Name="BtnClose" Content="&#xE8BB;"
+                            FontFamily="Segoe MDL2 Assets" FontSize="10"
                             Style="{StaticResource CloseBtnStyle}"
                             Click="BtnClose_Click"/>
                 </StackPanel>
@@ -186,7 +189,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.0.0"
+                            <TextBlock x:Name="TxtVersion" Text="v1.0.1"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
