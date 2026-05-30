@@ -29,36 +29,30 @@
             <TextBlock Text="MISES &#192; JOUR" Style="{StaticResource SecHdr}"/>
             <Border Style="{StaticResource CardStyle}">
                 <StackPanel>
-                    <!-- Ligne version + bouton vérifier -->
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtVersionLine"
-                                       Text="Version install&#233;e : &#8212;"
-                                       Foreground="{DynamicResource ThTextBody}"
-                                       FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="TxtUpdateStatus"
-                                       Text="Cliquez pour v&#233;rifier les mises &#224; jour."
-                                       Foreground="{DynamicResource ThTextDim}"
-                                       FontFamily="{StaticResource AppFont}" FontSize="11.5"
-                                       Margin="0,3,0,0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="BtnDownloadUpdate"
-                                    Content="T&#201;L&#201;CHARGER"
-                                    Style="{StaticResource PrimaryBtnStyle}"
-                                    Visibility="Collapsed"
-                                    Margin="0,0,8,0"
-                                    Click="BtnDownloadUpdate_Click"/>
-                            <Button x:Name="BtnCheckUpdate"
-                                    Content="V&#233;rifier"
-                                    Style="{StaticResource SecondaryBtnStyle}"
-                                    Click="BtnCheckUpdate_Click"/>
-                        </StackPanel>
-                    </Grid>
+                    <!-- Version + statut (pleine largeur) -->
+                    <TextBlock x:Name="TxtVersionLine"
+                               Text="Version install&#233;e : &#8212;"
+                               Foreground="{DynamicResource ThTextBody}"
+                               FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="TxtUpdateStatus"
+                               Text="Cliquez pour v&#233;rifier les mises &#224; jour."
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                               Margin="0,3,0,0" TextWrapping="Wrap"/>
+
+                    <!-- Boutons sur leur propre ligne (jamais de chevauchement) -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                        <Button x:Name="BtnDownloadUpdate"
+                                Content="T&#201;L&#201;CHARGER"
+                                Style="{StaticResource PrimaryBtnStyle}"
+                                Visibility="Collapsed"
+                                Margin="0,0,8,0"
+                                Click="BtnDownloadUpdate_Click"/>
+                        <Button x:Name="BtnCheckUpdate"
+                                Content="V&#233;rifier"
+                                Style="{StaticResource SecondaryBtnStyle}"
+                                Click="BtnCheckUpdate_Click"/>
+                    </StackPanel>
 
                     <!-- S&#233;parateur -->
                     <Border Height="1" Background="{DynamicResource ThBorder}" Margin="0,13,0,0"/>
