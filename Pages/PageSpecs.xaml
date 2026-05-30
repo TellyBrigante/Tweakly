@@ -1,0 +1,302 @@
+﻿<UserControl x:Class="Optimisation_Tool.Pages.PageSpecs"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+
+        <Style x:Key="TileStyle" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="8"/>
+            <Setter Property="Padding"         Value="14,12"/>
+            <Setter Property="MinHeight"       Value="76"/>
+        </Style>
+
+        <Style x:Key="TileLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextLabel}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin"     Value="0,0,0,7"/>
+        </Style>
+
+        <Style x:Key="TileValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily"   Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"     Value="11.5"/>
+            <Setter Property="LineHeight"   Value="18"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="SectionLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextSub}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <Style x:Key="ActionBtnStyle" TargetType="Button">
+            <Setter Property="Background"        Value="{DynamicResource ThSecBtn}"/>
+            <Setter Property="Foreground"        Value="{DynamicResource ThTextNav}"/>
+            <Setter Property="BorderBrush"       Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness"   Value="1"/>
+            <Setter Property="Padding"           Value="13,6"/>
+            <Setter Property="FontFamily"        Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"          Value="11.5"/>
+            <Setter Property="Cursor"            Value="Hand"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Lbl"
+                                       Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThSelection}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThSidebar}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThPanel}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="18,14,18,18">
+
+            <!-- ══ Score d'optimisation — carte moderne ══════════════════════ -->
+            <Border BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="14" Padding="22,18">
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="{DynamicResource ThCardA}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource ThCardB}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Border.Background>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- ── Anneau circulaire (jauge donut + halo) ── -->
+                    <Grid Grid.Column="0" Width="104" Height="104"
+                          Margin="0,0,24,0" VerticalAlignment="Center">
+                        <!-- Piste -->
+                        <Ellipse x:Name="RingTrack" Stroke="{DynamicResource ThTrack}" StrokeThickness="9"
+                                 Margin="5"/>
+                        <!-- Remplissage (StrokeDashArray pilotée en code) -->
+                        <Ellipse x:Name="RingFill" StrokeThickness="9"
+                                 StrokeDashCap="Round" StrokeDashArray="0 1000"
+                                 Stroke="#3B82E0" Margin="5"
+                                 RenderTransformOrigin="0.5,0.5">
+                            <Ellipse.RenderTransform>
+                                <RotateTransform Angle="-90"/>
+                            </Ellipse.RenderTransform>
+                            <Ellipse.Effect>
+                                <DropShadowEffect x:Name="RingGlow" BlurRadius="16"
+                                                  ShadowDepth="0" Color="#3B82E0" Opacity="0"/>
+                            </Ellipse.Effect>
+                        </Ellipse>
+                        <!-- Score au centre -->
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <TextBlock x:Name="TxtScoreTotal"
+                                       Text="&#8212;"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontSize="30" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="/ 100"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontSize="10"
+                                       FontFamily="{StaticResource AppFont}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,-4,0,0"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ── Détails + pastilles + barre ── -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="SCORE D'OPTIMISATION"
+                                   Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                                   FontSize="10.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtScoreStatus"
+                                   Text="Calcul en cours&#8230;"
+                                   Foreground="{DynamicResource ThTextTitle}" FontFamily="{StaticResource AppFont}"
+                                   FontSize="15" FontWeight="SemiBold"
+                                   Margin="0,2,0,11" TextWrapping="Wrap"/>
+
+                        <!-- Pastilles Système / Tweaks -->
+                        <StackPanel Orientation="Horizontal">
+                            <Border Background="{DynamicResource ThPill}" CornerRadius="9" Padding="11,5" Margin="0,0,8,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#3B82E0"
+                                             VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                    <TextBlock Text="Performance  " Foreground="{DynamicResource ThTextNav}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtSysVal" Text="&#8212; / 70" Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Background="{DynamicResource ThPill}" CornerRadius="9" Padding="11,5">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="#2EB872"
+                                             VerticalAlignment="Center" Margin="0,0,7,0"/>
+                                    <TextBlock Text="Confidentialit&#233;  " Foreground="{DynamicResource ThTextNav}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtWmtVal" Text="&#8212; / 30" Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Barre dégradée arrondie -->
+                        <Grid Height="8" Margin="0,13,0,0">
+                            <Border Background="{DynamicResource ThTrack}" CornerRadius="4"/>
+                            <Grid x:Name="ScoreProgressBar" ClipToBounds="True">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0*"/>
+                                    <ColumnDefinition Width="100*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="ProgressFill" Grid.Column="0" CornerRadius="4">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop x:Name="FillStop0" Color="#3B82E0" Offset="0"/>
+                                            <GradientStop x:Name="FillStop1" Color="#5BA0FF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Rafraîchir -->
+                    <Button Grid.Column="2"
+                            x:Name="BtnRefreshScore"
+                            Content="&#x21BB;  Rafra&#238;chir"
+                            Style="{StaticResource ActionBtnStyle}"
+                            VerticalAlignment="Center"
+                            Click="BtnRefreshScore_Click"/>
+                </Grid>
+            </Border>
+
+            <!-- ══ Sp&#233;cifications mat&#233;riel ══════════════════════════════════ -->
+            <Grid Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="10"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="8"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Ligne 1 : Syst&#232;me d'exploitation | Processeur -->
+                <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="SYST&#200;ME D'EXPLOITATION" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtOS"
+                                   Text="Chargement&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   Style="{StaticResource TileValueStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="PROCESSEUR (CPU)" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtCPU"
+                                   Text="Chargement&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   Style="{StaticResource TileValueStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ligne 2 : Carte M&#232;re &amp; BIOS | M&#233;moire RAM -->
+                <Border Grid.Column="0" Grid.Row="2" Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="CARTE M&#200;RE &amp; BIOS" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtMB"
+                                   Text="Chargement&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   Style="{StaticResource TileValueStyle}"/>
+                        <Button x:Name="BtnBios"
+                                Content="&#8599; Page BIOS constructeur"
+                                Style="{StaticResource ActionBtnStyle}"
+                                Margin="0,10,0,0"
+                                IsEnabled="False"
+                                HorizontalAlignment="Left"
+                                Click="BtnBios_Click"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="M&#201;MOIRE (RAM)" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtRAM"
+                                   Text="Chargement&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   Style="{StaticResource TileValueStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ligne 3 : Stockage | Carte Graphique -->
+                <Border Grid.Column="0" Grid.Row="4" Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="STOCKAGE" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtDisk"
+                                   Text="Chargement&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   Style="{StaticResource TileValueStyle}"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" Grid.Row="4" Style="{StaticResource TileStyle}">
+                    <StackPanel>
+                        <TextBlock Text="CARTE GRAPHIQUE" Style="{StaticResource TileLabelStyle}"/>
+                        <TextBlock x:Name="TxtGPU"
+                                   Text="Chargement&#8230;"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   Style="{StaticResource TileValueStyle}"/>
+                    </StackPanel>
+                </Border>
+
+            </Grid>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

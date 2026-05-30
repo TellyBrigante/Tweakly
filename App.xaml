@@ -1,0 +1,468 @@
+﻿<Application x:Class="Optimisation_Tool.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Optimisation_Tool"
+             xmlns:pages="clr-namespace:Optimisation_Tool.Pages"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+
+        <!-- ── Police globale : douce/arrondie, repli sur des polices Windows ── -->
+        <!-- Nunito (si installee) > Calibri (presente partout, douce) > Segoe UI -->
+        <FontFamily x:Key="AppFont">Segoe UI Variable, Segoe UI</FontFamily>
+
+        <!-- ── Brushes thémables (valeurs SOMBRES par défaut) — swap via ThemeManager ── -->
+        <SolidColorBrush x:Key="ThBg"        Color="#2B3252"/>
+        <SolidColorBrush x:Key="ThPanel"     Color="#313858"/>
+        <SolidColorBrush x:Key="ThSidebar"   Color="#262C49"/>
+        <SolidColorBrush x:Key="ThSecBtn"    Color="#2E3559"/>
+        <SolidColorBrush x:Key="ThPill"      Color="#2B3358"/>
+        <SolidColorBrush x:Key="ThTrack"     Color="#2A3358"/>
+        <SolidColorBrush x:Key="ThLogBg"     Color="#242A45"/>
+        <SolidColorBrush x:Key="ThLogHdr"    Color="#20253E"/>
+        <SolidColorBrush x:Key="ThHover"     Color="#2E3658"/>
+        <SolidColorBrush x:Key="ThSelection" Color="#34408A"/>
+        <SolidColorBrush x:Key="ThBorder"    Color="#3D456E"/>
+        <SolidColorBrush x:Key="ThTextTitle" Color="#E2E6FF"/>
+        <SolidColorBrush x:Key="ThTextBody"  Color="#DCE0F6"/>
+        <SolidColorBrush x:Key="ThTextLabel" Color="#C6CDEC"/>
+        <SolidColorBrush x:Key="ThTextSub"   Color="#B4BBE0"/>
+        <SolidColorBrush x:Key="ThTextNav"   Color="#B6BEE4"/>
+        <SolidColorBrush x:Key="ThTextDim"   Color="#9CA3CC"/>
+        <SolidColorBrush x:Key="ThLogText"   Color="#5FD98C"/>
+
+        <!-- Couleurs thémables pour les dégradés (sombre par défaut) -->
+        <Color x:Key="ThCardA">#353D66</Color>
+        <Color x:Key="ThCardB">#272D4C</Color>
+        <Color x:Key="ThSwOffA">#10132C</Color>
+        <Color x:Key="ThSwOffB">#080A1E</Color>
+        <Color x:Key="ThSwOffBdA">#2C3462</Color>
+        <Color x:Key="ThSwOffBdB">#07091B</Color>
+
+        <!-- ── Toggle switch premium (shared par toutes les pages Optimisations) ── -->
+        <Style x:Key="TweakChkStyle" TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="12"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="Margin"     Value="0,0,0,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid MinHeight="38">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="82"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- ══ Toggle pill ══════════════════════════════════ -->
+                            <Grid Grid.Column="0"
+                                  Width="72" Height="30"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Left">
+
+                                <!-- ── Couche OFF ── -->
+                                <Border x:Name="TrackOff" CornerRadius="15" BorderThickness="1.5">
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="{DynamicResource ThSwOffBdA}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThSwOffBdB}" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="{DynamicResource ThSwOffA}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThSwOffB}" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <!-- ── Couche ON ── -->
+                                <Border x:Name="TrackOn" CornerRadius="15" BorderThickness="1.5"
+                                        Opacity="0">
+                                    <Border.BorderBrush>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#50A8FF" Offset="0"/>
+                                            <GradientStop Color="#0C4EA0" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.BorderBrush>
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#1E7AE8" Offset="0"/>
+                                            <GradientStop Color="#1258BE" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <!-- ── Reflet gloss haut de piste ── -->
+                                <Border CornerRadius="15,15,4,4" Height="15"
+                                        VerticalAlignment="Top" IsHitTestVisible="False">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#22FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+
+                                <!-- ── Texte OFF (droite, visible quand OFF) ── -->
+                                <TextBlock x:Name="TxtOff"
+                                           Text="OFF"
+                                           Foreground="{DynamicResource ThTextSub}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Right"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           IsHitTestVisible="False"/>
+
+                                <!-- ── Texte ON (gauche, visible quand ON) ── -->
+                                <TextBlock x:Name="TxtOn"
+                                           Text="ON"
+                                           Foreground="#A0D0FF"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           Opacity="0"
+                                           IsHitTestVisible="False"/>
+
+                                <!-- ── Halo hover ── -->
+                                <Border x:Name="HoverRing"
+                                        CornerRadius="15" BorderThickness="1.5"
+                                        BorderBrush="#406090"
+                                        Opacity="0" IsHitTestVisible="False"/>
+
+                                <!-- ══ Bouton (knob) ════════════════════════════ -->
+                                <!-- Ombre portée du bouton sur la piste -->
+                                <Ellipse x:Name="KnobShadow"
+                                         Width="22" Height="22"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Center"
+                                         Margin="4,2,0,0"
+                                         IsHitTestVisible="False">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush Center="0.5,0.5"
+                                                             GradientOrigin="0.5,0.5">
+                                            <GradientStop Color="#70000018" Offset="0.5"/>
+                                            <GradientStop Color="#00000018" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform x:Name="ShadowTranslate"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+
+                                <!-- Surface du bouton -->
+                                <Border x:Name="Knob"
+                                        Width="20" Height="20"
+                                        CornerRadius="10"
+                                        BorderThickness="0.5"
+                                        BorderBrush="#6888A4"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Margin="5,0,0,0">
+                                    <Border.Background>
+                                        <RadialGradientBrush Center="0.40,0.32"
+                                                             GradientOrigin="0.40,0.32"
+                                                             RadiusX="0.75" RadiusY="0.75">
+                                            <GradientStop Color="#FFFFFF"  Offset="0"/>
+                                            <GradientStop Color="#EAF2F8"  Offset="0.40"/>
+                                            <GradientStop Color="#C8D8E6"  Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="KnobTranslate"/>
+                                    </Border.RenderTransform>
+
+                                    <!-- Reflet haut du bouton (dome) -->
+                                    <Border CornerRadius="10,10,0,0" Height="10"
+                                            VerticalAlignment="Top" IsHitTestVisible="False">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                <GradientStop Color="#60FFFFFF" Offset="0"/>
+                                                <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                </Border>
+                            </Grid>
+
+                            <!-- ── Texte du contrôle ── -->
+                            <TextBlock Grid.Column="1"
+                                       Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       VerticalAlignment="Center"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,8,0"/>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+
+                            <!-- Hover : halo subtil -->
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="HoverRing"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.10"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="HoverRing"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.10"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+
+                            <!-- ON : glissement → droite, piste bleue, texte ON -->
+                            <Trigger Property="IsChecked" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <!-- Bouton -->
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="KnobTranslate"
+                                                Storyboard.TargetProperty="X"
+                                                To="38" Duration="0:0:0.20">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <!-- Ombre suit le bouton -->
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ShadowTranslate"
+                                                Storyboard.TargetProperty="X"
+                                                To="38" Duration="0:0:0.20">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <!-- Couleur piste -->
+                                            <DoubleAnimation Storyboard.TargetName="TrackOn"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.20"/>
+                                            <DoubleAnimation Storyboard.TargetName="TrackOff"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.20"/>
+                                            <!-- Texte : OFF disparaît, ON apparaît -->
+                                            <DoubleAnimation Storyboard.TargetName="TxtOff"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.10"/>
+                                            <DoubleAnimation Storyboard.TargetName="TxtOn"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" BeginTime="0:0:0.10"
+                                                             Duration="0:0:0.10"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="KnobTranslate"
+                                                Storyboard.TargetProperty="X"
+                                                To="0" Duration="0:0:0.20">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation
+                                                Storyboard.TargetName="ShadowTranslate"
+                                                Storyboard.TargetProperty="X"
+                                                To="0" Duration="0:0:0.20">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="TrackOn"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.20"/>
+                                            <DoubleAnimation Storyboard.TargetName="TrackOff"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.20"/>
+                                            <DoubleAnimation Storyboard.TargetName="TxtOn"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.10"/>
+                                            <DoubleAnimation Storyboard.TargetName="TxtOff"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" BeginTime="0:0:0.10"
+                                                             Duration="0:0:0.10"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+
+                            <!-- Désactivé -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.40"/>
+                            </Trigger>
+
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Bouton primaire bleu ── -->
+        <Style x:Key="PrimaryBtnStyle" TargetType="Button">
+            <Setter Property="Background"      Value="#1870CC"/>
+            <Setter Property="Foreground"      Value="#E8F0FF"/>
+            <Setter Property="FontFamily"      Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="Padding"         Value="20,10"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Lbl"
+                                       Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       FontWeight="{TemplateBinding FontWeight}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2080E0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1260AA"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThSecBtn}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Bouton secondaire sombre ── -->
+        <Style x:Key="SecondaryBtnStyle" TargetType="Button">
+            <Setter Property="Background"      Value="{DynamicResource ThSecBtn}"/>
+            <Setter Property="Foreground"      Value="{DynamicResource ThTextNav}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontFamily"      Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="Padding"         Value="20,10"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <TextBlock x:Name="Lbl"
+                                       Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       FontWeight="{TemplateBinding FontWeight}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"  Property="Background"  Value="{DynamicResource ThSelection}"/>
+                                <Setter TargetName="Bd"  Property="BorderBrush" Value="{DynamicResource ThTextNav}"/>
+                                <Setter TargetName="Lbl" Property="Foreground"  Value="{DynamicResource ThTextBody}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThSidebar}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThPanel}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Scrollbar moderne (fine, arrondie, sombre) — appliquée partout ── -->
+        <Style x:Key="ModernScrollThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="T" CornerRadius="4"
+                                Background="#4A5285" Margin="2"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="T" Property="Background" Value="#5E68A8"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="T" Property="Background" Value="#6E78BE"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ScrollBar">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Width"      Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageUpCommand"
+                                                  Opacity="0" Focusable="False"
+                                                  IsTabStop="False"/>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ModernScrollThumb}"/>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="ScrollBar.PageDownCommand"
+                                                  Opacity="0" Focusable="False"
+                                                  IsTabStop="False"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter Property="Width"  Value="Auto"/>
+                                <Setter Property="Height" Value="11"/>
+                                <Setter TargetName="PART_Track" Property="Orientation" Value="Horizontal"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Convertisseur statut → couleur (Pack Réinstallation) -->
+        <pages:StatusToColorConverter x:Key="StatusColor"/>
+
+    </Application.Resources>
+</Application>

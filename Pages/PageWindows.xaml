@@ -1,0 +1,43 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageWindows"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="18,14,18,18">
+
+            <CheckBox x:Name="ChkHAGS"
+                      Content="Activer la Planification GPU mat&#233;rielle (HAGS)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkDisableGameBar"
+                      Content="D&#233;sactiver la barre de jeu Xbox (gain de performances)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkDisableDVR"
+                      Content="D&#233;sactiver l'enregistrement DVR en arri&#232;re-plan"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkGPUPriority"
+                      Content="Priorit&#233; GPU &#233;lev&#233;e pour les jeux (SystemProfile)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkMSIMode"
+                      Content="Mode MSI GPU &#8212; Interruptions bas&#233;es message (r&#233;duction latence)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkDiscordHWAccel"
+                      Content="D&#233;sactiver l'acc&#233;l&#233;ration mat&#233;rielle Discord"
+                      Style="{StaticResource TweakChkStyle}"
+                      IsChecked="False"/>
+            <CheckBox x:Name="ChkSteamOverlay"
+                      Content="D&#233;sactiver l'overlay Steam"
+                      Style="{StaticResource TweakChkStyle}"
+                      IsChecked="False"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                <Button x:Name="BtnAppliquer"
+                        Content="APPLIQUER LES OPTIMISATIONS WINDOWS"
+                        Style="{StaticResource PrimaryBtnStyle}"
+                        Click="BtnAppliquer_Click"/>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

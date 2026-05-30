@@ -1,0 +1,361 @@
+﻿<Window x:Class="Optimisation_Tool.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Tweakly" Width="1100" Height="700"
+        MinWidth="900" MinHeight="580"
+        Icon="Tweakly.ico"
+        WindowStyle="None" ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource ThBg}">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="5"
+                      GlassFrameThickness="0" CornerRadius="0"/>
+    </WindowChrome.WindowChrome>
+
+    <!-- Barre de progression dans la barre des tâches Windows -->
+    <Window.TaskbarItemInfo>
+        <TaskbarItemInfo x:Name="TaskbarInfo"
+                         ProgressState="None" ProgressValue="0"/>
+    </Window.TaskbarItemInfo>
+
+    <Window.Resources>
+
+        <!-- Brushes -->
+        <SolidColorBrush x:Key="BrushBg"      Color="#2B3252"/>
+        <SolidColorBrush x:Key="BrushSidebar" Color="#262C49"/>
+        <SolidColorBrush x:Key="BrushBorder"  Color="#3D456E"/>
+        <SolidColorBrush x:Key="BrushText"    Color="#E2E6FF"/>
+        <SolidColorBrush x:Key="BrushTextSub" Color="#B4BBE0"/>
+        <SolidColorBrush x:Key="BrushNavText" Color="#B6BEE4"/>
+        <SolidColorBrush x:Key="BrushLogBg"   Color="#242A45"/>
+        <SolidColorBrush x:Key="BrushLogText" Color="#37873A"/>
+
+        <!-- Bouton nav standard -->
+        <Style x:Key="NavBtnStyle" TargetType="Button">
+            <Setter Property="Background"                             Value="Transparent"/>
+            <Setter Property="Foreground"                             Value="{DynamicResource ThTextNav}"/>
+            <Setter Property="BorderThickness"                        Value="0"/>
+            <Setter Property="HorizontalContentAlignment"             Value="Left"/>
+            <Setter Property="FontSize"                               Value="12"/>
+            <Setter Property="FontFamily"                             Value="{StaticResource AppFont}"/>
+            <Setter Property="FontWeight"                             Value="Normal"/>
+            <Setter Property="Cursor"                                 Value="Hand"/>
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Margin="8,2">
+                            <TextBlock x:Name="Lbl"
+                                       Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       FontWeight="{TemplateBinding FontWeight}"
+                                       Padding="12,8" TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThSecBtn}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextNav}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Boutons fen&#234;tre (min/close) -->
+        <Style x:Key="WinBtnStyle" TargetType="Button">
+            <Setter Property="Background"                             Value="Transparent"/>
+            <Setter Property="Foreground"                             Value="{DynamicResource ThTextNav}"/>
+            <Setter Property="BorderThickness"                        Value="0"/>
+            <Setter Property="Width"                                  Value="34"/>
+            <Setter Property="Height"                                 Value="30"/>
+            <Setter Property="FontSize"                               Value="13"/>
+            <Setter Property="Cursor"                                 Value="Hand"/>
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="5">
+                            <TextBlock x:Name="Lbl" Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"  Property="Background" Value="#1F2865"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CloseBtnStyle" TargetType="Button">
+            <Setter Property="Background"                             Value="Transparent"/>
+            <Setter Property="Foreground"                             Value="{DynamicResource ThTextNav}"/>
+            <Setter Property="BorderThickness"                        Value="0"/>
+            <Setter Property="Width"                                  Value="34"/>
+            <Setter Property="Height"                                 Value="30"/>
+            <Setter Property="FontSize"                               Value="13"/>
+            <Setter Property="Cursor"                                 Value="Hand"/>
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="5">
+                            <TextBlock x:Name="Lbl" Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"  Property="Background" Value="#C42B1C"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ══ BARRE TITRE PLEINE LARGEUR (drag + min / agrandir / fermer) ═══ -->
+        <Border Grid.Row="0" Height="40"
+                Background="{DynamicResource ThSidebar}"
+                BorderBrush="{DynamicResource ThBorder}"
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_MouseDown">
+            <Grid>
+                <TextBlock x:Name="TxtPageTitle"
+                           Text="Informations Syst&#232;me"
+                           Foreground="{DynamicResource ThTextBody}"
+                           FontSize="12" FontFamily="{StaticResource AppFont}"
+                           VerticalAlignment="Center" Margin="16,0,0,0"/>
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Orientation="Horizontal" Margin="0,0,6,0">
+                    <Button x:Name="BtnMinimize" Content="&#x2013;"
+                            Style="{StaticResource WinBtnStyle}"
+                            Click="BtnMinimize_Click"/>
+                    <Button x:Name="BtnMaximize" Content="&#x25A1;"
+                            Style="{StaticResource WinBtnStyle}"
+                            Click="BtnMaximize_Click"/>
+                    <Button x:Name="BtnClose" Content="&#x2715;"
+                            Style="{StaticResource CloseBtnStyle}"
+                            Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══ CORPS : sidebar + contenu ════════════════════════════════════ -->
+        <Grid Grid.Row="1">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="178"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+            <!-- SIDEBAR -->
+            <Border Grid.Column="0"
+                    Background="{DynamicResource ThSidebar}"
+                    BorderBrush="{DynamicResource ThBorder}"
+                    BorderThickness="0,0,1,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Logo + zone de drag -->
+                    <Border Grid.Row="0" Padding="18,20,18,14"
+                            MouseLeftButtonDown="DragBar_MouseDown"
+                            Cursor="SizeAll">
+                        <StackPanel>
+                            <TextBlock FontSize="18" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
+                            <TextBlock x:Name="TxtVersion" Text="v1.0.0"
+                                       FontSize="11" Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Boutons de navigation -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,6,0,12">
+
+                            <!-- ── Groupe Optimisations (repliable) ── -->
+                            <Button x:Name="BtnNavOptGroup"
+                                    Content="&#x25B8;  Optimisations"
+                                    FontWeight="SemiBold"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="BtnNavOptGroup_Click"/>
+
+                            <!-- Sous-items Optimisations -->
+                            <Border x:Name="OptGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button Content="  &#x00B7;  Nettoyage"
+                                            Tag="Nettoyage"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="  &#x00B7;  Nvidia"
+                                            Tag="Nvidia"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="  &#x00B7;  CPU"
+                                            Tag="CPU"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="  &#x00B7;  Windows"
+                                            Tag="Windows"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="  &#x00B7;  R&#233;seau"
+                                            Tag="Reseau"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── Pages autonomes ── -->
+                            <Button x:Name="BtnNavPrivacy"
+                                    Content="Confidentialit&#233;"
+                                    Tag="Privacy"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="NavBtn_Click"/>
+                            <Button x:Name="BtnNavApps"
+                                    Content="Applications"
+                                    Tag="Apps"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="NavBtn_Click"/>
+                            <Button x:Name="BtnNavFresh"
+                                    Content="Pack R&#233;installation"
+                                    Tag="Fresh"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="NavBtn_Click"/>
+                            <Button x:Name="BtnNavMonitoring"
+                                    Content="Monitoring"
+                                    Tag="Monitoring"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="NavBtn_Click"/>
+                            <Button x:Name="BtnNavInfo"
+                                    Content="Informations Syst&#232;me"
+                                    Tag="Info"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="NavBtn_Click"/>
+                            <Button x:Name="BtnNavReglages"
+                                    Content="R&#233;glages"
+                                    Tag="Reglages"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="NavBtn_Click"/>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Bas de sidebar : toggle thème — mini pill -->
+                    <Button x:Name="BtnTheme" Grid.Row="2"
+                            ToolTip="Basculer le th&#232;me"
+                            HorizontalAlignment="Left"
+                            Height="28"
+                            Margin="12,0,0,12"
+                            Cursor="Hand"
+                            WindowChrome.IsHitTestVisibleInChrome="True"
+                            Click="BtnTheme_Click">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" CornerRadius="8"
+                                        Background="{DynamicResource ThSecBtn}"
+                                        BorderBrush="{DynamicResource ThBorder}"
+                                        BorderThickness="1"
+                                        Padding="10,0">
+                                    <TextBlock x:Name="ThemeIcon"
+                                               Text="Sombre"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#1870CC"/>
+                                        <Setter TargetName="ThemeIcon" Property="Foreground" Value="{DynamicResource ThTextNav}"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ══ COLONNE DROITE : contenu + journal ══════════════════════ -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- ZONE DE CONTENU -->
+                <Grid Grid.Row="0" Background="{DynamicResource ThBg}">
+
+                <!-- Contenu de la page active -->
+                <ContentControl x:Name="MainContent"
+                                Focusable="False"/>
+                </Grid><!-- fin ZONE DE CONTENU -->
+
+                <!-- ══ JOURNAL D'ACTIVIT&#201; (repliable) ══════════════════════ -->
+                <Border Grid.Row="1"
+                        Background="{DynamicResource ThLogBg}"
+                        BorderBrush="{DynamicResource ThBorder}"
+                        BorderThickness="0,1,0,0">
+                    <StackPanel>
+                        <!-- En-t&#234;te + bouton repli -->
+                        <Grid Height="24" Background="{DynamicResource ThLogHdr}">
+                            <TextBlock Text="Journal d'activit&#233;"
+                                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <Button x:Name="BtnToggleLog"
+                                    Content="&#x25B4;"
+                                    Style="{StaticResource WinBtnStyle}"
+                                    Width="40" Height="20"
+                                    HorizontalAlignment="Right" Margin="0,0,6,0"
+                                    Click="BtnToggleLog_Click"/>
+                        </Grid>
+                        <!-- Corps du journal -->
+                        <ScrollViewer x:Name="LogScroll"
+                                      Visibility="Collapsed"
+                                      Height="130"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Padding="12,6,12,8">
+                            <TextBlock x:Name="TxtLog"
+                                       Foreground="{DynamicResource ThLogText}"
+                                       FontFamily="Consolas" FontSize="11.5"
+                                       TextWrapping="Wrap" LineHeight="16"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+            </Grid><!-- fin colonne droite -->
+        </Grid><!-- fin corps (sidebar + contenu) -->
+    </Grid><!-- fin grille principale -->
+</Window>

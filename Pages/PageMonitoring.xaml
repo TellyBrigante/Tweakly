@@ -1,0 +1,225 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageMonitoring"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded"
+             Unloaded="UserControl_Unloaded">
+
+    <UserControl.Resources>
+        <Style x:Key="MTile" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="12"/>
+            <Setter Property="Padding"         Value="16,14"/>
+        </Style>
+        <Style x:Key="MHdr" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="MName" TargetType="TextBlock">
+            <Setter Property="Foreground"    Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily"    Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"      Value="11.5"/>
+            <Setter Property="TextTrimming"  Value="CharacterEllipsis"/>
+            <Setter Property="Margin"        Value="0,2,0,10"/>
+        </Style>
+        <Style x:Key="MBig" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="30"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="MRowLbl" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11.5"/>
+        </Style>
+        <Style x:Key="MRowVal" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize"   Value="11.5"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="18,16,18,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ══ TUILES ══ -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- CPU -->
+            <Border Grid.Column="0" Style="{StaticResource MTile}">
+                <StackPanel>
+                    <TextBlock Text="PROCESSEUR" Style="{StaticResource MHdr}"/>
+                    <TextBlock x:Name="TxtCpuName" Text="&#8212;" Style="{StaticResource MName}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtCpuUsage" Text="&#8212;" Style="{StaticResource MBig}"
+                                   Foreground="#3B82E0"/>
+                        <TextBlock Text="%" Foreground="#3B82E0" FontSize="16" FontWeight="Bold"
+                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
+                    </StackPanel>
+                    <!-- Barre usage -->
+                    <Grid Height="6" Margin="0,8,0,12">
+                        <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
+                        <Grid x:Name="BarCpu">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#3B82E0" CornerRadius="3"/>
+                        </Grid>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Fr&#233;quence" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtCpuFreq" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Fr&#233;q. de base" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtCpuBase" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Processus" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtCpuProc" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid>
+                        <TextBlock Text="Top process" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtCpuTop" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- GPU -->
+            <Border Grid.Column="2" Style="{StaticResource MTile}">
+                <StackPanel>
+                    <TextBlock Text="CARTE GRAPHIQUE" Style="{StaticResource MHdr}"/>
+                    <TextBlock x:Name="TxtGpuName" Text="&#8212;" Style="{StaticResource MName}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtGpuUsage" Text="&#8212;" Style="{StaticResource MBig}"
+                                   Foreground="#2EC46A"/>
+                        <TextBlock Text="%" Foreground="#2EC46A" FontSize="16" FontWeight="Bold"
+                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
+                    </StackPanel>
+                    <Grid Height="6" Margin="0,8,0,12">
+                        <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
+                        <Grid x:Name="BarGpu">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#2EC46A" CornerRadius="3"/>
+                        </Grid>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="VRAM"        Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtGpuVram" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Temp&#233;rature" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtGpuTemp"     Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Consommation" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtGpuWatts" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid>
+                        <TextBlock Text="Fr&#233;quence" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtGpuFreq"   Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- RAM -->
+            <Border Grid.Column="4" Style="{StaticResource MTile}">
+                <StackPanel>
+                    <TextBlock Text="M&#201;MOIRE VIVE" Style="{StaticResource MHdr}"/>
+                    <TextBlock x:Name="TxtRamName" Text="&#8212;" Style="{StaticResource MName}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtRamUsage" Text="&#8212;" Style="{StaticResource MBig}"
+                                   Foreground="#C08CF0"/>
+                        <TextBlock Text="%" Foreground="#C08CF0" FontSize="16" FontWeight="Bold"
+                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
+                    </StackPanel>
+                    <Grid Height="6" Margin="0,8,0,12">
+                        <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
+                        <Grid x:Name="BarRam">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Background="#C08CF0" CornerRadius="3"/>
+                        </Grid>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Disponible" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtRamFree" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Type" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtRamType" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <TextBlock Text="Barrettes" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtRamSticks" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid>
+                        <TextBlock Text="Top process" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtRamTop" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ══ GRAPHIQUE ══ -->
+        <Border Grid.Row="1" Style="{StaticResource MTile}" Margin="0,12,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- En-tête + légende -->
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <TextBlock Text="HISTORIQUE  (60 s)" Style="{StaticResource MHdr}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Ellipse Width="8" Height="8" Fill="#3B82E0" VerticalAlignment="Center"/>
+                        <TextBlock Text="CPU" Foreground="{DynamicResource ThTextNav}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="#2EC46A" VerticalAlignment="Center"/>
+                        <TextBlock Text="GPU" Foreground="{DynamicResource ThTextNav}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="#C08CF0" VerticalAlignment="Center"/>
+                        <TextBlock Text="RAM" Foreground="{DynamicResource ThTextNav}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Zone de tracé -->
+                <Border Grid.Row="1" Background="{DynamicResource ThBg}"
+                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="8"
+                        ClipToBounds="True">
+                    <Grid x:Name="GraphArea" SizeChanged="GraphArea_SizeChanged">
+                        <!-- Lignes de grille horizontales (25/50/75 %) -->
+                        <Canvas x:Name="GridCanvas" IsHitTestVisible="False"/>
+                        <Polyline x:Name="RamLine" Stroke="#C08CF0" StrokeThickness="1.8"
+                                  StrokeLineJoin="Round"/>
+                        <Polyline x:Name="GpuLine" Stroke="#2EC46A" StrokeThickness="1.8"
+                                  StrokeLineJoin="Round"/>
+                        <Polyline x:Name="CpuLine" Stroke="#3B82E0" StrokeThickness="1.8"
+                                  StrokeLineJoin="Round"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

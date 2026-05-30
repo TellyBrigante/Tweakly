@@ -1,0 +1,35 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageCPU"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="18,14,18,18">
+
+            <CheckBox x:Name="ChkUltimatePower"
+                      Content="Activer le Mode Performances Ultimes (Power Plan)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkDisableThrottling"
+                      Content="D&#233;sactiver le Power Throttling (&#233;vite le bridage CPU en arri&#232;re-plan)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkSysResponsiveness"
+                      Content="Prioriser le CPU pour les applications au premier plan (SystemResponsiveness)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkTimerResolution"
+                      Content="GlobalTimerResolution &#8212; R&#233;solution timer haute pr&#233;cision (Windows 11)"
+                      Style="{StaticResource TweakChkStyle}"/>
+            <CheckBox x:Name="ChkHVCI"
+                      Content="D&#233;sactiver Memory Integrity / HVCI (gros gain perf &#8212; r&#233;duit la s&#233;curit&#233;)"
+                      Style="{StaticResource TweakChkStyle}"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                <Button x:Name="BtnAppliquer"
+                        Content="APPLIQUER LES TWEAKS CPU"
+                        Style="{StaticResource PrimaryBtnStyle}"
+                        Click="BtnAppliquer_Click"/>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
