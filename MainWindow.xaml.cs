@@ -50,7 +50,12 @@ namespace Optimisation_Tool
                 TxtVersion.Text = "v" + Pages.PageReglages.AppVersion;
 
                 Log("Outil prêt.");
-                NavigateTo(BtnNavInfo);
+
+                // Démarrage : groupe Optimisations déroulé + page Nettoyage active
+                _optExpanded = true;
+                OptGroupPanel.Visibility = Visibility.Visible;
+                BtnNavOptGroup.Content   = "▾  Optimisations";
+                NavigateTo(BtnNavNettoyage);
 
 #if !DEBUG
                 // Vérification silencieuse des MAJ au démarrage (uniquement en build distribué)

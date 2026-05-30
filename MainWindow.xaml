@@ -1,8 +1,8 @@
 ﻿<Window x:Class="Optimisation_Tool.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Tweakly" Width="1100" Height="700"
-        MinWidth="900" MinHeight="580"
+        Title="Tweakly" Width="1180" Height="820"
+        MinWidth="940" MinHeight="620"
         Icon="Tweakly.ico"
         WindowStyle="None" ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource ThBg}">
@@ -189,7 +189,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.0.2"
+                            <TextBlock x:Name="TxtVersion" Text="v1.0.3"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -215,7 +215,8 @@
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
-                                    <Button Content="  &#x00B7;  Nettoyage"
+                                    <Button x:Name="BtnNavNettoyage"
+                                            Content="  &#x00B7;  Nettoyage"
                                             Tag="Nettoyage"
                                             Style="{StaticResource NavBtnStyle}"
                                             Click="NavBtn_Click"/>
