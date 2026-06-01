@@ -12,31 +12,72 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using Microsoft.Win32;
+using System.Text.Json;
+using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
+    // ── Statut de mise à jour ──────────────────────────────────────────────────
+
+    public enum UpdateStatus { Unknown, Checking, UpToDate, UpdateAvailable, Updating, Updated, Failed }
+
     // ── Modèle ────────────────────────────────────────────────────────────────
 
     public class AppItem : INotifyPropertyChanged
     {
-        private string _wingetId = "";
+        private string       _wingetId        = "";
+        private UpdateStatus _updateStatus    = UpdateStatus.Unknown;
+        private string       _availableVersion = "";
 
-        public string Name             { get; set; } = "";
-        public string Publisher        { get; set; } = "";
-        public string Version          { get; set; } = "";
-        public string UninstallString  { get; set; } = "";
-        public string InstallLocation  { get; set; } = "";
+        public string Name            { get; set; } = "";
+        public string Publisher       { get; set; } = "";
+        public string Version         { get; set; } = "";
+        public string UninstallString { get; set; } = "";
+        public string InstallLocation { get; set; } = "";
 
         public string WingetId
         {
             get => _wingetId;
+            set { if (_wingetId == value) return; _wingetId = value; Notify(nameof(WingetId)); }
+        }
+
+        public UpdateStatus UpdateStatus
+        {
+            get => _updateStatus;
             set
             {
-                if (_wingetId == value) return;
-                _wingetId = value;
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(WingetId)));
+                if (_updateStatus == value) return;
+                _updateStatus = value;
+                Notify(nameof(UpdateStatus));
+                Notify(nameof(StatusText));
             }
         }
+
+        public string AvailableVersion
+        {
+            get => _availableVersion;
+            set
+            {
+                if (_availableVersion == value) return;
+                _availableVersion = value;
+                Notify(nameof(AvailableVersion));
+                Notify(nameof(StatusText));
+            }
+        }
+
+        public string StatusText => UpdateStatus switch
+        {
+            UpdateStatus.Checking        => "Vérification…",
+            UpdateStatus.UpToDate        => "À jour",
+            UpdateStatus.UpdateAvailable => string.IsNullOrEmpty(AvailableVersion) ? "Disponible" : AvailableVersion,
+            UpdateStatus.Updating        => "Mise à jour…",
+            UpdateStatus.Updated         => "Mis à jour",
+            UpdateStatus.Failed          => "Échec",
+            _                            => "—",
+        };
+
+        private void Notify(string name)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
         public event PropertyChangedEventHandler? PropertyChanged;
     }
@@ -47,7 +88,7 @@ namespace Optimisation_Tool.Pages
     {
         public enum LType { Reg, File, Task }
         public LType  Type    { get; init; }
-        public string Target  { get; init; } = "";   // chemin reg / chemin fichier / "\Chemin\Tache"
+        public string Target  { get; init; } = "";
         public string Display { get; init; } = "";
     }
 
@@ -55,11 +96,12 @@ namespace Optimisation_Tool.Pages
 
     public partial class PageApps : UserControl
     {
-        private readonly MainWindow _main;
-        private readonly ObservableCollection<AppItem> _apps = new();
-        private ICollectionView? _view;
-        private bool _loaded = false;
-        private List<Leftover> _pendingCleanup = new();
+        private readonly MainWindow                          _main;
+        private readonly ObservableCollection<AppItem>      _apps = new();
+        private          ICollectionView?                   _view;
+        private          bool                               _loaded   = false;
+        private          bool                               _updating = false;
+        private          List<Leftover>                     _pendingCleanup = new();
 
         public PageApps(MainWindow main)
         {
@@ -94,6 +136,7 @@ namespace Optimisation_Tool.Pages
         {
             BtnRefresh.IsEnabled      = false;
             BtnDesinstaller.IsEnabled = false;
+            BtnUpdateAll.IsEnabled    = false;
             TxtStatus.Text            = "Chargement de la liste des applications…";
             TxtAppCount.Text          = "";
             _apps.Clear();
@@ -106,25 +149,258 @@ namespace Optimisation_Tool.Pages
             UpdateCount();
             BtnRefresh.IsEnabled = true;
             TxtStatus.Text       = $"{_apps.Count} application(s) chargée(s). Récupération des IDs Winget…";
-            _main.Log($"Applications : {_apps.Count} application(s) trouvée(s).");
+            _main.Log($"Applications : {_apps.Count} application(s) trouvée(s).");
 
-            // Phase 2 : IDs Winget en arrière-plan
-            var ids = await Task.Run(LoadWingetIds);
+            // Phase 2 : IDs Winget en arrière-plan
+            var ids = await Task.Run(() => LoadWingetIds());
 
             if (ids.Count > 0)
             {
                 foreach (var a in _apps)
-                {
-                    if (ids.TryGetValue(a.Name, out var id))
-                        a.WingetId = id;
-                }
-                TxtStatus.Text = "Prêt.";
-                _main.Log($"Applications : {ids.Count} ID(s) Winget récupéré(s).");
+                    if (ids.TryGetValue(a.Name, out var id)) a.WingetId = id;
+
+                _main.Log($"Applications : {ids.Count} ID(s) Winget récupéré(s).");
             }
             else
             {
                 TxtStatus.Text = "Prêt (Winget non disponible ou liste vide).";
+                return;
             }
+
+            // Phase 3 : vérification des mises à jour
+            await CheckAllUpdatesAsync();
+        }
+
+        // ── Vérification des mises à jour ─────────────────────────────────────
+
+        private async Task CheckAllUpdatesAsync()
+        {
+            var withId = _apps.Where(a => !string.IsNullOrEmpty(a.WingetId)).ToList();
+            if (withId.Count == 0)
+            {
+                TxtStatus.Text = "Prêt.";
+                return;
+            }
+
+            TxtStatus.Text = "Vérification des mises à jour…";
+            foreach (var a in withId) a.UpdateStatus = UpdateStatus.Checking;
+
+            var upgrades = await Task.Run(() => LoadWingetUpgrades());
+
+            foreach (var a in withId)
+            {
+                if (upgrades.TryGetValue(a.WingetId, out var newVer))
+                {
+                    a.AvailableVersion = newVer;
+                    a.UpdateStatus     = UpdateStatus.UpdateAvailable;
+                }
+                else
+                {
+                    a.UpdateStatus = UpdateStatus.UpToDate;
+                }
+            }
+
+            int count = withId.Count(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
+            BtnUpdateAll.IsEnabled = count > 0;
+
+            TxtStatus.Text = count > 0
+                ? $"{count} mise(s) à jour disponible(s)."
+                : "Toutes les applications gérées sont à jour.";
+            _main.Log($"Applications : vérification terminée — {count} mise(s) à jour disponible(s).");
+        }
+
+        private Dictionary<string, string> LoadWingetUpgrades()
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                var raw = RunWinget("upgrade --include-unknown --accept-source-agreements --disable-interactivity");
+                if (!string.IsNullOrWhiteSpace(raw))
+                    ParseWingetUpgrade(raw, dict);
+            }
+            catch (Exception ex) { _main.Log($"Applications : LoadWingetUpgrades — {ex.Message}"); }
+            return dict;
+        }
+
+        // Trouve la position du premier tableau JSON ('[') qui précède un objet ('{').
+        // Ignore les '[' qui proviennent de codes ANSI résiduels ou de texte de progression.
+        private static int FindJsonArrayStart(string s)
+        {
+            for (int k = s.IndexOf('['); k >= 0; k = s.IndexOf('[', k + 1))
+            {
+                var after = s.Substring(k + 1).TrimStart(' ', '\r', '\n');
+                if (after.StartsWith("{") || after.StartsWith("]"))
+                    return k;
+            }
+            return -1;
+        }
+
+        // Lance winget et retourne sa sortie.
+        // Tente d'abord en contexte utilisateur (de-élevé) car winget ne fonctionne pas bien
+        // dans un process admin. chcp 65001 force UTF-8 pour éviter les problèmes d'encodage.
+        // Fallback direct si la de-élévation échoue.
+        private string RunWinget(string arguments)
+        {
+            // Tentative 1 : de-élevé via token explorer
+            try
+            {
+                var tmp = Path.Combine(Path.GetTempPath(), $"tweakly_wg_{Guid.NewGuid():N}.txt");
+                try
+                {
+                    int exit = DeElevatedLauncher.StartAndWait(
+                        "cmd.exe",
+                        $"/c chcp 65001 > nul && winget {arguments} > \"{tmp}\" 2>&1",
+                        70_000);
+                    if (File.Exists(tmp))
+                    {
+                        var raw = File.ReadAllText(tmp, Encoding.UTF8);
+                        raw = Regex.Replace(raw, "\x1B\\[[0-9;?]*[A-Za-z]", ""); // strip ANSI colors
+                        if (!string.IsNullOrWhiteSpace(raw))
+                        {
+                            _main.Log($"Applications : winget OK — {raw.Length} chars.");
+                            return raw;
+                        }
+                    }
+                    _main.Log($"Applications : winget de-élevé exit={exit}, sortie vide.");
+                }
+                finally { try { File.Delete(tmp); } catch { } }
+            }
+            catch (Exception ex) { _main.Log($"Applications : de-élévation — {ex.Message}"); }
+
+            // Tentative 2 : direct (fallback)
+            try
+            {
+                using var p = Process.Start(new ProcessStartInfo("winget", arguments)
+                {
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true,
+                    RedirectStandardOutput = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                });
+                if (p != null)
+                {
+                    var raw = p.StandardOutput.ReadToEnd();
+                    p.WaitForExit(60_000);
+                    raw = Regex.Replace(raw ?? "", "\x1B\\[[0-9;?]*[A-Za-z]", "");
+                    if (!string.IsNullOrWhiteSpace(raw))
+                    {
+                        _main.Log($"Applications : winget direct OK — {raw.Length} chars.");
+                        return raw;
+                    }
+                    _main.Log($"Applications : winget direct exit={p.ExitCode}, sortie vide.");
+                }
+            }
+            catch (Exception ex) { _main.Log($"Applications : winget direct — {ex.Message}"); }
+
+            return "";
+        }
+
+        private static void ParseWingetUpgrade(string output, Dictionary<string, string> dict)
+        {
+            // Structure d'une ligne winget upgrade : Nom...  Id  VersionActuelle  Disponible  [Source]
+            // On repère le token ID, puis la version disponible = 2 tokens après l'ID.
+            foreach (var rawLine in output.Split('\n'))
+            {
+                var line   = rawLine.TrimEnd('\r').TrimEnd();
+                var tokens = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+
+                int idIdx = -1;
+                for (int k = 0; k < tokens.Length; k++)
+                    if (IsWingetId(tokens[k])) { idIdx = k; break; }
+
+                if (idIdx < 1 || idIdx + 2 >= tokens.Length) continue;
+
+                var id    = tokens[idIdx];
+                var avail = tokens[idIdx + 2];   // [Id][VersionActuelle][Disponible]
+                if (!string.IsNullOrEmpty(avail) && avail != "<")
+                    dict.TryAdd(id, avail);
+            }
+        }
+
+        // ── Mise à jour individuelle ───────────────────────────────────────────
+
+        private async Task UpdateSingleAppAsync(AppItem app)
+        {
+            if (string.IsNullOrEmpty(app.WingetId)) return;
+
+            app.UpdateStatus = UpdateStatus.Updating;
+            TxtStatus.Text   = $"Mise à jour de « {app.Name} »…";
+            _main.Log($"Applications : mise à jour de « {app.Name} »…");
+
+            var ok = await Task.Run(() =>
+            {
+                try
+                {
+                    int exit = DeElevatedLauncher.StartAndWait(
+                        "cmd.exe",
+                        $"/c winget upgrade --id \"{app.WingetId}\" --silent --accept-source-agreements --disable-interactivity",
+                        300_000);
+                    return exit == 0;
+                }
+                catch { return false; }
+            });
+
+            if (ok)
+            {
+                app.AvailableVersion = "";
+                app.UpdateStatus     = UpdateStatus.Updated;
+                _main.Log($"Applications : « {app.Name} » mise à jour avec succès.");
+            }
+            else
+            {
+                app.UpdateStatus = UpdateStatus.Failed;
+                _main.Log($"Applications : échec de la mise à jour de « {app.Name} ».");
+            }
+        }
+
+        private async void BtnUpdateOne_Click(object sender, RoutedEventArgs e)
+        {
+            if (_updating) return;
+            if ((sender as Button)?.Tag is not AppItem app) return;
+            if (app.UpdateStatus is UpdateStatus.Updating or UpdateStatus.Updated) return;
+
+            _updating              = true;
+            BtnUpdateAll.IsEnabled = false;
+            BtnRefresh.IsEnabled   = false;
+
+            await UpdateSingleAppAsync(app);
+
+            BtnUpdateAll.IsEnabled = _apps.Any(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
+            BtnRefresh.IsEnabled   = true;
+            _updating              = false;
+
+            TxtStatus.Text = app.UpdateStatus == UpdateStatus.Updated
+                ? $"« {app.Name} » mise à jour avec succès."
+                : $"Échec de la mise à jour de « {app.Name} ».";
+        }
+
+        private async void BtnUpdateAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (_updating) return;
+            var toUpdate = _apps.Where(a => a.UpdateStatus == UpdateStatus.UpdateAvailable).ToList();
+            if (toUpdate.Count == 0) return;
+
+            _updating                 = true;
+            BtnUpdateAll.IsEnabled    = false;
+            BtnRefresh.IsEnabled      = false;
+            BtnDesinstaller.IsEnabled = false;
+            _main.Log($"Applications : mise à jour groupée — {toUpdate.Count} application(s)…");
+
+            foreach (var app in toUpdate)
+                await UpdateSingleAppAsync(app);
+
+            int updated = toUpdate.Count(a => a.UpdateStatus == UpdateStatus.Updated);
+            int failed  = toUpdate.Count(a => a.UpdateStatus == UpdateStatus.Failed);
+
+            BtnUpdateAll.IsEnabled    = _apps.Any(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
+            BtnRefresh.IsEnabled      = true;
+            BtnDesinstaller.IsEnabled = DgApps.SelectedItem != null;
+            _updating                 = false;
+
+            TxtStatus.Text = failed > 0
+                ? $"Mises à jour : {updated} réussie(s), {failed} échouée(s)."
+                : $"{updated} application(s) mise(s) à jour avec succès.";
+            _main.Log($"Applications : MAJ groupée — {updated} réussie(s), {failed} échouée(s).");
         }
 
         // ── Lecture registre ──────────────────────────────────────────────────
@@ -134,7 +410,6 @@ namespace Optimisation_Tool.Pages
             var result = new List<AppItem>();
             var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // HKLM : apps 64-bit et 32-bit (WOW6432Node)
             string[] hklmPaths =
             {
                 @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
@@ -154,8 +429,7 @@ namespace Optimisation_Tool.Pages
                             using var k = root.OpenSubKey(sub);
                             if (k == null) continue;
                             var item = KeyToAppItem(k);
-                            if (item != null && seen.Add(item.Name))
-                                result.Add(item);
+                            if (item != null && seen.Add(item.Name)) result.Add(item);
                         }
                         catch { }
                     }
@@ -163,7 +437,6 @@ namespace Optimisation_Tool.Pages
                 catch { }
             }
 
-            // HKCU : apps utilisateur (ex. applis Microsoft Store, winget user scope)
             try
             {
                 using var root = Registry.CurrentUser.OpenSubKey(
@@ -177,8 +450,7 @@ namespace Optimisation_Tool.Pages
                             using var k = root.OpenSubKey(sub);
                             if (k == null) continue;
                             var item = KeyToAppItem(k);
-                            if (item != null && seen.Add(item.Name))
-                                result.Add(item);
+                            if (item != null && seen.Add(item.Name)) result.Add(item);
                         }
                         catch { }
                     }
@@ -194,10 +466,8 @@ namespace Optimisation_Tool.Pages
             var name = k.GetValue("DisplayName")?.ToString()?.Trim();
             if (string.IsNullOrEmpty(name)) return null;
 
-            // Filtrer : composants système
             if (k.GetValue("SystemComponent") is int sc && sc == 1) return null;
 
-            // Filtrer : mises à jour Windows (KB + numéro, "Security Update for …", etc.)
             if (Regex.IsMatch(name, @"^KB\d{6,}", RegexOptions.IgnoreCase)) return null;
             if (name.StartsWith("Security Update", StringComparison.OrdinalIgnoreCase)) return null;
             if (name.StartsWith("Update for",      StringComparison.OrdinalIgnoreCase)) return null;
@@ -206,7 +476,7 @@ namespace Optimisation_Tool.Pages
             return new AppItem
             {
                 Name            = name,
-                Publisher       = k.GetValue("Publisher")?.ToString()?.Trim()     ?? "",
+                Publisher       = k.GetValue("Publisher")?.ToString()?.Trim()      ?? "",
                 Version         = k.GetValue("DisplayVersion")?.ToString()?.Trim() ?? "",
                 InstallLocation = k.GetValue("InstallLocation")?.ToString()?.Trim() ?? "",
                 UninstallString = k.GetValue("QuietUninstallString")?.ToString()?.Trim()
@@ -217,89 +487,51 @@ namespace Optimisation_Tool.Pages
 
         // ── Lecture Winget ────────────────────────────────────────────────────
 
-        private static Dictionary<string, string> LoadWingetIds()
+        private Dictionary<string, string> LoadWingetIds()
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             try
             {
-                // Vérifier rapidement si winget est disponible
-                using var pChk = Process.Start(new ProcessStartInfo("winget", "--version")
-                {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                });
-                pChk?.WaitForExit(4_000);
-                if (pChk == null || pChk.ExitCode != 0) return dict;
-
-                // Récupérer la liste complète
-                using var p = Process.Start(new ProcessStartInfo(
-                    "winget", "list --accept-source-agreements --disable-interactivity")
-                {
-                    UseShellExecute         = false,
-                    CreateNoWindow          = true,
-                    RedirectStandardOutput  = true,
-                    StandardOutputEncoding  = Encoding.UTF8,
-                });
-                if (p == null) return dict;
-
-                var raw = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(60_000);
-
-                ParseWingetList(raw, dict);
+                var raw = RunWinget("list --accept-source-agreements --disable-interactivity");
+                if (!string.IsNullOrWhiteSpace(raw))
+                    ParseWingetList(raw, dict);
             }
-            catch { }
+            catch (Exception ex) { _main.Log($"Applications : LoadWingetIds — {ex.Message}"); }
             return dict;
+        }
+
+        private static bool IsWingetId(string tok)
+        {
+            // ID winget = contient un point, et le 1er segment a au moins une lettre.
+            // Distingue "Google.Chrome" (ID) de "19.4.0.10" (version).
+            if (!tok.Contains('.') || tok.Length < 4) return false;
+            // Rejette les pseudo-IDs internes ARP (ex. "ARP\Machine\X86\Battle.net") : non installables
+            if (tok.Contains('\\') || tok.StartsWith("ARP", StringComparison.OrdinalIgnoreCase)) return false;
+            return tok.Substring(0, tok.IndexOf('.')).Any(char.IsLetter);
         }
 
         private static void ParseWingetList(string output, Dictionary<string, string> dict)
         {
-            // Winget affiche un tableau texte dont les colonnes sont délimitées par des espaces.
-            // On repère la ligne d'en-tête (contient "Name" et "Id") pour connaître les offsets.
-            var lines    = output.Split('\n');
-            int nameCol  = -1;
-            int idCol    = -1;
-            bool pastSep = false;
-
-            foreach (var rawLine in lines)
+            // Pour chaque ligne : on cherche le 1er token au format winget ID (Éditeur.App).
+            // Tout ce qui précède = le nom. Indépendant du header, du séparateur et de la langue.
+            foreach (var rawLine in output.Split('\n'))
             {
-                var line = rawLine.TrimEnd('\r');
+                var line   = rawLine.TrimEnd('\r').TrimEnd();
+                var tokens = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
 
-                // Chercher l'en-tête
-                if (nameCol < 0)
+                int cur = 0;
+                foreach (var tok in tokens)
                 {
-                    var n = line.IndexOf("Name", StringComparison.Ordinal);
-                    var d = line.IndexOf("Id",   StringComparison.Ordinal);
-                    if (n >= 0 && d > n + 4)
+                    int p = line.IndexOf(tok, Math.Min(cur, line.Length), StringComparison.Ordinal);
+                    if (p < 0) continue;
+                    if (IsWingetId(tok) && p > 0)
                     {
-                        nameCol = n;
-                        idCol   = d;
+                        var name = line.Substring(0, p).Trim();
+                        if (name.Length > 0) dict.TryAdd(name, tok);
+                        break;
                     }
-                    continue;
+                    cur = p + tok.Length;
                 }
-
-                // Sauter la ligne séparateur (suite de tirets)
-                if (!pastSep)
-                {
-                    if (line.TrimStart().StartsWith("-", StringComparison.Ordinal))
-                        pastSep = true;
-                    continue;
-                }
-
-                if (line.Length <= idCol) continue;
-
-                var namePart = line
-                    .Substring(nameCol, Math.Min(idCol - nameCol, line.Length - nameCol))
-                    .Trim();
-
-                var idPart = line
-                    .Substring(idCol)
-                    .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
-                    .FirstOrDefault() ?? "";
-
-                // Les IDs winget contiennent toujours au moins un point (ex. "7zip.7zip")
-                if (!string.IsNullOrEmpty(namePart) && idPart.Contains('.'))
-                    dict.TryAdd(namePart, idPart);
             }
         }
 
@@ -321,10 +553,11 @@ namespace Optimisation_Tool.Pages
 
         private async void BtnRefresh_Click(object sender, RoutedEventArgs e)
         {
-            DgApps.SelectedItem = null;
-            TxtSearch.Text      = "";
-            _loaded             = false;   // autorise le rechargement complet
-            _loaded             = true;
+            DgApps.SelectedItem    = null;
+            TxtSearch.Text         = "";
+            BtnUpdateAll.IsEnabled = false;
+            _loaded                = false;
+            _loaded                = true;
             await LoadAppsAsync();
         }
 
@@ -333,7 +566,7 @@ namespace Optimisation_Tool.Pages
             if (DgApps.SelectedItem is not AppItem app) return;
 
             var confirm = MessageBox.Show(
-                $"Désinstaller « {app.Name} » ?\n\nCette action est irréversible.",
+                $"Désinstaller « {app.Name} » ?\n\nCette action est irréversible.",
                 "Confirmation de désinstallation",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
@@ -342,11 +575,10 @@ namespace Optimisation_Tool.Pages
 
             BtnDesinstaller.IsEnabled = false;
             BtnRefresh.IsEnabled      = false;
-            TxtStatus.Text            = $"Désinstallation de « {app.Name} »…";
-            _main.Log($"Applications : désinstallation de « {app.Name} »…");
+            TxtStatus.Text            = $"Désinstallation de « {app.Name} »…";
+            _main.Log($"Applications : désinstallation de « {app.Name} »…");
 
-            // Reinitialiser un eventuel nettoyage precedent
-            _pendingCleanup = new();
+            _pendingCleanup        = new();
             BtnNettoyer.Visibility = Visibility.Collapsed;
 
             var ok = await Task.Run(() => Uninstall(app));
@@ -355,16 +587,15 @@ namespace Optimisation_Tool.Pages
             {
                 _apps.Remove(app);
                 UpdateCount();
-                TxtStatus.Text = $"« {app.Name} » désinstallée avec succès.";
-                _main.Log($"Applications : « {app.Name} » désinstallée.");
+                TxtStatus.Text = $"« {app.Name} » désinstallée avec succès.";
+                _main.Log($"Applications : « {app.Name} » désinstallée.");
             }
             else
             {
-                TxtStatus.Text = $"Échec de la désinstallation de « {app.Name} ».";
-                _main.Log($"Applications : échec désinstallation « {app.Name} ».");
+                TxtStatus.Text = $"Échec de la désinstallation de « {app.Name} ».";
+                _main.Log($"Applications : échec désinstallation « {app.Name} ».");
             }
 
-            // ── Scan des résidus après une désinstallation réussie ──────────
             if (ok)
             {
                 TxtStatus.Text = "Scan des résidus en cours…";
@@ -373,12 +604,12 @@ namespace Optimisation_Tool.Pages
 
                 if (leftovers.Count > 0)
                 {
-                    _pendingCleanup = leftovers;
-                    int n = leftovers.Count;
+                    _pendingCleanup        = leftovers;
+                    int n                  = leftovers.Count;
                     BtnNettoyer.Content    = $"NETTOYER {n} RÉSIDU{(n > 1 ? "S" : "")}";
                     BtnNettoyer.Visibility = Visibility.Visible;
                     BtnNettoyer.IsEnabled  = true;
-                    TxtStatus.Text = $"Désinstallée — {n} résidu(s) détecté(s), cliquez pour nettoyer.";
+                    TxtStatus.Text         = $"Désinstallée — {n} résidu(s) détecté(s), cliquez pour nettoyer.";
                     _main.Log($"Applications : {n} résidu(s) détecté(s) après désinstallation.");
                 }
                 else
@@ -392,7 +623,7 @@ namespace Optimisation_Tool.Pages
             BtnDesinstaller.IsEnabled = DgApps.SelectedItem != null;
         }
 
-        // ── Scan + nettoyage des résidus ───────────────────────────────────────
+        // ── Scan + nettoyage des résidus ──────────────────────────────────────
 
         private static readonly string[] _exclWords =
         {
@@ -409,7 +640,6 @@ namespace Optimisation_Tool.Pages
             var seen  = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var excl  = new HashSet<string>(_exclWords, StringComparer.OrdinalIgnoreCase);
 
-            // Mots-clés candidats (nom d'app + éditeur)
             var cands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var w in Regex.Split(appName ?? "", @"[\s\-_\.]+"))
                 if (w.Length >= 4 && !excl.Contains(w)) cands.Add(w);
@@ -424,7 +654,6 @@ namespace Optimisation_Tool.Pages
 
             if (cands.Count == 0) return found;
 
-            // ── Registre ────────────────────────────────────────────────────
             var regRoots = new (RegistryKey hive, string prefix, string sub)[]
             {
                 (Registry.CurrentUser,  "HKCU", @"SOFTWARE"),
@@ -441,17 +670,11 @@ namespace Optimisation_Tool.Pages
                     {
                         using var k = hive.OpenSubKey(rel);
                         if (k != null && seen.Add($"{prefix}\\{rel}"))
-                            found.Add(new Leftover
-                            {
-                                Type = Leftover.LType.Reg,
-                                Target = $@"{prefix}\{rel}",
-                                Display = $@"Registre : {prefix}\{rel}",
-                            });
+                            found.Add(new Leftover { Type = Leftover.LType.Reg, Target = $@"{prefix}\{rel}", Display = $@"Registre : {prefix}\{rel}" });
                     }
                     catch { }
                 }
 
-                // Clé imbriquée Éditeur\App
                 if (!string.IsNullOrWhiteSpace(publisher))
                 {
                     var pf = Regex.Split(publisher.Trim(), @"[\s\-_\.]+").FirstOrDefault() ?? "";
@@ -463,19 +686,13 @@ namespace Optimisation_Tool.Pages
                         {
                             using var k = hive.OpenSubKey(rel);
                             if (k != null && seen.Add($"{prefix}\\{rel}"))
-                                found.Add(new Leftover
-                                {
-                                    Type = Leftover.LType.Reg,
-                                    Target = $@"{prefix}\{rel}",
-                                    Display = $@"Registre : {prefix}\{rel}",
-                                });
+                                found.Add(new Leftover { Type = Leftover.LType.Reg, Target = $@"{prefix}\{rel}", Display = $@"Registre : {prefix}\{rel}" });
                         }
                         catch { }
                     }
                 }
             }
 
-            // ── Système de fichiers ─────────────────────────────────────────
             var bases = new[]
             {
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -492,12 +709,7 @@ namespace Optimisation_Tool.Pages
                     try
                     {
                         if (Directory.Exists(p) && seen.Add(p))
-                            found.Add(new Leftover
-                            {
-                                Type = Leftover.LType.File,
-                                Target = p,
-                                Display = $"Dossier : {p}",
-                            });
+                            found.Add(new Leftover { Type = Leftover.LType.File, Target = p, Display = $"Dossier : {p}" });
                     }
                     catch { }
                 }
@@ -509,17 +721,11 @@ namespace Optimisation_Tool.Pages
                 try
                 {
                     if (Directory.Exists(il) && seen.Add(il))
-                        found.Add(new Leftover
-                        {
-                            Type = Leftover.LType.File,
-                            Target = il,
-                            Display = $"Dossier install : {il}",
-                        });
+                        found.Add(new Leftover { Type = Leftover.LType.File, Target = il, Display = $"Dossier install : {il}" });
                 }
                 catch { }
             }
 
-            // ── Tâches planifiées ───────────────────────────────────────────
             try
             {
                 var tasksRoot = Path.Combine(
@@ -531,16 +737,14 @@ namespace Optimisation_Tool.Pages
                     foreach (var file in Directory.GetFiles(tasksRoot, "*", SearchOption.AllDirectories))
                     {
                         var taskName = Path.GetFileName(file);
-                        bool match = cands.Any(kw =>
-                            taskName.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                        bool match   = cands.Any(kw => taskName.Contains(kw, StringComparison.OrdinalIgnoreCase));
 
                         if (!match)
                         {
                             try
                             {
                                 var content = File.ReadAllText(file);
-                                match = cands.Any(kw =>
-                                    content.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                                match = cands.Any(kw => content.Contains(kw, StringComparison.OrdinalIgnoreCase));
                             }
                             catch { }
                         }
@@ -550,12 +754,7 @@ namespace Optimisation_Tool.Pages
                         var rel = file.Substring(tasksRoot.Length).Replace('/', '\\');
                         if (!rel.StartsWith("\\")) rel = "\\" + rel;
                         if (seen.Add("TASK:" + rel))
-                            found.Add(new Leftover
-                            {
-                                Type = Leftover.LType.Task,
-                                Target = rel,
-                                Display = $"Tâche planifiée : {taskName}",
-                            });
+                            found.Add(new Leftover { Type = Leftover.LType.Task, Target = rel, Display = $"Tâche planifiée : {taskName}" });
                     }
                 }
             }
@@ -581,10 +780,10 @@ namespace Optimisation_Tool.Pages
             TxtStatus.Text        = "Nettoyage des résidus en cours…";
             _main.Log("Applications : nettoyage des résidus en cours…");
 
-            var items = _pendingCleanup;
+            var items          = _pendingCleanup;
             var (cleaned, errors) = await Task.Run(() => CleanLeftovers(items));
 
-            _pendingCleanup = new();
+            _pendingCleanup        = new();
             BtnNettoyer.Visibility = Visibility.Collapsed;
             BtnNettoyer.IsEnabled  = true;
 
@@ -633,16 +832,13 @@ namespace Optimisation_Tool.Pages
 
         private static void DeleteRegistryKey(string fullPath)
         {
-            // fullPath ex. "HKLM\SOFTWARE\WOW6432Node\Discord"
             var idx = fullPath.IndexOf('\\');
             if (idx <= 0) return;
             var prefix = fullPath.Substring(0, idx);
             var sub    = fullPath.Substring(idx + 1);
-
-            var hive = prefix.Equals("HKCU", StringComparison.OrdinalIgnoreCase)
+            var hive   = prefix.Equals("HKCU", StringComparison.OrdinalIgnoreCase)
                 ? Registry.CurrentUser
                 : Registry.LocalMachine;
-
             hive.DeleteSubKeyTree(sub, throwOnMissingSubKey: false);
         }
 
@@ -663,7 +859,6 @@ namespace Optimisation_Tool.Pages
 
         private static bool Uninstall(AppItem app)
         {
-            // 1. Winget par ID (le plus propre)
             if (!string.IsNullOrEmpty(app.WingetId))
             {
                 try
@@ -681,7 +876,6 @@ namespace Optimisation_Tool.Pages
                 catch { }
             }
 
-            // 2. UninstallString du registre (MSI ou NSIS)
             if (!string.IsNullOrEmpty(app.UninstallString))
             {
                 try
@@ -700,15 +894,13 @@ namespace Optimisation_Tool.Pages
                         exe  = sp > 0 ? us.Substring(0, sp) : us;
                         args = sp > 0 ? us.Substring(sp + 1).Trim() : "";
                     }
-                    using var p = Process.Start(new ProcessStartInfo(exe, args)
-                    { UseShellExecute = true });
+                    using var p = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = true });
                     p?.WaitForExit(120_000);
-                    return true;   // l'installeur s'est lancé, on considère OK
+                    return true;
                 }
                 catch { }
             }
 
-            // 3. Winget par nom (dernier recours)
             try
             {
                 using var p = Process.Start(new ProcessStartInfo(
@@ -731,10 +923,9 @@ namespace Optimisation_Tool.Pages
             if (_view == null) return;
             int visible = _view.Cast<object>().Count();
             int total   = _apps.Count;
-
             TxtAppCount.Text = visible == total
-                ? $"{total} application{(total > 1 ? "s" : "")}"
-                : $"{visible} / {total} application{(total > 1 ? "s" : "")}";
+                ? $"{total} application{(total > 1 ? "s" : "")}"
+                : $"{visible} / {total} application{(total > 1 ? "s" : "")}";
         }
     }
 }
