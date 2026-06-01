@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Management;
@@ -41,6 +42,15 @@ namespace Optimisation_Tool.Helpers
         public double GpuTemp;       // °C
         public double GpuWatts;
         public double GpuMHz;
+
+        public List<NvmeInfo> Nvmes = new();   // disques NVMe + température
+    }
+
+    public sealed class NvmeInfo
+    {
+        public string Name     = "";
+        public int    TempC;
+        public double UsagePct;   // % d'activité disque
     }
 
     public static class SystemMonitor
@@ -72,6 +82,7 @@ namespace Optimisation_Tool.Helpers
             CollectProcesses(s);
             CollectRam(s);
             CollectGpu(s);
+            CollectNvme(s);
             return s;
         }
 
@@ -272,6 +283,94 @@ namespace Optimisation_Tool.Helpers
                 }
             }
             catch { }
+        }
+
+        // ── Températures NVMe (namespace Storage WMI) ────────────────────────
+        // BusType 17 = NVMe. La température (°C) vient de MSFT_StorageReliabilityCounter.
+        // Nécessite l'élévation admin (l'app tourne en requireAdministrator).
+        // Cache 4 s : la température disque évolue lentement et la requête WMI est coûteuse.
+        private static DateTime        _nvmeCacheTime;
+        private static List<NvmeInfo>  _nvmeCache = new();
+
+        private static void CollectNvme(MonSnapshot s)
+        {
+            if (_nvmeCacheTime != default &&
+                (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds < 4000)
+            {
+                s.Nvmes = _nvmeCache;
+                return;
+            }
+
+            var list      = new List<NvmeInfo>();
+            var byDevice  = new Dictionary<int, NvmeInfo>();   // DeviceId → info (pour mapper l'usage)
+            try
+            {
+                var scope = new ManagementScope(@"\\.\root\Microsoft\Windows\Storage");
+                scope.Connect();
+
+                // ObjectId (la clé) est indispensable : sans elle, l'objet n'a pas de __PATH
+                // valide et GetRelated() échoue ("Operation is not valid due to the current state").
+                var query = new ObjectQuery(
+                    "SELECT ObjectId, DeviceId, FriendlyName, BusType FROM MSFT_PhysicalDisk WHERE BusType = 17");
+                using var searcher = new ManagementObjectSearcher(scope, query);
+
+                foreach (ManagementObject disk in searcher.Get())
+                {
+                    try
+                    {
+                        var name = disk["FriendlyName"]?.ToString()?.Trim();
+                        if (string.IsNullOrEmpty(name)) name = "NVMe";
+
+                        int temp = 0;
+                        foreach (ManagementObject rc in disk.GetRelated("MSFT_StorageReliabilityCounter"))
+                        {
+                            if (rc["Temperature"] != null)
+                                temp = Convert.ToInt32(rc["Temperature"]);
+                            rc.Dispose();
+                            break;
+                        }
+
+                        if (temp > 0 && temp < 200)   // garde-fou contre les valeurs aberrantes
+                        {
+                            var info = new NvmeInfo { Name = name, TempC = temp };
+                            list.Add(info);
+                            if (int.TryParse(disk["DeviceId"]?.ToString(), out int devId))
+                                byDevice[devId] = info;
+                        }
+                    }
+                    catch { }
+                    finally { disk.Dispose(); }
+                }
+            }
+            catch { }
+
+            // % d'activité disque via compteur de perf (root\CIMV2). Name = "<num> <lettres>".
+            // util% = 100 - PercentIdleTime (plus fiable que PercentDiskTime qui peut dépasser 100).
+            try
+            {
+                using var perf = new ManagementObjectSearcher(
+                    "SELECT Name, PercentIdleTime FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk");
+                foreach (ManagementObject o in perf.Get())
+                {
+                    try
+                    {
+                        var nm = o["Name"]?.ToString() ?? "";
+                        var numStr = nm.Split(' ')[0];
+                        if (int.TryParse(numStr, out int dn) && byDevice.TryGetValue(dn, out var info))
+                        {
+                            var idle = Convert.ToDouble(o["PercentIdleTime"]);
+                            info.UsagePct = Math.Max(0, Math.Min(100, 100 - idle));
+                        }
+                    }
+                    catch { }
+                    finally { o.Dispose(); }
+                }
+            }
+            catch { }
+
+            _nvmeCache     = list;
+            _nvmeCacheTime = DateTime.UtcNow;
+            s.Nvmes        = list;
         }
 
         // nvidia-smi spawn un process à chaque appel → rafraîchi toutes les ~2 s (cache entre-temps)

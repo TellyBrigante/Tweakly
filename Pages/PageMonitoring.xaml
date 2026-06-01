@@ -48,6 +48,7 @@
     <Grid Margin="18,16,18,18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -180,8 +181,23 @@
             </Border>
         </Grid>
 
+        <!-- ══ STOCKAGE NVMe : tuiles générées dynamiquement (même style que CPU/GPU/RAM) ══ -->
+        <Grid Grid.Row="1" Margin="0,12,0,0">
+            <!-- Tuiles NVMe : colonnes égales remplies en code -->
+            <Grid x:Name="NvmeGrid"/>
+            <!-- Repli si aucun NVMe -->
+            <Border x:Name="NvmeEmptyTile" Style="{StaticResource MTile}" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="STOCKAGE NVMe" Style="{StaticResource MHdr}" Margin="0,0,0,8"/>
+                    <TextBlock Text="Aucun disque NVMe détecté."
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}" FontSize="11.5"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <!-- ══ GRAPHIQUE ══ -->
-        <Border Grid.Row="1" Style="{StaticResource MTile}" Margin="0,12,0,0">
+        <Border Grid.Row="2" Style="{StaticResource MTile}" Margin="0,12,0,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -200,7 +216,9 @@
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
                         <Ellipse Width="8" Height="8" Fill="#C08CF0" VerticalAlignment="Center"/>
                         <TextBlock Text="RAM" Foreground="{DynamicResource ThTextNav}"
-                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
+                        <!-- Entrées NVMe ajoutées dynamiquement (pastille + marque) -->
+                        <StackPanel x:Name="NvmeLegend" Orientation="Horizontal" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
 
