@@ -36,6 +36,7 @@ namespace Optimisation_Tool
                 ["Fresh"]     = new Lazy<UserControl>(() => new PageFresh(this)),
                 ["Info"]      = new Lazy<UserControl>(() => new PageSpecs(this)),
                 ["Monitoring"]= new Lazy<UserControl>(() => new PageMonitoring(this)),
+                ["Diagnostic"]= new Lazy<UserControl>(() => new PageDiagnostic(this)),
                 ["Reglages"]  = new Lazy<UserControl>(() => new PageReglages(this)),
             };
 
