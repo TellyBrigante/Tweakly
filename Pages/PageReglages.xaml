@@ -230,6 +230,10 @@
                                Foreground="{DynamicResource ThTextDim}"
                                FontFamily="{StaticResource AppFont}" FontSize="11.5"
                                Margin="0,4,0,0" TextWrapping="Wrap"/>
+                    <TextBlock Text="© 2026 Telly · Distribué sous licence GNU GPL v3"
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}" FontSize="11"
+                               Margin="0,8,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 

@@ -12,7 +12,7 @@ Mise à jour automatique intégrée via les *releases* GitHub.
 
 ## Licence et droits
 
-© 2026 **TellyBrigante**.
+© 2026 **Telly**.
 
 Ce logiciel est distribué sous licence **GNU General Public License v3.0** — voir le fichier [`LICENSE`](LICENSE).
 
