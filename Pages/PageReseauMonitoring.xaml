@@ -1,0 +1,199 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageReseauMonitoring"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded"
+             Unloaded="UserControl_Unloaded">
+
+    <UserControl.Resources>
+        <Style x:Key="MTile" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="12"/>
+            <Setter Property="Padding"         Value="16,14"/>
+        </Style>
+        <Style x:Key="MHdr" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="MName" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily"   Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"     Value="11.5"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="Margin"       Value="0,2,0,10"/>
+        </Style>
+        <Style x:Key="MBig" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="30"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="MRowLbl" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11.5"/>
+        </Style>
+        <Style x:Key="MRowVal" TargetType="TextBlock">
+            <Setter Property="Foreground"          Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily"          Value="Consolas"/>
+            <Setter Property="FontSize"            Value="11.5"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="TextTrimming"        Value="CharacterEllipsis"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="18,16,18,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ══ TUILES ══ -->
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- LATENCE -->
+            <Border Grid.Column="0" Style="{StaticResource MTile}">
+                <StackPanel>
+                    <TextBlock Text="LATENCE (PING)" Style="{StaticResource MHdr}"/>
+                    <TextBlock x:Name="TxtTarget" Text="&#8212;" Style="{StaticResource MName}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="TxtPing" Text="&#8212;" Style="{StaticResource MBig}" Foreground="#3B82E0"/>
+                        <TextBlock Text="ms" Foreground="#3B82E0" FontSize="16" FontWeight="Bold"
+                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
+                        <Border x:Name="PillVerdict" CornerRadius="9" Padding="10,3" Margin="12,0,0,5"
+                                VerticalAlignment="Bottom" Background="#3B456E">
+                            <TextBlock x:Name="TxtVerdict" Text="&#8212;" Foreground="#FFFFFF"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11" FontWeight="Bold"/>
+                        </Border>
+                    </StackPanel>
+                    <Grid Margin="0,12,0,3">
+                        <TextBlock Text="Jitter" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtJitter" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid>
+                        <TextBlock Text="Perte de paquets" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtLoss" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- DÉBIT -->
+            <Border Grid.Column="2" Style="{StaticResource MTile}">
+                <StackPanel>
+                    <TextBlock Text="D&#201;BIT R&#201;SEAU" Style="{StaticResource MHdr}"/>
+                    <TextBlock Text="Trafic en temps r&#233;el" Style="{StaticResource MName}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#8595;" Foreground="#29C7D6" FontSize="20" FontWeight="Bold"
+                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="0,0,4,6"/>
+                        <TextBlock x:Name="TxtDown" Text="&#8212;" Style="{StaticResource MBig}" Foreground="#29C7D6"/>
+                        <TextBlock Text="Mbps" Foreground="#29C7D6" FontSize="14" FontWeight="Bold"
+                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="3,0,0,6"/>
+                    </StackPanel>
+                    <Grid Margin="0,12,0,3">
+                        <TextBlock Text="Envoi (&#8593;)" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtUp" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- CONNEXION -->
+            <Border Grid.Column="4" Style="{StaticResource MTile}">
+                <StackPanel>
+                    <TextBlock Text="CONNEXION" Style="{StaticResource MHdr}" Margin="0,0,0,10"/>
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="Type" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtConnType" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="Adaptateur" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtConnAdapter" Text="&#8212;" Style="{StaticResource MRowVal}" MaxWidth="150"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="Vitesse de lien" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtLinkSpeed" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="IP locale" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtLocalIp" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid Margin="0,0,0,4">
+                        <TextBlock Text="Passerelle" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtGateway" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                    <Grid>
+                        <TextBlock Text="DNS" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtDns" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ══ SÉLECTEUR DE CIBLE ══ -->
+        <Border Grid.Row="1" Style="{StaticResource MTile}" Margin="0,12,0,0" Padding="16,10">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Cible du ping :" Style="{StaticResource MRowLbl}"
+                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button x:Name="BtnTgtInternet" Content="Internet (1.1.1.1)"
+                        Style="{StaticResource SecondaryBtnStyle}" Padding="14,7" Margin="0,0,8,0"
+                        Click="BtnTgtInternet_Click"/>
+                <Button x:Name="BtnTgtGateway" Content="Passerelle (routeur)"
+                        Style="{StaticResource SecondaryBtnStyle}" Padding="14,7" Margin="0,0,8,0"
+                        Click="BtnTgtGateway_Click"/>
+                <TextBox x:Name="TxtCustomTarget"
+                         Width="150" VerticalContentAlignment="Center" Padding="8,6" Margin="6,0,6,0"
+                         Background="{DynamicResource ThBg}" Foreground="{DynamicResource ThTextBody}"
+                         BorderBrush="{DynamicResource ThBorder}" CaretBrush="{DynamicResource ThTextBody}"
+                         FontFamily="{StaticResource AppFont}" FontSize="11.5"/>
+                <Button x:Name="BtnTgtCustom" Content="OK"
+                        Style="{StaticResource SecondaryBtnStyle}" Padding="16,7"
+                        Click="BtnTgtCustom_Click"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ══ GRAPHIQUE PING ══ -->
+        <Border Grid.Row="2" Style="{StaticResource MTile}" Margin="0,12,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,10">
+                    <TextBlock Text="PING  (60 s)" Style="{StaticResource MHdr}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <Ellipse Width="8" Height="8" Fill="#3B82E0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Ping" Foreground="{DynamicResource ThTextNav}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="#E05555" VerticalAlignment="Center"/>
+                        <TextBlock Text="Perte" Foreground="{DynamicResource ThTextNav}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtScale" Text="&#8212;" Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Grid.Row="1" Background="{DynamicResource ThBg}"
+                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="8"
+                        ClipToBounds="True">
+                    <Grid x:Name="GraphArea" SizeChanged="GraphArea_SizeChanged">
+                        <Canvas x:Name="GridCanvas" IsHitTestVisible="False"/>
+                        <Polyline x:Name="PingLine" Stroke="#3B82E0" StrokeThickness="1.8" StrokeLineJoin="Round"/>
+                        <Canvas x:Name="LossCanvas" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
