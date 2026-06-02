@@ -19,7 +19,7 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.1.5";
+        public const string AppVersion = "1.1.6";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -41,6 +41,7 @@ namespace Optimisation_Tool.Pages
             TxtVersionLine.Text   = $"Version installée : Tweakly v{AppVersion}";
             ChkStartup.IsChecked  = IsStartupEnabled();
             ChkAutoUpdate.IsChecked = MainWindow.Settings.AutoUpdate;
+            ChkSounds.IsChecked     = MainWindow.Settings.SoundsEnabled;
             UpdateThemeSegment(ThemeManager.Current);
         }
 
@@ -50,6 +51,15 @@ namespace Optimisation_Tool.Pages
         {
             MainWindow.Settings.AutoUpdate = ChkAutoUpdate.IsChecked == true;
             MainWindow.Settings.Save();
+        }
+
+        // ── Toggle sons d'interface ─────────────────────────────────────────────
+
+        private void ChkSounds_Changed(object sender, RoutedEventArgs e)
+        {
+            MainWindow.Settings.SoundsEnabled = ChkSounds.IsChecked == true;
+            MainWindow.Settings.Save();
+            Helpers.UiSound.Enabled = MainWindow.Settings.SoundsEnabled;
         }
 
         // ── Check de MAJ (appelé au démarrage + manuellement) ──────────────────

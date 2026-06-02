@@ -12,6 +12,10 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
         private bool _loaded = false;
 
+        // État lu au chargement → référence pour n'appliquer que ce qui change
+        private (bool Telemetrie, bool AdID, bool ActivityHistory, bool BingSearch,
+                 bool InputPersonal, bool Location, bool WER, bool TailoredExp, bool CompatTel) _state;
+
         public PagePrivacy(MainWindow main)
         {
             _main = main;
@@ -43,6 +47,7 @@ namespace Optimisation_Tool.Pages
             ChkTailoredExp.IsChecked     = s.TailoredExp;
             ChkCompatTel.IsChecked       = s.CompatTel;
 
+            _state = s;
             BtnAppliquer.IsEnabled = true;
             _main.Log("Confidentialité : état chargé.");
         }
@@ -164,38 +169,54 @@ namespace Optimisation_Tool.Pages
         {
             BtnAppliquer.IsEnabled = false;
 
-            bool doTel      = ChkTelemetrie.IsChecked      == true;
-            bool doAdID     = ChkAdID.IsChecked            == true;
-            bool doActivity = ChkActivityHistory.IsChecked == true;
-            bool doBing     = ChkBingSearch.IsChecked      == true;
-            bool doInk      = ChkInputPersonal.IsChecked   == true;
-            bool doLoc      = ChkLocation.IsChecked        == true;
-            bool doWER      = ChkWER.IsChecked             == true;
-            bool doTailored = ChkTailoredExp.IsChecked     == true;
-            bool doCompat   = ChkCompatTel.IsChecked       == true;
+            // N'appliquer QUE ce qui a changé (null = inchangé → ignoré)
+            bool? doTel      = Helpers.TweakFeedback.Changed(ChkTelemetrie,      _state.Telemetrie);
+            bool? doAdID     = Helpers.TweakFeedback.Changed(ChkAdID,            _state.AdID);
+            bool? doActivity = Helpers.TweakFeedback.Changed(ChkActivityHistory, _state.ActivityHistory);
+            bool? doBing     = Helpers.TweakFeedback.Changed(ChkBingSearch,      _state.BingSearch);
+            bool? doInk      = Helpers.TweakFeedback.Changed(ChkInputPersonal,   _state.InputPersonal);
+            bool? doLoc      = Helpers.TweakFeedback.Changed(ChkLocation,        _state.Location);
+            bool? doWER      = Helpers.TweakFeedback.Changed(ChkWER,             _state.WER);
+            bool? doTailored = Helpers.TweakFeedback.Changed(ChkTailoredExp,     _state.TailoredExp);
+            bool? doCompat   = Helpers.TweakFeedback.Changed(ChkCompatTel,       _state.CompatTel);
+
+            if (!(doTel.HasValue || doAdID.HasValue || doActivity.HasValue || doBing.HasValue
+                  || doInk.HasValue || doLoc.HasValue || doWER.HasValue || doTailored.HasValue || doCompat.HasValue))
+            {
+                Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
+                BtnAppliquer.IsEnabled = true;
+                return;
+            }
 
             _main.Log("Confidentialité : application des paramètres…");
-
+            var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
                 ApplyChanges(doTel, doAdID, doActivity, doBing, doInk,
                              doLoc, doWER, doTailored, doCompat,
-                             msg => _main.Log(msg)));
+                             msg => { _main.Log(msg); msgs.Add(msg); }));
 
+            _state = (ChkTelemetrie.IsChecked == true, ChkAdID.IsChecked == true,
+                      ChkActivityHistory.IsChecked == true, ChkBingSearch.IsChecked == true,
+                      ChkInputPersonal.IsChecked == true, ChkLocation.IsChecked == true,
+                      ChkWER.IsChecked == true, ChkTailoredExp.IsChecked == true,
+                      ChkCompatTel.IsChecked == true);
             _main.Log("Confidentialité : paramètres appliqués.");
+            Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Paramètres de confidentialité appliqués");
             BtnAppliquer.IsEnabled = true;
         }
 
         private static void ApplyChanges(
-            bool doTel, bool doAdID, bool doActivity, bool doBing, bool doInk,
-            bool doLoc, bool doWER, bool doTailored, bool doCompat,
+            bool? doTel, bool? doAdID, bool? doActivity, bool? doBing, bool? doInk,
+            bool? doLoc, bool? doWER, bool? doTailored, bool? doCompat,
             Action<string> log)
         {
             // Télémétrie
+            if (doTel.HasValue)
             try
             {
                 const string pathDC =
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection";
-                if (doTel)
+                if (doTel.Value)
                 {
                     Registry.SetValue(pathDC, "AllowTelemetry", 0, RegistryValueKind.DWord);
                     SetSvc("DiagTrack",          disabled: true);
@@ -213,64 +234,70 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { log($"Télémétrie : erreur — {ex.Message}"); }
 
             // Identifiant publicitaire
+            if (doAdID.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-                    "Enabled", doAdID ? 0 : 1, RegistryValueKind.DWord);
-                log($"Identifiant publicitaire : {(doAdID ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
+                    "Enabled", doAdID.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Identifiant publicitaire : {(doAdID.Value ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
             }
             catch (Exception ex) { log($"AdvertisingInfo : erreur — {ex.Message}"); }
 
             // Historique d'activité
+            if (doActivity.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System",
-                    "EnableActivityFeed", doActivity ? 0 : 1, RegistryValueKind.DWord);
-                log($"Historique d'activité : {(doActivity ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
+                    "EnableActivityFeed", doActivity.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Historique d'activité : {(doActivity.Value ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
             }
             catch (Exception ex) { log($"ActivityFeed : erreur — {ex.Message}"); }
 
             // Bing Search
+            if (doBing.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
-                    "BingSearchEnabled", doBing ? 0 : 1, RegistryValueKind.DWord);
-                log($"Recherche Bing : {(doBing ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
+                    "BingSearchEnabled", doBing.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Recherche Bing : {(doBing.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"BingSearch : erreur — {ex.Message}"); }
 
             // Input Personalization
+            if (doInk.HasValue)
             try
             {
                 const string pathInk =
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputPersonalization";
                 Registry.SetValue(pathInk, "RestrictImplicitInkCollection",
-                    doInk ? 1 : 0, RegistryValueKind.DWord);
+                    doInk.Value ? 1 : 0, RegistryValueKind.DWord);
                 Registry.SetValue(pathInk, "RestrictImplicitTextCollection",
-                    doInk ? 1 : 0, RegistryValueKind.DWord);
-                log($"Personnalisation saisie : {(doInk ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
+                    doInk.Value ? 1 : 0, RegistryValueKind.DWord);
+                log($"Personnalisation saisie : {(doInk.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"InputPersonalization : erreur — {ex.Message}"); }
 
             // Localisation
+            if (doLoc.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
-                    "DisableLocation", doLoc ? 1 : 0, RegistryValueKind.DWord);
-                log($"Localisation : {(doLoc ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
+                    "DisableLocation", doLoc.Value ? 1 : 0, RegistryValueKind.DWord);
+                log($"Localisation : {(doLoc.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"Localisation : erreur — {ex.Message}"); }
 
             // WER
+            if (doWER.HasValue)
             try
             {
                 const string pathWER =
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting";
-                if (doWER)
+                if (doWER.Value)
                 {
                     Registry.SetValue(pathWER, "Disabled", 1, RegistryValueKind.DWord);
                     SetSvc("WerSvc", disabled: true);
@@ -286,23 +313,25 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { log($"WER : erreur — {ex.Message}"); }
 
             // Tailored Experiences
+            if (doTailored.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
                     "TailoredExperiencesWithDiagnosticDataEnabled",
-                    doTailored ? 0 : 1, RegistryValueKind.DWord);
-                log($"Tailored Experiences : {(doTailored ? "DÉSACTIVÉES" : "ACTIVÉES")}.");
+                    doTailored.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Tailored Experiences : {(doTailored.Value ? "DÉSACTIVÉES" : "ACTIVÉES")}.");
             }
             catch (Exception ex) { log($"TailoredExperiences : erreur — {ex.Message}"); }
 
             // CompatTel
+            if (doCompat.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat",
-                    "DisableInventory", doCompat ? 1 : 0, RegistryValueKind.DWord);
-                log($"Télémétrie applications (CompatTelRunner) : {(doCompat ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
+                    "DisableInventory", doCompat.Value ? 1 : 0, RegistryValueKind.DWord);
+                log($"Télémétrie applications (CompatTelRunner) : {(doCompat.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"CompatTel : erreur — {ex.Message}"); }
         }

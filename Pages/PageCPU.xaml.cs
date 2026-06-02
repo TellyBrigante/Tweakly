@@ -13,6 +13,10 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
         private bool _loaded = false;
 
+        // État lu au chargement → référence pour n'appliquer que ce qui change
+        private (bool UltimatePower, bool DisableThrottling, bool SysResponsiveness,
+                 bool TimerResolution, bool DisableHVCI) _state;
+
         public PageCPU(MainWindow main)
         {
             _main = main;
@@ -40,6 +44,7 @@ namespace Optimisation_Tool.Pages
             ChkTimerResolution.IsChecked   = state.TimerResolution;
             ChkHVCI.IsChecked              = state.DisableHVCI;
 
+            _state = state;
             BtnAppliquer.IsEnabled = true;
             _main.Log("CPU : état chargé.");
         }
@@ -119,14 +124,15 @@ namespace Optimisation_Tool.Pages
         {
             BtnAppliquer.IsEnabled = false;
 
-            bool doUltimate   = ChkUltimatePower.IsChecked     == true;
-            bool doThrottling = ChkDisableThrottling.IsChecked  == true;
-            bool doSysResp    = ChkSysResponsiveness.IsChecked  == true;
-            bool doTimerRes   = ChkTimerResolution.IsChecked    == true;
-            bool doHVCI       = ChkHVCI.IsChecked               == true;
+            // N'appliquer QUE ce qui a changé (null = inchangé → ignoré)
+            bool? chUlt   = Helpers.TweakFeedback.Changed(ChkUltimatePower,     _state.UltimatePower);
+            bool? chThr   = Helpers.TweakFeedback.Changed(ChkDisableThrottling, _state.DisableThrottling);
+            bool? chSys   = Helpers.TweakFeedback.Changed(ChkSysResponsiveness, _state.SysResponsiveness);
+            bool? chTimer = Helpers.TweakFeedback.Changed(ChkTimerResolution,   _state.TimerResolution);
+            bool? chHVCI  = Helpers.TweakFeedback.Changed(ChkHVCI,              _state.DisableHVCI);
 
-            // Avertissement sécurité avant de désactiver Memory Integrity
-            if (doHVCI && !ReadState().DisableHVCI)
+            // Avertissement sécurité avant de désactiver Memory Integrity (uniquement si on vient de cocher)
+            if (chHVCI == true)
             {
                 var r = MessageBox.Show(
                     "Désactiver Memory Integrity (HVCI) améliore les performances (5-10% dans certains jeux) " +
@@ -137,30 +143,42 @@ namespace Optimisation_Tool.Pages
                 if (r != MessageBoxResult.Yes)
                 {
                     ChkHVCI.IsChecked = false;
-                    doHVCI = false;
+                    chHVCI = null;
                 }
             }
 
+            if (!(chUlt.HasValue || chThr.HasValue || chSys.HasValue || chTimer.HasValue || chHVCI.HasValue))
+            {
+                Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
+                BtnAppliquer.IsEnabled = true;
+                return;
+            }
+
             _main.Log("CPU : application des tweaks…");
-
+            var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
-                ApplyChanges(doUltimate, doThrottling, doSysResp, doTimerRes, doHVCI,
-                             msg => _main.Log(msg)));
+                ApplyChanges(chUlt, chThr, chSys, chTimer, chHVCI,
+                             msg => { _main.Log(msg); msgs.Add(msg); }));
 
+            _state = (ChkUltimatePower.IsChecked == true, ChkDisableThrottling.IsChecked == true,
+                      ChkSysResponsiveness.IsChecked == true, ChkTimerResolution.IsChecked == true,
+                      ChkHVCI.IsChecked == true);
             _main.Log("CPU : tweaks appliqués.");
+            Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Tweaks CPU appliqués");
             BtnAppliquer.IsEnabled = true;
         }
 
         private static void ApplyChanges(
-            bool doUltimate, bool doThrottling, bool doSysResp, bool doTimerRes,
-            bool doHVCI, Action<string> log)
+            bool? doUltimate, bool? doThrottling, bool? doSysResp, bool? doTimerRes,
+            bool? doHVCI, Action<string> log)
         {
             const string UltimateGUID = "e9a42b02-d5df-448d-aa00-03f14749eb61";
 
             // Power plan
+            if (doUltimate.HasValue)
             try
             {
-                if (doUltimate)
+                if (doUltimate.Value)
                 {
                     RunCmd("powercfg", $"/setactive {UltimateGUID}");
                     // Si le plan n'existe pas encore, le dupliquer
@@ -191,42 +209,46 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { log($"Power Plan : erreur — {ex.Message}"); }
 
             // Power Throttling
+            if (doThrottling.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
-                    "PowerThrottlingOff", doThrottling ? 1 : 0, RegistryValueKind.DWord);
-                log($"Power Throttling : {(doThrottling ? "DÉSACTIVÉ" : "ACTIVÉ (par défaut)")}.");
+                    "PowerThrottlingOff", doThrottling.Value ? 1 : 0, RegistryValueKind.DWord);
+                log($"Power Throttling : {(doThrottling.Value ? "DÉSACTIVÉ" : "ACTIVÉ (par défaut)")}.");
             }
             catch (Exception ex) { log($"Power Throttling : erreur — {ex.Message}"); }
 
             // SystemResponsiveness
+            if (doSysResp.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
-                    "SystemResponsiveness", doSysResp ? 0 : 20, RegistryValueKind.DWord);
-                log($"SystemResponsiveness : {(doSysResp ? "0 (jeux)" : "20 (par défaut)")}.");
+                    "SystemResponsiveness", doSysResp.Value ? 0 : 20, RegistryValueKind.DWord);
+                log($"SystemResponsiveness : {(doSysResp.Value ? "0 (jeux)" : "20 (par défaut)")}.");
             }
             catch (Exception ex) { log($"SystemResponsiveness : erreur — {ex.Message}"); }
 
             // GlobalTimerResolution
+            if (doTimerRes.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
-                    "GlobalTimerResolutionRequests", doTimerRes ? 1 : 0, RegistryValueKind.DWord);
-                log($"GlobalTimerResolution : {(doTimerRes ? "ACTIVÉ" : "DÉSACTIVÉ")}.");
+                    "GlobalTimerResolutionRequests", doTimerRes.Value ? 1 : 0, RegistryValueKind.DWord);
+                log($"GlobalTimerResolution : {(doTimerRes.Value ? "ACTIVÉ" : "DÉSACTIVÉ")}.");
             }
             catch (Exception ex) { log($"GlobalTimerResolution : erreur — {ex.Message}"); }
 
             // HVCI / Memory Integrity
+            if (doHVCI.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-                    "Enabled", doHVCI ? 0 : 1, RegistryValueKind.DWord);
-                log($"Memory Integrity (HVCI) : {(doHVCI ? "DÉSACTIVÉ" : "ACTIVÉ")} — redémarrage requis.");
+                    "Enabled", doHVCI.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Memory Integrity (HVCI) : {(doHVCI.Value ? "DÉSACTIVÉ" : "ACTIVÉ")} — redémarrage requis.");
             }
             catch (Exception ex) { log($"HVCI : erreur — {ex.Message}"); }
         }

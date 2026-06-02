@@ -15,6 +15,10 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
         private bool _loaded = false;
 
+        // État lu au chargement → sert de référence pour n'appliquer que ce qui change
+        private (bool HAGS, bool DisableGameBar, bool DisableDVR, bool GPUPriority,
+                 bool MSIMode, bool DiscordHWAccel, bool SteamOverlay) _state;
+
         public PageWindows(MainWindow main)
         {
             _main = main;
@@ -45,6 +49,7 @@ namespace Optimisation_Tool.Pages
             ChkDiscordHWAccel.IsChecked = s.DiscordHWAccel;
             ChkSteamOverlay.IsChecked   = s.SteamOverlay;
 
+            _state = s;
             BtnAppliquer.IsEnabled = true;
             _main.Log("Windows : état chargé.");
         }
@@ -149,68 +154,85 @@ namespace Optimisation_Tool.Pages
         {
             BtnAppliquer.IsEnabled = false;
 
-            bool doHAGS           = ChkHAGS.IsChecked           == true;
-            bool doDisableGameBar = ChkDisableGameBar.IsChecked  == true;
-            bool doDisableDVR     = ChkDisableDVR.IsChecked      == true;
-            bool doGPUPriority    = ChkGPUPriority.IsChecked     == true;
-            bool doMSI            = ChkMSIMode.IsChecked         == true;
-            bool doDiscord        = ChkDiscordHWAccel.IsChecked  == true;
-            bool doSteam          = ChkSteamOverlay.IsChecked    == true;
+            // N'appliquer QUE ce qui a changé depuis le chargement (null = inchangé → ignoré)
+            bool? chHAGS    = Helpers.TweakFeedback.Changed(ChkHAGS,           _state.HAGS);
+            bool? chGameBar = Helpers.TweakFeedback.Changed(ChkDisableGameBar, _state.DisableGameBar);
+            bool? chDVR     = Helpers.TweakFeedback.Changed(ChkDisableDVR,     _state.DisableDVR);
+            bool? chGPU     = Helpers.TweakFeedback.Changed(ChkGPUPriority,    _state.GPUPriority);
+            bool? chMSI     = Helpers.TweakFeedback.Changed(ChkMSIMode,        _state.MSIMode);
+            bool? chDiscord = Helpers.TweakFeedback.Changed(ChkDiscordHWAccel, _state.DiscordHWAccel);
+            bool? chSteam   = Helpers.TweakFeedback.Changed(ChkSteamOverlay,   _state.SteamOverlay);
+
+            if (!(chHAGS.HasValue || chGameBar.HasValue || chDVR.HasValue || chGPU.HasValue
+                  || chMSI.HasValue || chDiscord.HasValue || chSteam.HasValue))
+            {
+                Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
+                BtnAppliquer.IsEnabled = true;
+                return;
+            }
 
             _main.Log("Windows : application des optimisations…");
-
+            var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
-                ApplyChanges(doHAGS, doDisableGameBar, doDisableDVR,
-                             doGPUPriority, doMSI, doDiscord, doSteam,
-                             msg => _main.Log(msg)));
+                ApplyChanges(chHAGS, chGameBar, chDVR, chGPU, chMSI, chDiscord, chSteam,
+                             msg => { _main.Log(msg); msgs.Add(msg); }));
 
+            _state = (ChkHAGS.IsChecked == true, ChkDisableGameBar.IsChecked == true,
+                      ChkDisableDVR.IsChecked == true, ChkGPUPriority.IsChecked == true,
+                      ChkMSIMode.IsChecked == true, ChkDiscordHWAccel.IsChecked == true,
+                      ChkSteamOverlay.IsChecked == true);
             _main.Log("Windows : optimisations appliquées.");
+            Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Optimisations Windows appliquées");
             BtnAppliquer.IsEnabled = true;
         }
 
         private static void ApplyChanges(
-            bool doHAGS, bool doDisableGameBar, bool doDisableDVR,
-            bool doGPUPriority, bool doMSI, bool doDiscord, bool doSteam,
+            bool? doHAGS, bool? doDisableGameBar, bool? doDisableDVR,
+            bool? doGPUPriority, bool? doMSI, bool? doDiscord, bool? doSteam,
             Action<string> log)
         {
             // HAGS
+            if (doHAGS.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
-                    "HwSchMode", doHAGS ? 2 : 1, RegistryValueKind.DWord);
-                log($"HAGS : {(doHAGS ? "ACTIVÉ" : "DÉSACTIVÉ")} — redémarrage requis.");
+                    "HwSchMode", doHAGS.Value ? 2 : 1, RegistryValueKind.DWord);
+                log($"HAGS : {(doHAGS.Value ? "ACTIVÉ" : "DÉSACTIVÉ")} — redémarrage requis.");
             }
             catch (Exception ex) { log($"HAGS : erreur — {ex.Message}"); }
 
             // Game Bar
+            if (doDisableGameBar.HasValue)
             try
             {
                 const string pathDVR =
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR";
                 Registry.SetValue(pathDVR, "AppCaptureEnabled",
-                    doDisableGameBar ? 0 : 1, RegistryValueKind.DWord);
-                log($"Barre de jeu Xbox : {(doDisableGameBar ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
+                    doDisableGameBar.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Barre de jeu Xbox : {(doDisableGameBar.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"Barre de jeu : erreur — {ex.Message}"); }
 
             // DVR
+            if (doDisableDVR.HasValue)
             try
             {
                 const string pathDVR =
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR";
                 Registry.SetValue(pathDVR, "HistoricalCaptureEnabled",
-                    doDisableDVR ? 0 : 1, RegistryValueKind.DWord);
-                log($"Enregistrement DVR : {(doDisableDVR ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
+                    doDisableDVR.Value ? 0 : 1, RegistryValueKind.DWord);
+                log($"Enregistrement DVR : {(doDisableDVR.Value ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
             }
             catch (Exception ex) { log($"DVR : erreur — {ex.Message}"); }
 
             // GPU Priority
+            if (doGPUPriority.HasValue)
             try
             {
                 const string pathGames =
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
-                if (doGPUPriority)
+                if (doGPUPriority.Value)
                 {
                     Registry.SetValue(pathGames, "GPU Priority",        8,      RegistryValueKind.DWord);
                     Registry.SetValue(pathGames, "Priority",            6,      RegistryValueKind.DWord);
@@ -228,19 +250,21 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { log($"GPU Priority : erreur — {ex.Message}"); }
 
             // Mode MSI GPU
+            if (doMSI.HasValue)
             try
             {
                 var msiPath = FindMSIPath();
                 if (msiPath != null)
                 {
-                    Registry.SetValue(msiPath, "MSISupported", doMSI ? 1 : 0, RegistryValueKind.DWord);
-                    log($"Mode MSI GPU : {(doMSI ? "ACTIVÉ" : "DÉSACTIVÉ")} — redémarrage requis.");
+                    Registry.SetValue(msiPath, "MSISupported", doMSI.Value ? 1 : 0, RegistryValueKind.DWord);
+                    log($"Mode MSI GPU : {(doMSI.Value ? "ACTIVÉ" : "DÉSACTIVÉ")} — redémarrage requis.");
                 }
                 else log("Mode MSI GPU : aucun GPU détecté.");
             }
             catch (Exception ex) { log($"Mode MSI GPU : erreur — {ex.Message}"); }
 
             // Discord HW Accel
+            if (doDiscord.HasValue)
             try
             {
                 if (Process.GetProcessesByName("Discord").Length > 0)
@@ -264,11 +288,11 @@ namespace Optimisation_Tool.Pages
                                             : prop.Value.GetString()!;
                         }
                         // enableHardwareAcceleration = true si on N'a PAS coché "désactiver"
-                        dict["enableHardwareAcceleration"] = !doDiscord;
+                        dict["enableHardwareAcceleration"] = !doDiscord.Value;
                         File.WriteAllText(settingsPath, JsonSerializer.Serialize(dict,
                             new JsonSerializerOptions { WriteIndented = true }),
                             System.Text.Encoding.UTF8);
-                        log($"Discord HW Accel : {(doDiscord ? "DÉSACTIVÉE" : "ACTIVÉE")}. Redémarrez Discord.");
+                        log($"Discord HW Accel : {(doDiscord.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}. Redémarrez Discord.");
                     }
                     else log("Discord : settings.json introuvable.");
                 }
@@ -276,6 +300,7 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { log($"Discord : erreur — {ex.Message}"); }
 
             // Steam Overlay
+            if (doSteam.HasValue)
             try
             {
                 if (Process.GetProcessesByName("steam").Length > 0)
@@ -288,12 +313,12 @@ namespace Optimisation_Tool.Pages
                     if (vdfPath != null && File.Exists(vdfPath))
                     {
                         var content = File.ReadAllText(vdfPath);
-                        var newVal = doSteam ? "0" : "1";
+                        var newVal = doSteam.Value ? "0" : "1";
                         content = Regex.Replace(content,
                             @"""EnableGameOverlay""\s+""\d""",
                             $"\"EnableGameOverlay\"\t\t\"{newVal}\"");
                         File.WriteAllText(vdfPath, content, System.Text.Encoding.UTF8);
-                        log($"Overlay Steam : {(doSteam ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
+                        log($"Overlay Steam : {(doSteam.Value ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
                     }
                     else log("Overlay Steam : localconfig.vdf introuvable.");
                 }

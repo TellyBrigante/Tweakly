@@ -289,8 +289,12 @@ namespace Optimisation_Tool.Pages
         private static void SetBar(Grid bar, double pct)
         {
             pct = Math.Max(0, Math.Min(100, pct));
-            bar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
-            bar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
+            double cur = bar.ColumnDefinitions[0].Width.Value;
+            var dur = new Duration(TimeSpan.FromMilliseconds(300));
+            bar.ColumnDefinitions[0].BeginAnimation(ColumnDefinition.WidthProperty,
+                new GridLengthAnimation { From = cur, To = pct, Duration = dur });
+            bar.ColumnDefinitions[1].BeginAnimation(ColumnDefinition.WidthProperty,
+                new GridLengthAnimation { From = 100 - cur, To = 100 - pct, Duration = dur });
         }
 
         // ── Graphique ──────────────────────────────────────────────────────────

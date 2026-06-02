@@ -16,6 +16,9 @@ namespace Optimisation_Tool.Helpers
         [JsonPropertyName("autoUpdate")]
         public bool AutoUpdate { get; set; } = true;   // activé par défaut
 
+        [JsonPropertyName("soundsEnabled")]
+        public bool SoundsEnabled { get; set; } = true;   // sons d'interface (survol/clic/notifs)
+
         // ── Chemin du fichier (à côté de l'exe) ───────────────────────────────
         public static string FilePath => Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "tweakly-settings.json");

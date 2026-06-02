@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using Optimisation_Tool.Helpers;
 
@@ -593,9 +595,9 @@ namespace Optimisation_Tool.Pages
             var (sys, wmt) = await Task.Run(CalcScore);
             int total = sys + wmt;
 
-            TxtScoreTotal.Text  = total.ToString();
-            TxtSysVal.Text      = $"{sys} / 70";
-            TxtWmtVal.Text      = $"{wmt} / 30";
+            Anim.CountUp(TxtScoreTotal, total, 800);
+            Anim.CountUp(TxtSysVal, sys, 800, " / 70");
+            Anim.CountUp(TxtWmtVal, wmt, 800, " / 30");
             TxtScoreStatus.Text = ScoreLabel(total);
 
             var scoreColor = total switch
@@ -612,14 +614,34 @@ namespace Optimisation_Tool.Pages
             FillStop1.Color = lighter;
 
             var pct = Math.Max(0.0, Math.Min(100.0, (double)total));
-            ScoreProgressBar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
-            ScoreProgressBar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
 
-            // Anneau circulaire (jauge donut)
+            // Barre dégradée — glisse de 0 jusqu'au score
+            var dur = new Duration(TimeSpan.FromMilliseconds(800));
+            ScoreProgressBar.ColumnDefinitions[0].BeginAnimation(ColumnDefinition.WidthProperty,
+                new GridLengthAnimation { From = 0, To = pct, Duration = dur });
+            ScoreProgressBar.ColumnDefinitions[1].BeginAnimation(ColumnDefinition.WidthProperty,
+                new GridLengthAnimation { From = 100, To = 100 - pct, Duration = dur });
+
+            // Anneau circulaire (jauge donut) — remplissage animé
             RingFill.Stroke = new SolidColorBrush(lighter);
             RingGlow.Color   = scoreColor;
             RingGlow.Opacity = 0.6;
-            SetRing(pct);
+            AnimateRing(pct, 800);
+        }
+
+        /// <summary>Remplit l'anneau de 0 % jusqu'à la cible (easeOut).</summary>
+        private void AnimateRing(double targetPct, int ms)
+        {
+            var sw = Stopwatch.StartNew();
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+            timer.Tick += (_, _) =>
+            {
+                double t = Math.Min(1.0, sw.Elapsed.TotalMilliseconds / ms);
+                double e = 1 - Math.Pow(1 - t, 3);
+                SetRing(targetPct * e);
+                if (t >= 1.0) { SetRing(targetPct); timer.Stop(); }
+            };
+            timer.Start();
         }
 
         /// <summary>Pilote le remplissage de l'anneau via StrokeDashArray (0–100 %).</summary>

@@ -51,9 +51,9 @@ namespace Optimisation_Tool.Pages
             int ok   = items.Count(i => i.Status == HStatus.Ok);
             int warn = items.Count(i => i.Status == HStatus.Warning);
             int crit = items.Count(i => i.Status == HStatus.Critical);
-            TxtOk.Text   = ok.ToString();
-            TxtWarn.Text = warn.ToString();
-            TxtCrit.Text = crit.ToString();
+            Anim.CountUp(TxtOk,   ok,   600);
+            Anim.CountUp(TxtWarn, warn, 600);
+            Anim.CountUp(TxtCrit, crit, 600);
 
             TxtStatus.Text = $"Analyse terminée — {items.Count} point(s) vérifié(s).";
             _main.Log($"Diagnostic : terminé — {ok} OK, {warn} avertissement(s), {crit} critique(s).");
@@ -64,15 +64,21 @@ namespace Optimisation_Tool.Pages
         private void Render(List<HealthItem> items)
         {
             ResultsPanel.Children.Clear();
+            int idx = 0;
+            void Add(Border card)
+            {
+                ResultsPanel.Children.Add(card);
+                Anim.FadeSlideIn(card, 14, 240, idx++ * 70);   // apparition en cascade
+            }
 
             foreach (var cat in CatOrder)
             {
                 var catItems = items.Where(i => i.Category == cat).ToList();
-                if (catItems.Count > 0) ResultsPanel.Children.Add(BuildCategory(cat, catItems));
+                if (catItems.Count > 0) Add(BuildCategory(cat, catItems));
             }
             // Catégories imprévues éventuelles
             foreach (var cat in items.Select(i => i.Category).Distinct().Where(c => !CatOrder.Contains(c)))
-                ResultsPanel.Children.Add(BuildCategory(cat, items.Where(i => i.Category == cat).ToList()));
+                Add(BuildCategory(cat, items.Where(i => i.Category == cat).ToList()));
         }
 
         private Border BuildCategory(string category, List<HealthItem> catItems)

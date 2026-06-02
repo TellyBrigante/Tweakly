@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shell;
 using Optimisation_Tool.Pages;
 using Optimisation_Tool.Helpers;
@@ -23,6 +24,9 @@ namespace Optimisation_Tool
         public MainWindow()
         {
             InitializeComponent();
+
+            // Sons d'interface : uniquement les notifications (succès / avertissement).
+            Helpers.UiSound.Init();
 
             _pages = new Dictionary<string, Lazy<UserControl>>
             {
@@ -45,6 +49,7 @@ namespace Optimisation_Tool
             {
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
+                Helpers.UiSound.Enabled = Settings.SoundsEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode);
 
@@ -212,21 +217,35 @@ namespace Optimisation_Tool
             var raw = btn.Content?.ToString() ?? "";
             TxtPageTitle.Text = raw.TrimStart().TrimStart('·').Trim();
 
-            // Charger et afficher la page (lazy)
+            // Charger et afficher la page (lazy) + transition d'entrée (fondu + glissement)
             MainContent.Content = _pages[tag].Value;
+            Helpers.Anim.PageIn(MainContent);
         }
 
         private static void ApplyNavStyle(Button btn, bool selected)
         {
             if (selected)
             {
-                btn.Background = ThemeManager.Brush("ThSelection");
+                // Surbrillance qui apparaît en fondu (l'ancien item s'efface en parallèle → effet de glissement)
+                var target = (ThemeManager.Brush("ThSelection") as SolidColorBrush)?.Color
+                             ?? Color.FromRgb(0x34, 0x40, 0x8A);
+                var b = new SolidColorBrush(Color.FromArgb(0, target.R, target.G, target.B));
+                btn.Background = b;
+                b.BeginAnimation(SolidColorBrush.ColorProperty,
+                    new ColorAnimation(target, TimeSpan.FromMilliseconds(200)));
                 btn.Foreground = ThemeManager.Brush("ThTextTitle");
             }
             else
             {
-                // Retour au style par défaut (Transparent + DynamicResource ThTextNav)
-                btn.ClearValue(BackgroundProperty);
+                // Effacement en fondu vers transparent
+                if (btn.Background is SolidColorBrush sb)
+                {
+                    var c = sb.Color;
+                    var b = new SolidColorBrush(c);
+                    btn.Background = b;
+                    b.BeginAnimation(SolidColorBrush.ColorProperty,
+                        new ColorAnimation(Color.FromArgb(0, c.R, c.G, c.B), TimeSpan.FromMilliseconds(160)));
+                }
                 btn.ClearValue(ForegroundProperty);
             }
         }

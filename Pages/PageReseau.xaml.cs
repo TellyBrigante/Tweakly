@@ -15,6 +15,9 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
         private bool _loaded = false;
 
+        // État lu au chargement → référence pour n'appliquer que ce qui change
+        private (bool Nagle, bool NetDNS, bool AdapterPower, bool WPAD) _state;
+
         public PageReseau(MainWindow main)
         {
             _main = main;
@@ -41,6 +44,7 @@ namespace Optimisation_Tool.Pages
             ChkAdapterPower.IsChecked = s.AdapterPower;
             ChkWPAD.IsChecked         = s.WPAD;
 
+            _state = s;
             BtnAppliquer.IsEnabled = true;
             _main.Log("Réseau : état chargé.");
         }
@@ -115,27 +119,38 @@ namespace Optimisation_Tool.Pages
         {
             BtnAppliquer.IsEnabled = false;
 
-            bool doNagle   = ChkNagle.IsChecked        == true;
-            bool doDNS     = ChkNetDNS.IsChecked       == true;
-            bool doPower   = ChkAdapterPower.IsChecked == true;
-            bool doWPAD    = ChkWPAD.IsChecked         == true;
+            // N'appliquer QUE ce qui a changé (null = inchangé → ignoré)
+            bool? chNagle = Helpers.TweakFeedback.Changed(ChkNagle,        _state.Nagle);
+            bool? chDNS   = Helpers.TweakFeedback.Changed(ChkNetDNS,       _state.NetDNS);
+            bool? chPower = Helpers.TweakFeedback.Changed(ChkAdapterPower, _state.AdapterPower);
+            bool? chWPAD  = Helpers.TweakFeedback.Changed(ChkWPAD,         _state.WPAD);
+
+            if (!(chNagle.HasValue || chDNS.HasValue || chPower.HasValue || chWPAD.HasValue))
+            {
+                Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
+                BtnAppliquer.IsEnabled = true;
+                return;
+            }
 
             _main.Log("Réseau : application des tweaks…");
-
+            var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
-                ApplyChanges(doNagle, doDNS, doPower, doWPAD,
-                             msg => _main.Log(msg)));
+                ApplyChanges(chNagle, chDNS, chPower, chWPAD,
+                             msg => { _main.Log(msg); msgs.Add(msg); }));
 
+            _state = (ChkNagle.IsChecked == true, ChkNetDNS.IsChecked == true,
+                      ChkAdapterPower.IsChecked == true, ChkWPAD.IsChecked == true);
             _main.Log("Réseau : tweaks appliqués.");
+            Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Tweaks réseau appliqués");
             BtnAppliquer.IsEnabled = true;
         }
 
         private static void ApplyChanges(
-            bool doNagle, bool doDNS, bool doPower, bool doWPAD,
+            bool? doNagle, bool? doDNS, bool? doPower, bool? doWPAD,
             Action<string> log)
         {
             // Nagle
-            if (doNagle)
+            if (doNagle == true)
             {
                 try
                 {
@@ -160,7 +175,7 @@ namespace Optimisation_Tool.Pages
                 }
                 catch (Exception ex) { log($"Nagle : erreur — {ex.Message}"); }
             }
-            else
+            else if (doNagle == false)
             {
                 try
                 {
@@ -174,13 +189,14 @@ namespace Optimisation_Tool.Pages
             }
 
             // DNS
+            if (doDNS.HasValue)
             try
             {
                 using var searcher = new ManagementObjectSearcher(
                     "SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True");
                 foreach (ManagementObject obj in searcher.Get())
                 {
-                    if (doDNS)
+                    if (doDNS.Value)
                         obj.InvokeMethod("SetDNSServerSearchOrder",
                             new object[] { new string[] { "1.1.1.1", "8.8.8.8" } });
                     else
@@ -188,11 +204,12 @@ namespace Optimisation_Tool.Pages
                             new object?[] { null });
                     obj.Dispose();
                 }
-                log($"DNS : {(doDNS ? "1.1.1.1 / 8.8.8.8 (Cloudflare)" : "automatique (DHCP)")}.");
+                log($"DNS : {(doDNS.Value ? "1.1.1.1 / 8.8.8.8 (Cloudflare)" : "automatique (DHCP)")}.");
             }
             catch (Exception ex) { log($"DNS : erreur — {ex.Message}"); }
 
             // Adapter power management
+            if (doPower.HasValue)
             try
             {
                 const string netClass =
@@ -200,7 +217,7 @@ namespace Optimisation_Tool.Pages
                 using var root = Registry.LocalMachine.OpenSubKey(netClass, writable: true);
                 if (root != null)
                 {
-                    int pnpVal = doPower ? 24 : 0;
+                    int pnpVal = doPower.Value ? 24 : 0;
                     foreach (var sub in root.GetSubKeyNames())
                     {
                         try
@@ -212,17 +229,18 @@ namespace Optimisation_Tool.Pages
                         catch { }
                     }
                 }
-                log($"Adaptateur réseau : mise en veille {(doPower ? "DÉSACTIVÉE" : "ACTIVÉE (par défaut)")}.");
+                log($"Adaptateur réseau : mise en veille {(doPower.Value ? "DÉSACTIVÉE" : "ACTIVÉE (par défaut)")}.");
             }
             catch (Exception ex) { log($"Adaptateur réseau : erreur — {ex.Message}"); }
 
             // WPAD
+            if (doWPAD.HasValue)
             try
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp",
-                    "DisableWpad", doWPAD ? 1 : 0, RegistryValueKind.DWord);
-                log($"WPAD : {(doWPAD ? "DÉSACTIVÉ" : "ACTIVÉ (par défaut)")}.");
+                    "DisableWpad", doWPAD.Value ? 1 : 0, RegistryValueKind.DWord);
+                log($"WPAD : {(doWPAD.Value ? "DÉSACTIVÉ" : "ACTIVÉ (par défaut)")}.");
             }
             catch (Exception ex) { log($"WPAD : erreur — {ex.Message}"); }
         }
@@ -247,6 +265,8 @@ namespace Optimisation_Tool.Pages
             });
 
             _main.Log(ok ? "Cache DNS vidé avec succès." : "Cache DNS : erreur lors du vidage.");
+            Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, ok,
+                "Cache DNS vidé", "Erreur lors du vidage du cache DNS — voir le journal.");
             BtnFlushDNS.IsEnabled = true;
         }
     }

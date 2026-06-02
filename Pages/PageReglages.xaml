@@ -187,6 +187,27 @@
                                 VerticalAlignment="Center"
                                 Click="BtnShortcut_Click"/>
                     </Grid>
+                    <!-- Séparateur -->
+                    <Border Height="1" Background="{DynamicResource ThBorder}" Margin="0,12,0,12"/>
+                    <!-- Sons d'interface -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="Sons de l'interface"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="Sons discrets lors des notifications (r&#233;glage appliqu&#233;, etc.)."
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkSounds" Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource TweakChkStyle}"
+                                  Checked="ChkSounds_Changed" Unchecked="ChkSounds_Changed"/>
+                    </Grid>
                 </StackPanel>
             </Border>
 
