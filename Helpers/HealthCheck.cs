@@ -35,12 +35,17 @@ namespace Optimisation_Tool.Helpers
             try { CheckStorageHealth(items); }       catch { }
             try { CheckMemory(items); }              catch { }
             try { CheckGpuLink(items); }             catch { }
+            try { CheckGpuTemp(items); }             catch { }
+            try { CheckGpuCrashes(items); }          catch { }
             try { CheckDevices(items); }             catch { }
             try { CheckUnexpectedShutdowns(items); } catch { }
             try { CheckBsod(items); }                catch { }
             try { CheckWhea(items); }                catch { }
             try { CheckDiskErrors(items); }          catch { }
-            try { CheckPowerPlan(items); }           catch { }
+            try { CheckFsCorruption(items); }        catch { }
+            try { CheckServices(items); }            catch { }
+            try { CheckDriverLoad(items); }          catch { }
+            try { CheckAppCrashes(items); }          catch { }
             return items;
         }
 
@@ -141,6 +146,25 @@ namespace Optimisation_Tool.Helpers
                     {
                         extra   = $"Santé du SSD : {life}%";
                         extraSt = life <= 10 ? HStatus.Critical : life <= 25 ? HStatus.Warning : HStatus.Ok;
+                    }
+
+                    // Dégradation fine (signes avant-coureurs de panne) : erreurs média NVMe / secteurs réalloués SATA.
+                    // Garde-fous : on ignore les valeurs aberrantes (offset/lecture douteux) pour éviter les faux positifs.
+                    long degradation = 0;
+                    if (busType == 17 && devId >= 0)
+                    {
+                        var me = NvmeSmart.GetMediaErrors(devId);
+                        if (me.HasValue && me.Value > 0 && me.Value < 1_000_000_000UL) degradation = (long)me.Value;
+                    }
+                    else if (busType == 11 && devId >= 0)
+                    {
+                        var rs = AtaSmart.GetReallocatedSectors(devId);
+                        if (rs.HasValue && rs.Value > 0 && rs.Value < 1_000_000) degradation = rs.Value;
+                    }
+                    if (degradation > 0 && healthSt == HStatus.Ok)
+                    {
+                        healthSt = HStatus.Warning;
+                        detail   = busType == 17 ? $"Erreurs média : {degradation}" : $"Secteurs réalloués : {degradation}";
                     }
 
                     // Espace cumulé des partitions de ce disque (colonne 2)
@@ -292,87 +316,170 @@ namespace Optimisation_Tool.Helpers
 
         // ── Événements système (30 derniers jours) via le journal Windows ──────
         // Compte les événements correspondant au filtre XPath. Retourne -1 si inaccessible.
-        private static int CountEvents(string xpath)
+        private static int CountEvents(string log, string xpath)
         {
             try
             {
-                var query = new EventLogQuery("System", PathType.LogName, xpath);
+                var query = new EventLogQuery(log, PathType.LogName, xpath);
                 using var reader = new EventLogReader(query);
                 int count = 0;
                 for (EventRecord? ev = reader.ReadEvent(); ev != null; ev = reader.ReadEvent())
                 {
                     count++;
                     ev.Dispose();
-                    if (count >= 500) break;
+                    if (count >= 999) break;
                 }
                 return count;
             }
             catch { return -1; }
         }
 
-        private static void AddEventCheck(List<HealthItem> items, string title,
+        private static void AddEventCheck(List<HealthItem> items, string category, string log, string title,
             string xpath, string okMsg, string koMsgFmt, HStatus koStatus)
         {
-            int n = CountEvents(xpath);
+            int n = CountEvents(log, xpath);
             if (n < 0) return;   // journal inaccessible → on n'affiche rien
             items.Add(new HealthItem
             {
-                Category = "Système",
+                Category = category,
                 Title    = title,
                 Message  = n == 0 ? okMsg : string.Format(koMsgFmt, n),
                 Status   = n == 0 ? HStatus.Ok : koStatus,
             });
         }
 
+        // Variante qui, en cas de problème, nomme les éléments concernés (nom = 1re propriété de l'événement).
+        private static void AddEventCheckNamed(List<HealthItem> items, string category, string log, string title,
+            string xpath, string okMsg, string koMsgFmt, HStatus koStatus)
+        {
+            try
+            {
+                var query = new EventLogQuery(log, PathType.LogName, xpath);
+                using var reader = new EventLogReader(query);
+
+                int total = 0;
+                var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (EventRecord? ev = reader.ReadEvent(); ev != null; ev = reader.ReadEvent())
+                {
+                    try
+                    {
+                        total++;
+                        if (ev.Properties != null && ev.Properties.Count > 0)
+                        {
+                            var name = CleanName(ev.Properties[0].Value?.ToString());
+                            if (name.Length > 0) { byName.TryGetValue(name, out int c); byName[name] = c + 1; }
+                        }
+                    }
+                    catch { }
+                    finally { ev.Dispose(); }
+                    if (total >= 999) break;
+                }
+
+                string  msg;
+                HStatus st;
+                if (total == 0) { msg = okMsg; st = HStatus.Ok; }
+                else
+                {
+                    st  = koStatus;
+                    msg = string.Format(koMsgFmt, total);
+                    if (byName.Count > 0 && byName.Count <= 3)
+                    {
+                        msg += " : " + string.Join(", ", byName.Keys);   // peu d'éléments → on les liste
+                    }
+                    else if (byName.Count > 3)
+                    {
+                        string topName = ""; int topCount = 0;            // beaucoup → on cite le pire
+                        foreach (var kv in byName) if (kv.Value > topCount) { topCount = kv.Value; topName = kv.Key; }
+                        msg += $" — surtout {topName} ({topCount} fois)";
+                    }
+                }
+                items.Add(new HealthItem { Category = category, Title = title, Message = msg, Status = st });
+            }
+            catch { }
+        }
+
+        private static string CleanName(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return "";
+            var s = raw.Trim();
+            int nl = s.IndexOfAny(new[] { '\r', '\n' });   // event 7026 = liste multi-ligne → 1re entrée
+            if (nl > 0) s = s.Substring(0, nl).Trim();
+            if (s.Length > 40) s = s.Substring(0, 39) + "…";
+            return s;
+        }
+
         private static void CheckUnexpectedShutdowns(List<HealthItem> items) => AddEventCheck(items,
-            "Stabilité",
+            "Système", "System", "Stabilité",
             "*[System[(EventID=41 or EventID=6008) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
             "Aucun arrêt inattendu (30 derniers jours)", "{0} arrêt(s) inattendu(s) sur 30 jours", HStatus.Warning);
 
         private static void CheckBsod(List<HealthItem> items) => AddEventCheck(items,
-            "Écrans bleus",
+            "Système", "System", "Écrans bleus",
             "*[System[Provider[@Name='Microsoft-Windows-WER-SystemErrorReporting'] and EventID=1001 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
             "Aucun écran bleu (30 derniers jours)", "{0} écran(s) bleu(s) sur 30 jours", HStatus.Warning);
 
         private static void CheckWhea(List<HealthItem> items) => AddEventCheck(items,
-            "Erreurs matérielles",
+            "Système", "System", "Erreurs matérielles",
             // Level 1 = Critical, 2 = Error (on ignore les erreurs corrigées bénignes)
             "*[System[Provider[@Name='Microsoft-Windows-WHEA-Logger'] and (Level=1 or Level=2) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
             "Aucune erreur matérielle (WHEA)", "{0} erreur(s) matérielle(s) WHEA sur 30 jours", HStatus.Warning);
 
         private static void CheckDiskErrors(List<HealthItem> items) => AddEventCheck(items,
-            "Erreurs disque",
+            "Système", "System", "Erreurs disque",
             "*[System[(Provider[@Name='disk'] or Provider[@Name='Disk'] or Provider[@Name='Ntfs']) and (Level=1 or Level=2) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
             "Aucune erreur disque (30 derniers jours)", "{0} erreur(s) disque/NTFS sur 30 jours", HStatus.Warning);
 
-        // ── Mode d'alimentation Windows ─────────────────────────────────────────
-        private static void CheckPowerPlan(List<HealthItem> items)
+        // Corruption du système de fichiers (NTFS event 55) — grave → critique si présent
+        private static void CheckFsCorruption(List<HealthItem> items) => AddEventCheck(items,
+            "Système", "System", "Intégrité fichiers",
+            "*[System[Provider[@Name='Microsoft-Windows-Ntfs'] and EventID=55 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
+            "Aucune corruption détectée (30 derniers jours)", "{0} corruption(s) du système de fichiers", HStatus.Critical);
+
+        // Services Windows qui plantent / s'arrêtent anormalement (7034 = crash, 7031 = arrêt inattendu)
+        private static void CheckServices(List<HealthItem> items) => AddEventCheckNamed(items,
+            "Système", "System", "Services Windows",
+            "*[System[Provider[@Name='Service Control Manager'] and (EventID=7034 or EventID=7031) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
+            "Aucun service planté (30 derniers jours)", "{0} service(s) Windows planté(s) sur 30 jours", HStatus.Warning);
+
+        // Pilotes / services qui échouent à démarrer au boot (7000 = service KO, 7026 = pilote boot KO)
+        private static void CheckDriverLoad(List<HealthItem> items) => AddEventCheckNamed(items,
+            "Système", "System", "Pilotes système",
+            "*[System[Provider[@Name='Service Control Manager'] and (EventID=7000 or EventID=7026) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
+            "Tous les pilotes ont démarré (30 derniers jours)", "{0} pilote(s)/service(s) en échec de démarrage", HStatus.Warning);
+
+        // Plantages de logiciels (journal Application) : 1000 = Application Error, 1002 = Hang.
+        // Nomme le(s) logiciel(s) le(s) plus instable(s).
+        private static void CheckAppCrashes(List<HealthItem> items) => AddEventCheckNamed(items,
+            "Système", "Application", "Plantages de logiciels",
+            "*[System[(EventID=1000 or EventID=1002) and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
+            "Aucun plantage de logiciel (30 derniers jours)", "{0} plantage(s) de logiciel sur 30 jours", HStatus.Warning);
+
+        // Plantages du pilote GPU (TDR) : « Display driver stopped responding » (event 4101)
+        private static void CheckGpuCrashes(List<HealthItem> items) => AddEventCheck(items,
+            "Carte graphique", "System", "Plantages pilote GPU",
+            "*[System[Provider[@Name='Display'] and EventID=4101 and TimeCreated[timediff(@SystemTime) <= 2592000000]]]",
+            "Aucun plantage du pilote GPU (30 derniers jours)", "{0} plantage(s) du pilote GPU sur 30 jours", HStatus.Warning);
+
+        // Surchauffe : température GPU instantanée vs seuils (refroidissement défaillant)
+        private static void CheckGpuTemp(List<HealthItem> items)
         {
-            using var p = Process.Start(new ProcessStartInfo("powercfg", "/getactivescheme")
+            try
             {
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-                RedirectStandardOutput = true,
-            });
-            if (p == null) return;
+                using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
+                    "--query-gpu=temperature.gpu --format=csv,noheader,nounits")
+                {
+                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
+                });
+                if (p == null) return;
+                var line = p.StandardOutput.ReadLine();
+                p.WaitForExit(4000);
+                if (!int.TryParse((line ?? "").Trim(), out int t) || t <= 0 || t > 150) return;
 
-            var outp = p.StandardOutput.ReadToEnd();
-            p.WaitForExit(4000);
-
-            var m = Regex.Match(outp, @"([0-9a-fA-F]{8}-[0-9a-fA-F-]{27})");
-            if (!m.Success) return;
-
-            var guid = m.Groups[1].Value.ToLowerInvariant();
-            // Hautes performances OU Performances ultimes
-            bool high = guid == "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
-                     || guid == "e9a42b02-d5df-448d-aa00-03f14749eb61";
-
-            var st  = high ? HStatus.Ok : HStatus.Warning;
-            var msg = high
-                ? "Mode hautes performances actif"
-                : "Mode équilibré / économie — performances potentiellement bridées";
-
-            items.Add(new HealthItem { Category = "Système", Title = "Alimentation", Message = msg, Status = st });
+                var st  = t >= 90 ? HStatus.Critical : t >= 83 ? HStatus.Warning : HStatus.Ok;
+                var msg = t >= 83 ? $"{t} °C — élevée (refroidissement à vérifier)" : $"{t} °C — normale";
+                items.Add(new HealthItem { Category = "Carte graphique", Title = "Température GPU", Message = msg, Status = st });
+            }
+            catch { }
         }
 
         private static int ParseInt(string s)

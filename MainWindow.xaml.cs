@@ -52,11 +52,8 @@ namespace Optimisation_Tool
 
                 Log("Outil prêt.");
 
-                // Démarrage : groupe Optimisations déroulé + page Nettoyage active
-                _optExpanded = true;
-                OptGroupPanel.Visibility = Visibility.Visible;
-                BtnNavOptGroup.Content   = "▾  Optimisations";
-                NavigateTo(BtnNavNettoyage);
+                // Démarrage : groupe Optimisations replié (état par défaut du XAML) + page Monitoring active
+                NavigateTo(BtnNavMonitoring);
 
 #if !DEBUG
                 // MAJ : vérification au démarrage + périodique (uniquement en build distribué).

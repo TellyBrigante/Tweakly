@@ -5,12 +5,10 @@ using Microsoft.Win32.SafeHandles;
 namespace Optimisation_Tool.Helpers
 {
     /// <summary>
-    /// Lecture de la vie restante d'un SSD SATA via les attributs SMART ATA
-    /// (IOCTL SMART_RCV_DRIVE_DATA, commande SMART READ ATTRIBUTES).
-    /// On cherche, dans l'ordre, un attribut « vie restante » normalisé (0-100) :
-    /// 231 (SSD Life Left), 202 (Percent Lifetime Remaining), 177 (Wear Leveling), 233.
-    /// La valeur exacte dépend du fabricant → retourne null si rien d'exploitable.
-    /// Nécessite l'élévation admin.
+    /// Lecture des attributs SMART d'un disque SATA via IOCTL SMART_RCV_DRIVE_DATA.
+    /// - Vie restante : attribut normalisé 231 / 202 / 177 / 233 (dépend du fabricant).
+    /// - Secteurs réalloués : attribut 5 (raw value) — indicateur de dégradation.
+    /// Nécessite l'élévation admin. Retourne null si indisponible.
     /// </summary>
     internal static class AtaSmart
     {
@@ -34,10 +32,10 @@ namespace Optimisation_Tool.Helpers
             byte[] lpInBuffer, int nInBufferSize, byte[] lpOutBuffer, int nOutBufferSize,
             out uint lpBytesReturned, IntPtr lpOverlapped);
 
-        // Attributs « vie restante » par ordre de préférence
         private static readonly int[] LifeAttrs = { 231, 202, 177, 233 };
 
-        public static int? GetLifeRemaining(int diskNumber)
+        /// <summary>Renvoie le buffer de sortie SMART (en-tête 16 o + 512 o de données), ou null.</summary>
+        private static byte[]? ReadSmartData(int diskNumber)
         {
             try
             {
@@ -45,10 +43,8 @@ namespace Optimisation_Tool.Helpers
                     GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
                 if (h.IsInvalid) return null;
 
-                // SENDCMDINPARAMS (en-tête 32 octets, on n'a pas besoin de bBuffer en entrée)
                 var inBuf = new byte[32];
                 BitConverter.GetBytes((uint)512).CopyTo(inBuf, 0);   // cBufferSize
-                // IDEREGS à l'offset 4
                 inBuf[4]  = READ_ATTRIBUTES;   // Features = 0xD0
                 inBuf[5]  = 1;                 // SectorCount
                 inBuf[6]  = 1;                 // SectorNumber
@@ -58,30 +54,54 @@ namespace Optimisation_Tool.Helpers
                 inBuf[10] = SMART_CMD;         // Command = 0xB0
                 inBuf[12] = (byte)diskNumber;  // bDriveNumber
 
-                // SENDCMDOUTPARAMS : en-tête 16 octets + 512 octets de données SMART
                 var outBuf = new byte[16 + 512];
-
                 if (!DeviceIoControl(h, SMART_RCV_DRIVE_DATA, inBuf, inBuf.Length, outBuf, outBuf.Length, out _, IntPtr.Zero))
                     return null;
-
-                // Données SMART à partir de l'offset 16 ; attributs à partir de l'octet 2 de ces données.
-                // Chaque attribut = 12 octets : [0]=ID, [3]=valeur normalisée (current), …
-                const int dataStart = 16 + 2;
-                for (int i = 0; i < 30; i++)
-                {
-                    int pos = dataStart + i * 12;
-                    if (pos + 3 >= outBuf.Length) break;
-                    int id = outBuf[pos];
-                    if (id == 0) continue;
-                    if (Array.IndexOf(LifeAttrs, id) >= 0)
-                    {
-                        int value = outBuf[pos + 3];        // valeur normalisée = % de vie restante
-                        if (value > 0 && value <= 100) return value;
-                    }
-                }
-                return null;
+                return outBuf;
             }
             catch { return null; }
+        }
+
+        // Itère les 30 attributs SMART. Données à partir de l'offset 16 ; attributs à l'octet 2 de ces données.
+        // Chaque attribut = 12 octets : [0]=ID, [3]=valeur normalisée, [5..10]=raw (6 o LE).
+        private const int AttrBase = 16 + 2;
+
+        public static int? GetLifeRemaining(int diskNumber)
+        {
+            var d = ReadSmartData(diskNumber);
+            if (d == null) return null;
+            for (int i = 0; i < 30; i++)
+            {
+                int pos = AttrBase + i * 12;
+                if (pos + 3 >= d.Length) break;
+                int id = d[pos];
+                if (id == 0) continue;
+                if (Array.IndexOf(LifeAttrs, id) >= 0)
+                {
+                    int value = d[pos + 3];                 // valeur normalisée = % de vie restante
+                    if (value > 0 && value <= 100) return value;
+                }
+            }
+            return null;
+        }
+
+        public static long? GetReallocatedSectors(int diskNumber)
+        {
+            var d = ReadSmartData(diskNumber);
+            if (d == null) return null;
+            for (int i = 0; i < 30; i++)
+            {
+                int pos = AttrBase + i * 12;
+                if (pos + 10 >= d.Length) break;
+                int id = d[pos];
+                if (id == 5)   // Reallocated Sectors Count
+                {
+                    // raw value sur 4 octets LE (suffisant pour un compteur de secteurs)
+                    long raw = d[pos + 5] | ((long)d[pos + 6] << 8) | ((long)d[pos + 7] << 16) | ((long)d[pos + 8] << 24);
+                    return raw;
+                }
+            }
+            return null;
         }
     }
 }

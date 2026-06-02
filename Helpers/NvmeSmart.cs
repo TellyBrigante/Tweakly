@@ -5,10 +5,8 @@ using Microsoft.Win32.SafeHandles;
 namespace Optimisation_Tool.Helpers
 {
     /// <summary>
-    /// Lecture de l'usure réelle d'un SSD NVMe via IOCTL_STORAGE_QUERY_PROPERTY
-    /// (log SMART/Health NVMe, page 0x02, octet 5 = « Percentage Used », 0-255 %).
-    /// Méthode native Windows — pas de dépendance externe. Nécessite l'élévation admin.
-    /// Retourne null si indisponible (disque non NVMe, accès refusé, etc.).
+    /// Lecture du log SMART/Health NVMe (page 0x02) via IOCTL_STORAGE_QUERY_PROPERTY.
+    /// Méthode native Windows, pas de dépendance. Nécessite l'élévation admin.
     /// </summary>
     internal static class NvmeSmart
     {
@@ -35,7 +33,8 @@ namespace Optimisation_Tool.Helpers
             byte[] lpInBuffer, int nInBufferSize, byte[] lpOutBuffer, int nOutBufferSize,
             out uint lpBytesReturned, IntPtr lpOverlapped);
 
-        public static int? GetPercentageUsed(int diskNumber)
+        /// <summary>Retourne les 512 octets du log SMART/Health NVMe, ou null si indisponible.</summary>
+        private static byte[]? ReadHealthLog(int diskNumber)
         {
             try
             {
@@ -43,37 +42,51 @@ namespace Optimisation_Tool.Helpers
                     GENERIC_READ | GENERIC_WRITE, FILE_SHARE_RW, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
                 if (h.IsInvalid) return null;
 
-                const int queryHeader = 8;    // STORAGE_PROPERTY_QUERY : PropertyId + QueryType
-                const int protoData   = 40;   // STORAGE_PROTOCOL_SPECIFIC_DATA
-                const int logSize     = 512;  // NVMe SMART/Health log
+                const int queryHeader = 8;
+                const int protoData   = 40;
+                const int logSize     = 512;
                 int size = queryHeader + protoData + logSize;
                 var b = new byte[size];
 
-                // STORAGE_PROPERTY_QUERY
                 BitConverter.GetBytes(StorageDeviceProtocolSpecificProperty).CopyTo(b, 0);
                 BitConverter.GetBytes(PropertyStandardQuery).CopyTo(b, 4);
-                // STORAGE_PROTOCOL_SPECIFIC_DATA (offset 8)
-                BitConverter.GetBytes(ProtocolTypeNvme).CopyTo(b, 8);          // ProtocolType
-                BitConverter.GetBytes(NVMeDataTypeLogPage).CopyTo(b, 12);      // DataType
-                BitConverter.GetBytes(NVME_LOG_HEALTH_INFO).CopyTo(b, 16);     // ProtocolDataRequestValue (log 0x02)
-                BitConverter.GetBytes((uint)0).CopyTo(b, 20);                  // ProtocolDataRequestSubValue
-                BitConverter.GetBytes((uint)protoData).CopyTo(b, 24);         // ProtocolDataOffset
-                BitConverter.GetBytes((uint)logSize).CopyTo(b, 28);           // ProtocolDataLength
+                BitConverter.GetBytes(ProtocolTypeNvme).CopyTo(b, 8);
+                BitConverter.GetBytes(NVMeDataTypeLogPage).CopyTo(b, 12);
+                BitConverter.GetBytes(NVME_LOG_HEALTH_INFO).CopyTo(b, 16);
+                BitConverter.GetBytes((uint)0).CopyTo(b, 20);
+                BitConverter.GetBytes((uint)protoData).CopyTo(b, 24);
+                BitConverter.GetBytes((uint)logSize).CopyTo(b, 28);
 
                 if (!DeviceIoControl(h, IOCTL_STORAGE_QUERY_PROPERTY, b, size, b, size, out _, IntPtr.Zero))
                     return null;
 
-                // Sortie : STORAGE_PROTOCOL_DATA_DESCRIPTOR (Version+Size = 8) + ProtocolSpecificData (40) + log
-                // ProtocolDataOffset (renvoyé) est relatif au début de ProtocolSpecificData (offset 8).
-                uint off = BitConverter.ToUInt32(b, 8 + 16);   // champ ProtocolDataOffset dans la sortie
+                uint off = BitConverter.ToUInt32(b, 8 + 16);   // ProtocolDataOffset renvoyé
                 int logStart = 8 + (int)off;
-                if (logStart + 5 >= b.Length) logStart = 8 + protoData;   // garde-fou → 48
-                if (logStart + 5 >= b.Length) return null;
+                if (logStart + logSize > b.Length) logStart = 8 + protoData;   // garde-fou → 48
+                if (logStart + logSize > b.Length) return null;
 
-                int pu = b[logStart + 5];        // octet 5 du log = Percentage Used
-                return (pu >= 0 && pu <= 255) ? pu : (int?)null;
+                var log = new byte[logSize];
+                Array.Copy(b, logStart, log, 0, logSize);
+                return log;
             }
             catch { return null; }
+        }
+
+        /// <summary>Usure NVMe « Percentage Used » (octet 5), 0-255 %. Null si indisponible.</summary>
+        public static int? GetPercentageUsed(int diskNumber)
+        {
+            var log = ReadHealthLog(diskNumber);
+            if (log == null) return null;
+            int pu = log[5];
+            return (pu >= 0 && pu <= 255) ? pu : (int?)null;
+        }
+
+        /// <summary>« Media and Data Integrity Errors » (offset 160, 64 bits LE). Null si indisponible.</summary>
+        public static ulong? GetMediaErrors(int diskNumber)
+        {
+            var log = ReadHealthLog(diskNumber);
+            if (log == null || log.Length < 168) return null;
+            return BitConverter.ToUInt64(log, 160);
         }
     }
 }
