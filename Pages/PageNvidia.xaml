@@ -114,8 +114,72 @@
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="18,14,18,18">
+        <StackPanel Margin="18,14,18,18" MaxWidth="600" HorizontalAlignment="Left">
 
+            <!-- ── Onglets : Paramètres globaux / Par application (segmented) ── -->
+            <Border Background="{DynamicResource ThBg}" BorderBrush="{DynamicResource ThBorder}"
+                    BorderThickness="1" CornerRadius="10" Padding="4" HorizontalAlignment="Left"
+                    Margin="0,0,0,16">
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnTabGlobal" Click="BtnTabGlobal_Click" Cursor="Hand" Height="32" Width="180">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" CornerRadius="7" Background="Transparent">
+                                    <TextBlock x:Name="Lbl" Text="Param&#232;tres globaux"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="12" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                    <Button x:Name="BtnTabApp" Click="BtnTabApp_Click" Cursor="Hand" Height="32" Width="180">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" CornerRadius="7" Background="Transparent">
+                                    <TextBlock x:Name="Lbl" Text="Param&#232;tres par application"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="12" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- ══ PARAMÈTRES GLOBAUX ══ -->
+            <StackPanel x:Name="GlobalPanel">
+                <TextBlock x:Name="TxtCurrentStatus" Text="Lecture en cours&#8230;"
+                           Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                           FontSize="11.5" Margin="2,0,0,12" TextWrapping="Wrap"/>
+                <Border Background="{DynamicResource ThPanel}"
+                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                        CornerRadius="10" Padding="18,8,18,12">
+                    <StackPanel x:Name="CurrentSettingsPanel"/>
+                </Border>
+                <Button x:Name="BtnApplyGlobal"
+                        Content="APPLIQUER LES MODIFICATIONS"
+                        Click="BtnApplyGlobal_Click"
+                        HorizontalAlignment="Left" Margin="0,18,0,0">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
+                            <Setter Property="Background" Value="#1E7A3C"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#28A050"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+
+            <!-- ══ PARAMÈTRES PAR APPLICATION (.nip) ══ -->
+            <StackPanel x:Name="AppPanel" Visibility="Collapsed">
             <TextBlock Text="S&#233;lectionnez un profil NVIDIA Inspector (.nip) :"
                        Foreground="{DynamicResource ThTextNav}" FontFamily="{StaticResource AppFont}" FontSize="11.5"
                        Margin="0,0,0,8"/>
@@ -199,6 +263,7 @@
                     </Button.Style>
                 </Button>
             </StackPanel>
+            </StackPanel><!-- fin AppPanel -->
 
         </StackPanel>
     </ScrollViewer>
