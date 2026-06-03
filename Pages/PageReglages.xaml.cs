@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.1.9";
+        public const string AppVersion = "1.2.0";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -221,7 +221,18 @@ namespace Optimisation_Tool.Pages
             var exePath    = Process.GetCurrentProcess().MainModule!.FileName;
             var installDir = Path.GetDirectoryName(exePath)!;
 
-            // Script : attend la fermeture, remplace les fichiers, relance
+            // Script : attend la fermeture, remplace les fichiers, relance.
+            // ⚠️ MAJ-SENSIBLE — ce batch est généré par la version EN COURS d'exécution : toute
+            // amélioration ne profite QU'AUX mises à jour partant de cette version (les versions déjà
+            // installées chez les users gardent leur propre batch, intouchable). Conçu pour être
+            // STRICTEMENT plus robuste que l'ancien `xcopy` (qui copiait une seule fois et abandonnait
+            // en silence si le .exe était encore verrouillé — antivirus scannant le nouvel exe, ou
+            // verrou du gros single-file pas encore relâché par l'OS → l'ancienne version relancée).
+            //   • timeout 1s : petite tempo après la sortie du process pour laisser l'OS libérer le verrou.
+            //   • robocopy /R:10 /W:2 : RÉESSAIE une cible verrouillée (10 essais × 2 s = 20 s de patience)
+            //     au lieu d'abandonner. /E = arborescence complète (équiv. xcopy /E /Y, additif, ne supprime rien).
+            //   • Pire cas (échec après 20 s) : on relance quand même → comportement IDENTIQUE à l'ancien
+            //     batch (aucune régression possible). Au mieux : le blocage antivirus est absorbé.
             var bat = Path.Combine(tmp, "update.bat");
             var script =
                 "@echo off\r\n" +
@@ -231,7 +242,8 @@ namespace Optimisation_Tool.Pages
                 "  timeout /t 1 /nobreak >nul\r\n" +
                 "  goto wait\r\n" +
                 ")\r\n" +
-                $"xcopy /E /Y /I \"{srcDir}\\*\" \"{installDir}\\\" >nul\r\n" +
+                "timeout /t 1 /nobreak >nul\r\n" +
+                $"robocopy \"{srcDir}\" \"{installDir}\" /E /R:10 /W:2 /NFL /NDL /NJH /NJS /NP >nul\r\n" +
                 $"start \"\" \"{exePath}\"\r\n" +
                 "del \"%~f0\"\r\n";
             File.WriteAllText(bat, script);
