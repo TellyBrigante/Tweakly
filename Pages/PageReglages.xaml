@@ -165,6 +165,25 @@
                                   Style="{StaticResource TweakChkStyle}"
                                   Checked="ChkStartup_Changed" Unchecked="ChkStartup_Changed"/>
                     </Grid>
+                    <!-- Démarrer minimisé -->
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="D&#233;marrer minimis&#233;"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="Tweakly se lance dans la barre des t&#226;ches."
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartMinimized" Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource TweakChkStyle}"
+                                  Checked="ChkStartMinimized_Changed" Unchecked="ChkStartMinimized_Changed"/>
+                    </Grid>
                     <!-- Séparateur -->
                     <Border Height="1" Background="{DynamicResource ThBorder}" Margin="0,0,0,12"/>
                     <!-- Raccourci bureau -->

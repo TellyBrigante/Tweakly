@@ -17,6 +17,11 @@ namespace Optimisation_Tool
         private Button?                                  _selectedNav;
         private readonly Dictionary<string, Lazy<UserControl>> _pages;
 
+        // Mode mini (overlay compact) — voir EnterMiniMode / ExitMiniMode
+        private MiniMonitor? _mini;
+        private Button?      _returnNav;     // page à restaurer en sortant du mode mini
+        public  bool         ShuttingDown { get; private set; }
+
         // Groupes de navigation repliables (Optimisations, Diagnostic)
         private sealed class NavGroup
         {
@@ -75,6 +80,7 @@ namespace Optimisation_Tool
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode);
+                if (Settings.StartMinimized) this.WindowState = WindowState.Minimized;
 
                 // Version affichée = source unique (PageReglages.AppVersion)
                 TxtVersion.Text = "v" + Pages.PageReglages.AppVersion;
@@ -434,7 +440,70 @@ namespace Optimisation_Tool
         private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)
-            => Application.Current.Shutdown();
+        {
+            ShuttingDown = true;
+            Application.Current.Shutdown();
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            ShuttingDown = true;
+            base.OnClosing(e);
+        }
+
+        // ── Mode mini (overlay compact monitoring) ────────────────────────────
+
+        private void BtnMiniMode_Click(object sender, RoutedEventArgs e) => EnterMiniMode();
+
+        /// <summary>
+        /// Bascule vers l'overlay compact. Vide d'abord la page active (son timer de
+        /// sampling s'arrête via Unloaded) pour qu'un SEUL sampler tourne : celui de la mini.
+        /// </summary>
+        public void EnterMiniMode()
+        {
+            try
+            {
+                _returnNav = _selectedNav;
+                MainContent.Content = null;   // décharge la page active → stoppe son timer
+
+                _mini ??= new MiniMonitor(this);
+                PositionMini(_mini);
+                _mini.Show();
+                _mini.StartSampling();
+                _mini.Activate();
+                Hide();
+            }
+            catch (Exception ex) { Log($"Mode mini : erreur — {ex.Message}"); }
+        }
+
+        /// <summary>Revient à la fenêtre complète et restaure la page d'où l'on venait.</summary>
+        public void ExitMiniMode()
+        {
+            try
+            {
+                _mini?.StopSampling();
+                _mini?.Hide();
+
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
+
+                if (_returnNav != null) NavigateTo(_returnNav);
+            }
+            catch (Exception ex) { Log($"Mode mini : erreur — {ex.Message}"); }
+        }
+
+        // Place la mini en bas à droite de la zone de travail du moniteur principal.
+        private static void PositionMini(Window w)
+        {
+            try
+            {
+                var wa = SystemParameters.WorkArea;
+                w.Left = wa.Right  - w.Width  - 18;
+                w.Top  = wa.Bottom - 220       - 18;
+            }
+            catch { }
+        }
 
         // ── Journal d'activité ────────────────────────────────────────────────
 

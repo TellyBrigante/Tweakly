@@ -17,9 +17,10 @@ namespace Optimisation_Tool.Pages
     public partial class PageReglages : UserControl
     {
         private readonly MainWindow _main;
+        private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.1.8";
+        public const string AppVersion = "1.1.9";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -38,11 +39,14 @@ namespace Optimisation_Tool.Pages
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            TxtVersionLine.Text   = $"Version installée : Tweakly v{AppVersion}";
-            ChkStartup.IsChecked  = IsStartupEnabled();
-            ChkAutoUpdate.IsChecked = MainWindow.Settings.AutoUpdate;
-            ChkSounds.IsChecked     = MainWindow.Settings.SoundsEnabled;
+            _loading = true;
+            TxtVersionLine.Text        = $"Version installée : Tweakly v{AppVersion}";
+            ChkStartup.IsChecked       = IsStartupEnabled();
+            ChkStartMinimized.IsChecked = MainWindow.Settings.StartMinimized;
+            ChkAutoUpdate.IsChecked    = MainWindow.Settings.AutoUpdate;
+            ChkSounds.IsChecked        = MainWindow.Settings.SoundsEnabled;
             UpdateThemeSegment(ThemeManager.Current);
+            _loading = false;
         }
 
         // ── Toggle MAJ automatiques ─────────────────────────────────────────────
@@ -280,6 +284,7 @@ namespace Optimisation_Tool.Pages
 
         private void ChkStartup_Changed(object sender, RoutedEventArgs e)
         {
+            if (_loading) return;
             bool enable = ChkStartup.IsChecked == true;
             try
             {
@@ -296,6 +301,14 @@ namespace Optimisation_Tool.Pages
             {
                 _main.Log($"Réglages : erreur démarrage Windows — {ex.Message}");
             }
+        }
+
+        private void ChkStartMinimized_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            MainWindow.Settings.StartMinimized = ChkStartMinimized.IsChecked == true;
+            MainWindow.Settings.Save();
+            _main.Log($"Réglages : démarrage minimisé {(MainWindow.Settings.StartMinimized ? "activé" : "désactivé")}.");
         }
 
         // ── Raccourci bureau ────────────────────────────────────────────────────
