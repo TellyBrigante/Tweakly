@@ -35,6 +35,10 @@
                       Content="Journaux d'&#233;v&#233;nements Windows (peuvent atteindre plusieurs Go)"
                       Style="{StaticResource TweakChkStyle}"
                       IsChecked="False"/>
+            <CheckBox x:Name="ChkResidues"
+                      Content="R&#233;sidus de logiciels d&#233;sinstall&#233;s (raccourcis cass&#233;s + entr&#233;es registre orphelines)"
+                      Style="{StaticResource TweakChkStyle}"
+                      IsChecked="False"/>
 
             <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                 <Button x:Name="BtnLancer"

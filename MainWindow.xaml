@@ -56,6 +56,34 @@
             </Setter>
         </Style>
 
+        <!-- Bouton de sous-item : texte CENTRÉ (les noms longs wrappent centrés sous le parent) -->
+        <Style x:Key="NavSubBtnStyle" TargetType="Button" BasedOn="{StaticResource NavBtnStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Margin="8,2">
+                            <TextBlock x:Name="Lbl"
+                                       Text="{TemplateBinding Content}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       FontWeight="{TemplateBinding FontWeight}"
+                                       Padding="10,7" TextWrapping="Wrap" TextAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThSecBtn}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextNav}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Boutons fen&#234;tre (min/close) -->
         <Style x:Key="WinBtnStyle" TargetType="Button">
             <Setter Property="Background"                             Value="Transparent"/>
@@ -179,7 +207,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.1.7"
+                            <TextBlock x:Name="TxtVersion" Text="v1.1.8"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -206,29 +234,29 @@
                                     Margin="20,0,8,4">
                                 <StackPanel>
                                     <Button x:Name="BtnNavNettoyage"
-                                            Content="  &#x00B7;  Nettoyage"
+                                            Content="Nettoyage"
                                             Tag="Nettoyage"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="  &#x00B7;  Nvidia"
+                                    <Button Content="Nvidia"
                                             Tag="Nvidia"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="  &#x00B7;  CPU"
+                                    <Button Content="CPU"
                                             Tag="CPU"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="  &#x00B7;  Windows"
+                                    <Button Content="Windows"
                                             Tag="Windows"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="  &#x00B7;  R&#233;seau"
+                                    <Button Content="R&#233;seau"
                                             Tag="Reseau"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="  &#x00B7;  Confidentialit&#233;"
+                                    <Button Content="Confidentialit&#233;"
                                             Tag="Privacy"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
                                 </StackPanel>
                             </Border>
@@ -245,38 +273,63 @@
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
-                                    <Button Content="  &#x00B7;  Bilan de sant&#233;"
+                                    <Button Content="Bilan de sant&#233;"
                                             Tag="Diagnostic"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="  &#x00B7;  Erreurs Windows"
+                                    <Button Content="Erreurs Windows"
                                             Tag="EventLog"
-                                            Style="{StaticResource NavBtnStyle}"
+                                            Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
                                 </StackPanel>
                             </Border>
 
-                            <!-- ── Pages autonomes ── -->
-                            <Button x:Name="BtnNavApps"
-                                    Content="Applications"
-                                    Tag="Apps"
+                            <!-- ── Groupe Boîte à outils (repliable) ── -->
+                            <Button x:Name="BtnNavToolsGroup"
+                                    Content="&#x25B8;  Bo&#238;te &#224; outils"
+                                    FontWeight="SemiBold"
                                     Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
-                            <Button x:Name="BtnNavFresh"
-                                    Content="Pack R&#233;installation"
-                                    Tag="Fresh"
+                                    Click="BtnNavToolsGroup_Click"/>
+                            <Border x:Name="ToolsGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button Content="Applications"
+                                            Tag="Apps"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="Pack R&#233;installation"
+                                            Tag="Fresh"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── Groupe Surveillance (repliable) ── -->
+                            <Button x:Name="BtnNavMonGroup"
+                                    Content="&#x25B8;  Surveillance"
+                                    FontWeight="SemiBold"
                                     Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
-                            <Button x:Name="BtnNavMonitoring"
-                                    Content="Monitoring"
-                                    Tag="Monitoring"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
-                            <Button x:Name="BtnNavReseauMon"
-                                    Content="Monitoring r&#233;seau"
-                                    Tag="ReseauMon"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
+                                    Click="BtnNavMonGroup_Click"/>
+                            <Border x:Name="MonGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button x:Name="BtnNavMonitoring"
+                                            Content="Monitoring Syst&#232;me"
+                                            Tag="Monitoring"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="Monitoring R&#233;seau"
+                                            Tag="ReseauMon"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
                             <Button x:Name="BtnNavInfo"
                                     Content="Informations Syst&#232;me"
                                     Tag="Info"

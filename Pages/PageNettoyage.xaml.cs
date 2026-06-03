@@ -1,10 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 
 namespace Optimisation_Tool.Pages
 {
@@ -34,9 +38,10 @@ namespace Optimisation_Tool.Pages
             bool doNv        = ChkNvCache.IsChecked    == true;
             bool doTrim      = ChkTrimSSD.IsChecked    == true;
             bool doEventLogs = ChkEventLogs.IsChecked  == true;
+            bool doResidues  = ChkResidues.IsChecked   == true;
 
             if (!doTemp && !doSysTemp && !doPrefetch && !doDX &&
-                !doNv && !doTrim && !doEventLogs)
+                !doNv && !doTrim && !doEventLogs && !doResidues)
             {
                 _main.Log("Nettoyage : aucune option sélectionnée.");
                 BtnLancer.IsEnabled = true;
@@ -45,8 +50,13 @@ namespace Optimisation_Tool.Pages
 
             _main.Log("Nettoyage en cours…");
 
-            var (freed, ops) = await Task.Run(() =>
-                RunCleanup(doTemp, doSysTemp, doPrefetch, doDX, doNv, doTrim, doEventLogs));
+            long freed = 0; int ops = 0;
+            try
+            {
+                (freed, ops) = await Task.Run(() =>
+                    RunCleanup(doTemp, doSysTemp, doPrefetch, doDX, doNv, doTrim, doEventLogs, doResidues));
+            }
+            catch (Exception ex) { _main.Log($"Nettoyage : erreur — {ex.Message}"); }
 
             _main.Log($"Nettoyage terminé — {FormatBytes(freed)} libérés ({ops} opérations).");
 
@@ -58,13 +68,14 @@ namespace Optimisation_Tool.Pages
             if (doNv)        ChkNvCache.IsChecked     = false;
             if (doTrim)      ChkTrimSSD.IsChecked     = false;
             if (doEventLogs) ChkEventLogs.IsChecked   = false;
+            if (doResidues)  ChkResidues.IsChecked    = false;
 
             BtnLancer.IsEnabled = true;
         }
 
         private static (long freed, int ops) RunCleanup(
             bool doTemp, bool doSysTemp, bool doPrefetch,
-            bool doDX, bool doNv, bool doTrim, bool doEventLogs)
+            bool doDX, bool doNv, bool doTrim, bool doEventLogs, bool doResidues)
         {
             long freed = 0;
             int  ops   = 0;
@@ -118,6 +129,11 @@ namespace Optimisation_Tool.Pages
             if (doEventLogs)
             {
                 ops += ClearEventLogs();
+            }
+
+            if (doResidues)
+            {
+                ops += CleanSoftwareResidues();
             }
 
             return (freed, ops);
@@ -184,6 +200,121 @@ namespace Optimisation_Tool.Pages
             }
             catch { }
             return count;
+        }
+
+        // ── Résidus de logiciels désinstallés (signaux SÛRS uniquement) ───────
+        // Entrées Uninstall orphelines + raccourcis cassés. On NE touche PAS aux dossiers AppData
+        // (risque de faux positif) — ça reste le flux avec revue de l'onglet Applications.
+        // Tout est blindé : aucune exception ne doit remonter (sinon crash de l'app).
+        private static int CleanSoftwareResidues()
+        {
+            int n = 0;
+            try { n += CleanOrphanUninstallEntries(); } catch { }
+
+            // WScript.Shell = COM → EXIGE un thread STA (sinon plantage depuis le thread pool MTA).
+            try
+            {
+                int shortcuts = 0;
+                var th = new Thread(() => { try { shortcuts = CleanBrokenShortcuts(); } catch { } });
+                th.SetApartmentState(ApartmentState.STA);
+                th.IsBackground = true;
+                th.Start();
+                th.Join(20000);
+                n += shortcuts;
+            }
+            catch { }
+            return n;
+        }
+
+        private static int CleanOrphanUninstallEntries()
+        {
+            int n = 0;
+            var roots = new (RegistryKey hive, string path)[]
+            {
+                (Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+                (Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+                (Registry.CurrentUser,  @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            };
+            foreach (var (hive, path) in roots)
+            {
+                try
+                {
+                    using var root = hive.OpenSubKey(path, writable: true);
+                    if (root == null) continue;
+                    foreach (var sub in root.GetSubKeyNames())
+                    {
+                        try
+                        {
+                            string? name, loc;
+                            using (var k = root.OpenSubKey(sub))
+                            {
+                                if (k == null) continue;
+                                name = k.GetValue("DisplayName") as string;
+                                loc  = k.GetValue("InstallLocation") as string;
+                            }
+                            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(loc)) continue;
+                            loc = loc.Trim().Trim('"').TrimEnd('\\');
+                            if (loc.Length < 4 || !loc.Contains(":\\")) continue;            // chemin absolu requis
+                            var drive = Path.GetPathRoot(loc);
+                            if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive)) continue;  // disque absent → on s'abstient
+                            if (Directory.Exists(loc)) continue;                              // dossier présent → pas orphelin
+                            root.DeleteSubKeyTree(sub, throwOnMissingSubKey: false);          // entrée morte → retirée
+                            n++;
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            }
+            return n;
+        }
+
+        // Appelé sur un thread STA (COM). EnumerationOptions.IgnoreInaccessible évite les exceptions
+        // d'accès pendant le parcours récursif.
+        private static int CleanBrokenShortcuts()
+        {
+            int n = 0;
+            var dirs = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+            }.Where(d => !string.IsNullOrEmpty(d)).Distinct();
+
+            dynamic? shell;
+            try
+            {
+                var t = Type.GetTypeFromProgID("WScript.Shell");
+                if (t == null) return 0;
+                shell = Activator.CreateInstance(t);
+            }
+            catch { return 0; }
+            if (shell == null) return 0;
+
+            var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+            foreach (var d in dirs)
+            {
+                if (!Directory.Exists(d)) continue;
+                IEnumerable<string> lnks;
+                try { lnks = Directory.EnumerateFiles(d, "*.lnk", opts).ToList(); } catch { continue; }
+                foreach (var lnk in lnks)
+                {
+                    try
+                    {
+                        dynamic sc = shell.CreateShortcut(lnk);
+                        string target = sc.TargetPath as string ?? "";
+                        if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                        var drive = Path.GetPathRoot(target);
+                        if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive)) continue;  // disque absent → s'abstient
+                        if (File.Exists(target)) continue;                              // cible présente → ok
+                        File.Delete(lnk);
+                        n++;
+                    }
+                    catch { }
+                }
+            }
+            return n;
         }
 
         private static string FormatBytes(long bytes)

@@ -62,6 +62,10 @@ namespace Optimisation_Tool
                                Tags = new HashSet<string> { "Nettoyage", "Nvidia", "CPU", "Windows", "Reseau", "Privacy" } },
                 new NavGroup { Header = BtnNavDiagGroup, Panel = DiagGroupPanel, Label = "Diagnostic",
                                Tags = new HashSet<string> { "Diagnostic", "EventLog" } },
+                new NavGroup { Header = BtnNavToolsGroup, Panel = ToolsGroupPanel, Label = "Boîte à outils",
+                               Tags = new HashSet<string> { "Apps", "Fresh" } },
+                new NavGroup { Header = BtnNavMonGroup,   Panel = MonGroupPanel,   Label = "Surveillance",
+                               Tags = new HashSet<string> { "Monitoring", "ReseauMon" } },
             };
 
             Loaded += (_, _) =>
@@ -200,8 +204,10 @@ namespace Optimisation_Tool
             => NavigateTo((Button)sender);
 
         // Groupes repliables (Optimisations, Diagnostic) — même mécanisme pour les deux
-        private void BtnNavOptGroup_Click(object sender, RoutedEventArgs e)  => ToggleGroup((Button)sender);
-        private void BtnNavDiagGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
+        private void BtnNavOptGroup_Click(object sender, RoutedEventArgs e)   => ToggleGroup((Button)sender);
+        private void BtnNavDiagGroup_Click(object sender, RoutedEventArgs e)  => ToggleGroup((Button)sender);
+        private void BtnNavToolsGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
+        private void BtnNavMonGroup_Click(object sender, RoutedEventArgs e)   => ToggleGroup((Button)sender);
 
         private NavGroup? GroupOf(string tag)     => _groups.FirstOrDefault(g => g.Tags.Contains(tag));
         private NavGroup? GroupByHeader(Button h)  => _groups.FirstOrDefault(g => g.Header == h);
