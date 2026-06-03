@@ -45,21 +45,21 @@
                                Margin="0,0,0,8"/>
                     <StackPanel Orientation="Horizontal">
                         <!-- OK -->
-                        <Ellipse Width="11" Height="11" Fill="#2EC46A" VerticalAlignment="Center"/>
+                        <Ellipse Width="11" Height="11" Fill="{DynamicResource ThOk}" VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtOk" Text="—"
                                    Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
                                    FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,4,0"/>
                         <TextBlock Text="OK" Foreground="{DynamicResource ThTextDim}"
                                    FontFamily="{StaticResource AppFont}" FontSize="12" VerticalAlignment="Center" Margin="0,0,22,0"/>
                         <!-- Avertissements -->
-                        <Ellipse Width="11" Height="11" Fill="#F5C24A" VerticalAlignment="Center"/>
+                        <Ellipse Width="11" Height="11" Fill="{DynamicResource ThWarn}" VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtWarn" Text="—"
                                    Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
                                    FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,4,0"/>
                         <TextBlock Text="avertissements" Foreground="{DynamicResource ThTextDim}"
                                    FontFamily="{StaticResource AppFont}" FontSize="12" VerticalAlignment="Center" Margin="0,0,22,0"/>
                         <!-- Critiques -->
-                        <Ellipse Width="11" Height="11" Fill="#E05555" VerticalAlignment="Center"/>
+                        <Ellipse Width="11" Height="11" Fill="{DynamicResource ThCrit}" VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtCrit" Text="—"
                                    Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
                                    FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,4,0"/>

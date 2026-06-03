@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shell;
+using System.Runtime.InteropServices;
 using Optimisation_Tool.Pages;
 using Optimisation_Tool.Helpers;
 
@@ -14,9 +15,18 @@ namespace Optimisation_Tool
     public partial class MainWindow : Window
     {
         private Button?                                  _selectedNav;
-        private bool                                     _optExpanded = false;
-        private readonly HashSet<string>                 _subTags     = new() { "Nettoyage", "Nvidia", "CPU", "Windows", "Reseau" };
         private readonly Dictionary<string, Lazy<UserControl>> _pages;
+
+        // Groupes de navigation repliables (Optimisations, Diagnostic)
+        private sealed class NavGroup
+        {
+            public Button Header = null!;
+            public Border Panel  = null!;
+            public HashSet<string> Tags = new();
+            public string Label  = "";
+            public bool   Expanded;
+        }
+        private List<NavGroup> _groups = new();
 
         // Settings persistants
         public static AppSettings Settings { get; private set; } = new();
@@ -42,7 +52,16 @@ namespace Optimisation_Tool
                 ["Monitoring"]= new Lazy<UserControl>(() => new PageMonitoring(this)),
                 ["ReseauMon"] = new Lazy<UserControl>(() => new PageReseauMonitoring(this)),
                 ["Diagnostic"]= new Lazy<UserControl>(() => new PageDiagnostic(this)),
+                ["EventLog"]  = new Lazy<UserControl>(() => new PageEventLog(this)),
                 ["Reglages"]  = new Lazy<UserControl>(() => new PageReglages(this)),
+            };
+
+            _groups = new List<NavGroup>
+            {
+                new NavGroup { Header = BtnNavOptGroup,  Panel = OptGroupPanel,  Label = "Optimisations",
+                               Tags = new HashSet<string> { "Nettoyage", "Nvidia", "CPU", "Windows", "Reseau", "Privacy" } },
+                new NavGroup { Header = BtnNavDiagGroup, Panel = DiagGroupPanel, Label = "Diagnostic",
+                               Tags = new HashSet<string> { "Diagnostic", "EventLog" } },
             };
 
             Loaded += (_, _) =>
@@ -180,16 +199,24 @@ namespace Optimisation_Tool
         private void NavBtn_Click(object sender, RoutedEventArgs e)
             => NavigateTo((Button)sender);
 
-        // Groupe Optimisations — expansion / repli
-        private void BtnNavOptGroup_Click(object sender, RoutedEventArgs e)
+        // Groupes repliables (Optimisations, Diagnostic) — même mécanisme pour les deux
+        private void BtnNavOptGroup_Click(object sender, RoutedEventArgs e)  => ToggleGroup((Button)sender);
+        private void BtnNavDiagGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
+
+        private NavGroup? GroupOf(string tag)     => _groups.FirstOrDefault(g => g.Tags.Contains(tag));
+        private NavGroup? GroupByHeader(Button h)  => _groups.FirstOrDefault(g => g.Header == h);
+
+        private void ToggleGroup(Button header)
         {
-            _optExpanded = !_optExpanded;
-            OptGroupPanel.Visibility = _optExpanded ? Visibility.Visible : Visibility.Collapsed;
-            BtnNavOptGroup.Content   = _optExpanded ? "▾  Optimisations" : "▸  Optimisations";
+            var g = GroupByHeader(header);
+            if (g == null) return;
+            g.Expanded = !g.Expanded;
+            g.Panel.Visibility = g.Expanded ? Visibility.Visible : Visibility.Collapsed;
+            g.Header.Content   = (g.Expanded ? "▾  " : "▸  ") + g.Label;
 
             // Surligner le groupe si un sous-item est actif ET que le groupe est replié
-            bool subActive = _selectedNav != null && _subTags.Contains(_selectedNav.Tag as string ?? "");
-            ApplyNavStyle(BtnNavOptGroup, selected: subActive && !_optExpanded);
+            bool subActive = _selectedNav != null && g.Tags.Contains(_selectedNav.Tag as string ?? "");
+            ApplyNavStyle(g.Header, selected: subActive && !g.Expanded);
         }
 
         public void NavigateTo(Button btn)
@@ -200,9 +227,9 @@ namespace Optimisation_Tool
             if (_selectedNav != null)
             {
                 ApplyNavStyle(_selectedNav, selected: false);
-                // Désélectionner le groupe si on quittait un sous-item
-                if (_subTags.Contains(_selectedNav.Tag as string ?? ""))
-                    ApplyNavStyle(BtnNavOptGroup, selected: false);
+                // Désélectionner l'éventuel groupe parent
+                var oldG = GroupOf(_selectedNav.Tag as string ?? "");
+                if (oldG != null) ApplyNavStyle(oldG.Header, selected: false);
             }
 
             // Sélectionner le nouveau
@@ -210,8 +237,8 @@ namespace Optimisation_Tool
             ApplyNavStyle(btn, selected: true);
 
             // Si sous-item + groupe replié → surligner le header du groupe
-            if (_subTags.Contains(tag) && !_optExpanded)
-                ApplyNavStyle(BtnNavOptGroup, selected: true);
+            var g = GroupOf(tag);
+            if (g != null && !g.Expanded) ApplyNavStyle(g.Header, selected: true);
 
             // Titre de la page (supprimer le préfixe "  ·  " des sous-items)
             var raw = btn.Content?.ToString() ?? "";
@@ -283,8 +310,8 @@ namespace Optimisation_Tool
             if (_selectedNav != null)
             {
                 ApplyNavStyle(_selectedNav, true);
-                if (_subTags.Contains(_selectedNav.Tag as string ?? "") && !_optExpanded)
-                    ApplyNavStyle(BtnNavOptGroup, true);
+                var g = GroupOf(_selectedNav.Tag as string ?? "");
+                if (g != null && !g.Expanded) ApplyNavStyle(g.Header, true);
             }
         }
 
@@ -338,7 +365,7 @@ namespace Optimisation_Tool
             base.OnStateChanged(e);
             if (WindowState == WindowState.Maximized)
             {
-                RootGrid.Margin     = new Thickness(7);
+                RootGrid.Margin     = new Thickness(0);
                 BtnMaximize.Content = "\uE923";   // MDL2 : restaurer
             }
             else
@@ -347,6 +374,58 @@ namespace Optimisation_Tool
                 BtnMaximize.Content = "\uE922";   // MDL2 : agrandir
             }
         }
+
+        // ── Plein écran correct pour une fenêtre sans bordure ──────────────────
+        // Sans ça, maximiser une fenêtre WindowStyle=None déborde de l'écran (contenu coupé) et
+        // recouvre la barre des tâches. On contraint la maximisation à la ZONE DE TRAVAIL du moniteur
+        // courant → taille exacte, barre des tâches visible, sur n'importe quel écran/DPI.
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(WindowProc);
+        }
+
+        private static IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == 0x0024)   // WM_GETMINMAXINFO
+            {
+                var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                IntPtr monitor = MonitorFromWindow(hwnd, 0x00000002);   // MONITOR_DEFAULTTONEAREST
+                if (monitor != IntPtr.Zero)
+                {
+                    var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                    if (GetMonitorInfo(monitor, ref mi))
+                    {
+                        var work = mi.rcWork;
+                        var mon  = mi.rcMonitor;
+                        mmi.ptMaxPosition.x  = work.left   - mon.left;
+                        mmi.ptMaxPosition.y  = work.top    - mon.top;
+                        mmi.ptMaxSize.x      = work.right  - work.left;
+                        mmi.ptMaxSize.y      = work.bottom - work.top;
+                        mmi.ptMaxTrackSize.x = work.right  - work.left;
+                        mmi.ptMaxTrackSize.y = work.bottom - work.top;
+                        Marshal.StructureToPtr(mmi, lParam, true);
+                    }
+                }
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int x; public int y; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+        }
+        [StructLayout(LayoutKind.Sequential)] private struct RECT { public int left, top, right, bottom; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+
+        [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)
             => Application.Current.Shutdown();

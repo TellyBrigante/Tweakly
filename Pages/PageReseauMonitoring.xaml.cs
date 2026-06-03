@@ -64,7 +64,7 @@ namespace Optimisation_Tool.Pages
                 TxtJitter.Text = valid.Count > 1 ? $"{jitter:F0} ms" : "—";
                 TxtLoss.Text   = $"{loss:F0} %";
                 TxtDown.Text   = $"{s.DownMbps:F1}";
-                TxtUp.Text     = $"{s.UpMbps:F1} Mbps";
+                TxtUp.Text     = $"{s.UpMbps:F1}";
 
                 UpdateVerdict(avg, jitter, loss, valid.Count);
 
@@ -181,15 +181,12 @@ namespace Optimisation_Tool.Pages
             double w = GraphArea.ActualWidth, h = GraphArea.ActualHeight;
             if (w <= 0 || h <= 0) return;
 
-            var brush = (Brush)FindResource("ThBorder");
             foreach (var p in new[] { 25, 50, 75 })
             {
                 double y = h - (p / 100.0) * h;
-                GridCanvas.Children.Add(new Line
-                {
-                    X1 = 0, X2 = w, Y1 = y, Y2 = y,
-                    Stroke = brush, StrokeThickness = 1, Opacity = 0.5,
-                });
+                var line = new Line { X1 = 0, X2 = w, Y1 = y, Y2 = y, StrokeThickness = 1, Opacity = 0.5 };
+                line.SetResourceReference(Shape.StrokeProperty, "ThBorder");   // suit le thème
+                GridCanvas.Children.Add(line);
             }
         }
 

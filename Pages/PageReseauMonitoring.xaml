@@ -94,16 +94,33 @@
                 <StackPanel>
                     <TextBlock Text="D&#201;BIT R&#201;SEAU" Style="{StaticResource MHdr}"/>
                     <TextBlock Text="Trafic en temps r&#233;el" Style="{StaticResource MName}"/>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#8595;" Foreground="#29C7D6" FontSize="20" FontWeight="Bold"
-                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="0,0,4,6"/>
-                        <TextBlock x:Name="TxtDown" Text="&#8212;" Style="{StaticResource MBig}" Foreground="#29C7D6"/>
-                        <TextBlock Text="Mbps" Foreground="#29C7D6" FontSize="14" FontWeight="Bold"
-                                   FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="3,0,0,6"/>
-                    </StackPanel>
-                    <Grid Margin="0,12,0,3">
-                        <TextBlock Text="Envoi (&#8593;)" Style="{StaticResource MRowLbl}"/>
-                        <TextBlock x:Name="TxtUp" Text="&#8212;" Style="{StaticResource MRowVal}"/>
+
+                    <!-- Réception (↓) -->
+                    <Grid Margin="0,4,0,10">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="&#8595;" Foreground="#29C7D6" FontSize="16" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TxtDown" Text="&#8212;" Foreground="#29C7D6" FontSize="20" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Mbps" Foreground="#29C7D6" FontSize="12" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="3,0,0,2"/>
+                        </StackPanel>
+                        <TextBlock Text="R&#233;ception" Style="{StaticResource MRowLbl}"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <!-- Envoi (↑) -->
+                    <Grid Margin="0,0,0,2">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="&#8593;" Foreground="#29C7D6" FontSize="16" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" VerticalAlignment="Center" Margin="0,0,7,0"/>
+                            <TextBlock x:Name="TxtUp" Text="&#8212;" Foreground="#29C7D6" FontSize="20" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
+                            <TextBlock Text="Mbps" Foreground="#29C7D6" FontSize="12" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="3,0,0,2"/>
+                        </StackPanel>
+                        <TextBlock Text="Envoi" Style="{StaticResource MRowLbl}"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center"/>
                     </Grid>
                 </StackPanel>
             </Border>

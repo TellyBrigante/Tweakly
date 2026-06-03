@@ -29,6 +29,9 @@
         <SolidColorBrush x:Key="ThTextNav"   Color="#B6BEE4"/>
         <SolidColorBrush x:Key="ThTextDim"   Color="#9CA3CC"/>
         <SolidColorBrush x:Key="ThLogText"   Color="#5FD98C"/>
+        <SolidColorBrush x:Key="ThOk"        Color="#2EC46A"/>
+        <SolidColorBrush x:Key="ThWarn"      Color="#F5C24A"/>
+        <SolidColorBrush x:Key="ThCrit"      Color="#E05555"/>
 
         <!-- Couleurs thémables pour les dégradés (sombre par défaut) -->
         <Color x:Key="ThCardA">#353D66</Color>

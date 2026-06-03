@@ -19,17 +19,17 @@ namespace Optimisation_Tool.Helpers
         // rôle → (sombre, clair)
         private static readonly Dictionary<string, (string dark, string light)> Roles = new()
         {
-            ["ThBg"]        = ("#2B3252", "#ECEFF7"),
-            ["ThPanel"]     = ("#313858", "#FFFFFF"),
-            ["ThSidebar"]   = ("#262C49", "#E3E7F1"),
-            ["ThSecBtn"]    = ("#2E3559", "#E3E7F1"),
-            ["ThPill"]      = ("#2B3358", "#E8ECF5"),
-            ["ThTrack"]     = ("#2A3358", "#D3D9E8"),
-            ["ThLogBg"]     = ("#242A45", "#F1F3F9"),
-            ["ThLogHdr"]    = ("#20253E", "#E3E7F1"),
-            ["ThHover"]     = ("#2E3658", "#DCE2F0"),
-            ["ThSelection"] = ("#34408A", "#C6D5F4"),
-            ["ThBorder"]    = ("#3D456E", "#C3CBE0"),
+            ["ThBg"]        = ("#2B3252", "#C2C8D7"),   // fond page — gris clair mat (assombri ++)
+            ["ThPanel"]     = ("#313858", "#CBD1E0"),   // cartes — gris (assombri ++)
+            ["ThSidebar"]   = ("#262C49", "#C4CAD9"),
+            ["ThSecBtn"]    = ("#2E3559", "#C7CEDD"),
+            ["ThPill"]      = ("#2B3358", "#CCD2E0"),
+            ["ThTrack"]     = ("#2A3358", "#B6BFD2"),
+            ["ThLogBg"]     = ("#242A45", "#CCD2E0"),
+            ["ThLogHdr"]    = ("#20253E", "#C4CAD9"),
+            ["ThHover"]     = ("#2E3658", "#C6CEDF"),
+            ["ThSelection"] = ("#34408A", "#BCCEEF"),
+            ["ThBorder"]    = ("#3D456E", "#AFB8CF"),
             ["ThTextTitle"] = ("#E2E6FF", "#1B2238"),
             ["ThTextBody"]  = ("#DCE0F6", "#232B45"),
             ["ThTextLabel"] = ("#C6CDEC", "#394163"),
@@ -37,13 +37,17 @@ namespace Optimisation_Tool.Helpers
             ["ThTextNav"]   = ("#B6BEE4", "#44507A"),
             ["ThTextDim"]   = ("#9CA3CC", "#6A7299"),
             ["ThLogText"]   = ("#5FD98C", "#1E7A3C"),  // vert journal : clair sur sombre, foncé sur clair
+            // Couleurs de statut — vives en sombre, ASSOMBRIES en clair pour rester lisibles
+            ["ThOk"]        = ("#2EC46A", "#1E9E55"),
+            ["ThWarn"]      = ("#F5C24A", "#A87900"),   // amber foncé en clair (le jaune vif était illisible)
+            ["ThCrit"]      = ("#E05555", "#C0392B"),
         };
 
         // Couleurs (pour les dégradés : carte de score, pilule des switches)
         private static readonly Dictionary<string, (string dark, string light)> ColorRoles = new()
         {
-            ["ThCardA"]    = ("#353D66", "#FFFFFF"),   // carte score — haut
-            ["ThCardB"]    = ("#272D4C", "#E9EEF7"),   // carte score — bas
+            ["ThCardA"]    = ("#353D66", "#CDD3E2"),   // carte score — haut (assombri ++)
+            ["ThCardB"]    = ("#272D4C", "#BFC7D7"),   // carte score — bas
             ["ThSwOffA"]   = ("#10132C", "#CDD4E4"),   // switch OFF fond haut
             ["ThSwOffB"]   = ("#080A1E", "#BFC7DB"),   // switch OFF fond bas
             ["ThSwOffBdA"] = ("#2C3462", "#AAB3CC"),   // switch OFF bordure haut

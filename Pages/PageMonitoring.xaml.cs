@@ -27,10 +27,13 @@ namespace Optimisation_Tool.Pages
         // Visuels NVMe générés dynamiquement (un par disque : bloc + courbe + couleur signature)
         private sealed class NvmeVisual
         {
-            public Brush        Color    = Brushes.Gray;
-            public TextBlock    UsageBig = null!;   // grosse valeur % d'utilisation
-            public Grid         UsageBar = null!;   // barre d'utilisation
-            public TextBlock    TempVal  = null!;   // ligne "Température"
+            public Brush        Color    = Brushes.Gray;   // couleur signature (vive, mode sombre)
+            public TextBlock    UsageBig = null!;
+            public TextBlock    PctLabel = null!;            // le « % »
+            public Grid         UsageBar = null!;
+            public Border       BarFill  = null!;            // remplissage de la barre
+            public Ellipse      Dot      = null!;            // pastille de légende
+            public TextBlock    TempVal  = null!;
             public List<double> Hist     = new();
             public Polyline     Line     = null!;
         }
@@ -163,7 +166,13 @@ namespace Optimisation_Tool.Pages
             foreach (var n in nvmes)
             {
                 if (!_nvme.TryGetValue(n.Name, out var v)) continue;
-                v.UsageBig.Text      = $"{n.UsagePct:F0}";
+                v.UsageBig.Text = $"{n.UsagePct:F0}";
+                var sigCol = LegibleText(v.Color);   // signature, assombrie en mode clair (cohérent partout)
+                v.UsageBig.Foreground = sigCol;
+                v.PctLabel.Foreground = sigCol;
+                v.BarFill.Background  = sigCol;
+                v.Line.Stroke         = sigCol;
+                v.Dot.Fill            = sigCol;
                 SetBar(v.UsageBar, n.UsagePct);
                 v.TempVal.Text       = $"{n.TempC} °C";
                 v.TempVal.Foreground = TempColor(n.TempC);
@@ -200,7 +209,7 @@ namespace Optimisation_Tool.Pages
                 Grid.SetColumn(card, i);
                 NvmeGrid.Children.Add(card);
 
-                AddNvmeLegend(n.Name, color);
+                AddNvmeLegend(n.Name, v);
                 _nvme[n.Name] = v;
                 i++;
             }
@@ -223,23 +232,26 @@ namespace Optimisation_Tool.Pages
                 Text = $"{n.UsagePct:F0}", Style = (Style)FindResource("MBig"), Foreground = v.Color,
             };
             bigRow.Children.Add(v.UsageBig);
-            bigRow.Children.Add(new TextBlock
+            v.PctLabel = new TextBlock
             {
                 Text = "%", Foreground = v.Color, FontSize = 16, FontWeight = FontWeights.Bold,
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(2, 0, 0, 5),
-            });
+            };
+            bigRow.Children.Add(v.PctLabel);
             stack.Children.Add(bigRow);
 
             // Barre d'utilisation (couleur signature)
             var barOuter = new Grid { Height = 6, Margin = new Thickness(0, 8, 0, 12) };
-            barOuter.Children.Add(new Border { Background = (Brush)FindResource("ThTrack"), CornerRadius = new CornerRadius(3) });
+            var track = new Border { CornerRadius = new CornerRadius(3) };
+            track.SetResourceReference(Border.BackgroundProperty, "ThTrack");   // suit le thème
+            barOuter.Children.Add(track);
             v.UsageBar = new Grid();
             v.UsageBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0,   GridUnitType.Star) });
             v.UsageBar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100, GridUnitType.Star) });
-            var fill = new Border { Background = v.Color, CornerRadius = new CornerRadius(3) };
-            Grid.SetColumn(fill, 0);
-            v.UsageBar.Children.Add(fill);
+            v.BarFill = new Border { Background = v.Color, CornerRadius = new CornerRadius(3) };
+            Grid.SetColumn(v.BarFill, 0);
+            v.UsageBar.Children.Add(v.BarFill);
             barOuter.Children.Add(v.UsageBar);
             stack.Children.Add(barOuter);
 
@@ -257,27 +269,41 @@ namespace Optimisation_Tool.Pages
             return card;
         }
 
-        private void AddNvmeLegend(string fullName, Brush color)
+        private void AddNvmeLegend(string fullName, NvmeVisual v)
         {
             var shortName = fullName.Split(' ')[0];   // marque : PNY, Samsung…
-            NvmeLegend.Children.Add(new Ellipse
+            v.Dot = new Ellipse
             {
-                Width = 8, Height = 8, Fill = color, VerticalAlignment = VerticalAlignment.Center,
-            });
-            NvmeLegend.Children.Add(new TextBlock
+                Width = 8, Height = 8, Fill = v.Color, VerticalAlignment = VerticalAlignment.Center,
+            };
+            NvmeLegend.Children.Add(v.Dot);
+            var lbl = new TextBlock
             {
-                Text = shortName, Foreground = (Brush)FindResource("ThTextNav"),
+                Text = shortName,
                 FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 11,
                 Margin = new Thickness(5, 0, 14, 0), VerticalAlignment = VerticalAlignment.Center,
-            });
+            };
+            lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextNav");   // suit le thème
+            NvmeLegend.Children.Add(lbl);
         }
 
-        // Vert < 50 °C, orange 50-64 °C, rouge >= 65 °C
+        // Vert < 50 °C, ambre 50-64 °C, rouge >= 65 °C — couleurs thémables (lisibles en clair)
         private static Brush TempColor(int t)
         {
-            if (t >= 65) return new SolidColorBrush(Color.FromRgb(0xE0, 0x55, 0x55));
-            if (t >= 50) return new SolidColorBrush(Color.FromRgb(0xF5, 0xC2, 0x4A));
-            return new SolidColorBrush(Color.FromRgb(0x2E, 0xC4, 0x6A));
+            string role = t >= 65 ? "ThCrit" : t >= 50 ? "ThWarn" : "ThOk";
+            return new SolidColorBrush(ThemeManager.C(role));
+        }
+
+        // Rend une couleur de signature lisible sur fond CLAIR (le jaune/cyan vif y est illisible).
+        // En mode sombre on garde la couleur vive d'origine.
+        private static Brush LegibleText(Brush sig)
+        {
+            if (ThemeManager.Current != ThemeManager.Mode.Light || sig is not SolidColorBrush sb) return sig;
+            var c = sb.Color;
+            double lum = 0.299 * c.R + 0.587 * c.G + 0.114 * c.B;
+            if (lum <= 130) return sig;                 // déjà assez foncé pour le fond clair
+            double f = 110.0 / lum;                       // ramène la luminance autour de 110
+            return new SolidColorBrush(Color.FromRgb((byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f)));
         }
 
         private static void Push(List<double> list, double v)
@@ -314,15 +340,12 @@ namespace Optimisation_Tool.Pages
             double w = GraphArea.ActualWidth, h = GraphArea.ActualHeight;
             if (w <= 0 || h <= 0) return;
 
-            var brush = (Brush)(FindResource("ThBorder"));
             foreach (var p in new[] { 25, 50, 75 })
             {
                 double y = h - (p / 100.0) * h;
-                GridCanvas.Children.Add(new Line
-                {
-                    X1 = 0, X2 = w, Y1 = y, Y2 = y,
-                    Stroke = brush, StrokeThickness = 1, Opacity = 0.5
-                });
+                var line = new Line { X1 = 0, X2 = w, Y1 = y, Y2 = y, StrokeThickness = 1, Opacity = 0.5 };
+                line.SetResourceReference(Shape.StrokeProperty, "ThBorder");   // suit le thème
+                GridCanvas.Children.Add(line);
             }
         }
 

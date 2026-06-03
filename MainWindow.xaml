@@ -20,16 +20,6 @@
 
     <Window.Resources>
 
-        <!-- Brushes -->
-        <SolidColorBrush x:Key="BrushBg"      Color="#2B3252"/>
-        <SolidColorBrush x:Key="BrushSidebar" Color="#262C49"/>
-        <SolidColorBrush x:Key="BrushBorder"  Color="#3D456E"/>
-        <SolidColorBrush x:Key="BrushText"    Color="#E2E6FF"/>
-        <SolidColorBrush x:Key="BrushTextSub" Color="#B4BBE0"/>
-        <SolidColorBrush x:Key="BrushNavText" Color="#B6BEE4"/>
-        <SolidColorBrush x:Key="BrushLogBg"   Color="#242A45"/>
-        <SolidColorBrush x:Key="BrushLogText" Color="#37873A"/>
-
         <!-- Bouton nav standard -->
         <Style x:Key="NavBtnStyle" TargetType="Button">
             <Setter Property="Background"                             Value="Transparent"/>
@@ -189,7 +179,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.1.6"
+                            <TextBlock x:Name="TxtVersion" Text="v1.1.7"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -236,15 +226,37 @@
                                             Tag="Reseau"
                                             Style="{StaticResource NavBtnStyle}"
                                             Click="NavBtn_Click"/>
+                                    <Button Content="  &#x00B7;  Confidentialit&#233;"
+                                            Tag="Privacy"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── Groupe Diagnostic (repliable) ── -->
+                            <Button x:Name="BtnNavDiagGroup"
+                                    Content="&#x25B8;  Diagnostic"
+                                    FontWeight="SemiBold"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="BtnNavDiagGroup_Click"/>
+                            <Border x:Name="DiagGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button Content="  &#x00B7;  Bilan de sant&#233;"
+                                            Tag="Diagnostic"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="  &#x00B7;  Erreurs Windows"
+                                            Tag="EventLog"
+                                            Style="{StaticResource NavBtnStyle}"
+                                            Click="NavBtn_Click"/>
                                 </StackPanel>
                             </Border>
 
                             <!-- ── Pages autonomes ── -->
-                            <Button x:Name="BtnNavPrivacy"
-                                    Content="Confidentialit&#233;"
-                                    Tag="Privacy"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
                             <Button x:Name="BtnNavApps"
                                     Content="Applications"
                                     Tag="Apps"
@@ -263,11 +275,6 @@
                             <Button x:Name="BtnNavReseauMon"
                                     Content="Monitoring r&#233;seau"
                                     Tag="ReseauMon"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
-                            <Button x:Name="BtnNavDiagnostic"
-                                    Content="Diagnostic"
-                                    Tag="Diagnostic"
                                     Style="{StaticResource NavBtnStyle}"
                                     Click="NavBtn_Click"/>
                             <Button x:Name="BtnNavInfo"

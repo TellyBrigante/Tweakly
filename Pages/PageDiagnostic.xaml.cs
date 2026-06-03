@@ -117,19 +117,21 @@ namespace Optimisation_Tool.Pages
             if (storage) { worst = Worst(worst, it.DetailStatus); worst = Worst(worst, it.ExtraStatus); }
             var dot = new Ellipse
             {
-                Width = 10, Height = 10, Fill = StatusBrush(worst),
+                Width = 10, Height = 10,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0),
             };
+            dot.SetResourceReference(Shape.FillProperty, RoleOf(worst));
             Grid.SetColumn(dot, 0);
             row.Children.Add(dot);
 
             var title = new TextBlock
             {
-                Text = it.Title, Foreground = (Brush)FindResource("ThTextBody"),
+                Text = it.Title,
                 FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5, FontWeight = FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0),
             };
+            title.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");   // suit le thème
             Grid.SetColumn(title, 1);
             row.Children.Add(title);
 
@@ -137,11 +139,12 @@ namespace Optimisation_Tool.Pages
             var msg = new TextBlock
             {
                 Text = it.Message,
-                Foreground = it.Status == HStatus.Ok ? (Brush)FindResource("ThTextDim") : StatusBrush(it.Status),
                 FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5,
                 TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 12, 0),
             };
+            msg.SetResourceReference(TextBlock.ForegroundProperty,
+                it.Status == HStatus.Ok ? "ThTextDim" : RoleOf(it.Status));   // suit le thème + lisible en clair
             Grid.SetColumn(msg, 2);
             row.Children.Add(msg);
 
@@ -152,10 +155,11 @@ namespace Optimisation_Tool.Pages
                 {
                     var extra = new TextBlock
                     {
-                        Text = it.Extra, Foreground = StatusBrush(it.ExtraStatus),
+                        Text = it.Extra,
                         FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5,
                         VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0),
                     };
+                    extra.SetResourceReference(TextBlock.ForegroundProperty, RoleOf(it.ExtraStatus));
                     Grid.SetColumn(extra, 3);
                     row.Children.Add(extra);
                 }
@@ -163,10 +167,11 @@ namespace Optimisation_Tool.Pages
                 // Colonne 4 : état (Sain) — tout à la fin de la ligne
                 var det = new TextBlock
                 {
-                    Text = it.Detail, Foreground = StatusBrush(it.DetailStatus), FontWeight = FontWeights.SemiBold,
+                    Text = it.Detail, FontWeight = FontWeights.SemiBold,
                     FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5,
                     VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0),
                 };
+                det.SetResourceReference(TextBlock.ForegroundProperty, RoleOf(it.DetailStatus));
                 Grid.SetColumn(det, 4);
                 row.Children.Add(det);
             }
@@ -179,12 +184,13 @@ namespace Optimisation_Tool.Pages
         };
         private static HStatus Worst(HStatus a, HStatus b) => Severity(a) >= Severity(b) ? a : b;
 
-        private static Brush StatusBrush(HStatus s) => s switch
+        // Rôle de couleur thémable selon le statut (suit le thème : vif en sombre, lisible en clair)
+        private static string RoleOf(HStatus s) => s switch
         {
-            HStatus.Ok       => new SolidColorBrush(Color.FromRgb(0x2E, 0xC4, 0x6A)),
-            HStatus.Warning  => new SolidColorBrush(Color.FromRgb(0xF5, 0xC2, 0x4A)),
-            HStatus.Critical => new SolidColorBrush(Color.FromRgb(0xE0, 0x55, 0x55)),
-            _                => new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xCC)),
+            HStatus.Ok       => "ThOk",
+            HStatus.Warning  => "ThWarn",
+            HStatus.Critical => "ThCrit",
+            _                => "ThTextDim",
         };
     }
 }

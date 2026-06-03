@@ -1,0 +1,80 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageEventLog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+        <Style x:Key="DTile" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="12"/>
+            <Setter Property="Padding"         Value="18,16"/>
+        </Style>
+        <Style x:Key="DCat" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin"     Value="2,0,0,8"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="18,16,18,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ══ CARTE D'EN-TÊTE ══ -->
+        <Border Grid.Row="0" Style="{StaticResource DTile}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="ERREURS WINDOWS" Style="{StaticResource DCat}" Margin="0,0,0,8"/>
+                    <TextBlock x:Name="TxtSummary" Text="Lecture des journaux Windows (System + Application)…"
+                               Foreground="{DynamicResource ThTextBody}"
+                               FontFamily="{StaticResource AppFont}" FontSize="13"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnViewIncident" Content="Par incident" Style="{StaticResource SecondaryBtnStyle}"
+                            Padding="14,8" Margin="0,0,8,0" Click="BtnViewIncident_Click"/>
+                    <Button x:Name="BtnViewSource" Content="Par source" Style="{StaticResource SecondaryBtnStyle}"
+                            Padding="14,8" Margin="0,0,16,0" Click="BtnViewSource_Click"/>
+                    <Button x:Name="Btn7"  Content="7 j"  Style="{StaticResource SecondaryBtnStyle}"
+                            Padding="12,8" Margin="0,0,8,0" Click="Btn7_Click"/>
+                    <Button x:Name="Btn30" Content="30 j" Style="{StaticResource SecondaryBtnStyle}"
+                            Padding="12,8" Margin="0,0,12,0" Click="Btn30_Click"/>
+                    <Button x:Name="BtnScan" Content="ANALYSER" Style="{StaticResource PrimaryBtnStyle}"
+                            Click="BtnScan_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ══ RÉSULTATS ══ -->
+        <ScrollViewer Grid.Row="1" Margin="0,12,0,0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="ResultsPanel"/>
+        </ScrollViewer>
+
+        <!-- ══ BARRE DE STATUT ══ -->
+        <Border Grid.Row="2"
+                Background="{DynamicResource ThSidebar}"
+                BorderBrush="{DynamicResource ThBorder}"
+                BorderThickness="0,1,0,0"
+                Padding="18,7" Margin="0,12,0,0"
+                CornerRadius="8">
+            <TextBlock x:Name="TxtStatus" Text="Prêt."
+                       Foreground="{DynamicResource ThTextDim}"
+                       FontFamily="{StaticResource AppFont}" FontSize="11.5"/>
+        </Border>
+    </Grid>
+</UserControl>

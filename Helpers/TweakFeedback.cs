@@ -17,10 +17,7 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     public static class TweakFeedback
     {
-        private static readonly Color Green  = Color.FromRgb(0x2E, 0xC4, 0x6A);
-        private static readonly Color Orange = Color.FromRgb(0xF5, 0xC2, 0x4A);
-        private static readonly Color Red    = Color.FromRgb(0xE0, 0x55, 0x55);
-        private static readonly Color Grey   = Color.FromRgb(0x9C, 0xA3, 0xCC);
+        private enum Level { Ok, Warn, Err, Info }
 
         private static int _seq;   // jeton anti-collision entre deux toasts rapprochés
 
@@ -36,21 +33,21 @@ namespace Optimisation_Tool.Helpers
                 if (s.Contains("fermez")   || s.Contains("introuvable")) action  = true;
             }
 
-            if (error)        Run(banner, dot, text, Red,    "Appliqué, mais des erreurs sont survenues — voir le journal d'activité.", emphasize: true,  autoHide: false);
-            else if (action)  Run(banner, dot, text, Orange, okText + " — une action est requise, voir le journal d'activité.",        emphasize: true,  autoHide: false);
-            else if (restart) Run(banner, dot, text, Orange, okText + " — redémarre le PC pour activer certains réglages.",            emphasize: true,  autoHide: false);
-            else              Run(banner, dot, text, Green,  okText + " ✓",                                                       emphasize: false, autoHide: true);
+            if (error)        Run(banner, dot, text, Level.Err,  "Appliqué, mais des erreurs sont survenues — voir le journal d'activité.", emphasize: true,  autoHide: false);
+            else if (action)  Run(banner, dot, text, Level.Warn, okText + " — une action est requise, voir le journal d'activité.",        emphasize: true,  autoHide: false);
+            else if (restart) Run(banner, dot, text, Level.Warn, okText + " — redémarre le PC pour activer certains réglages.",            emphasize: true,  autoHide: false);
+            else              Run(banner, dot, text, Level.Ok,   okText + " ✓",                                                       emphasize: false, autoHide: true);
         }
 
         public static void ShowSimple(Border banner, Ellipse dot, TextBlock text,
                                       bool ok, string okMsg, string errMsg)
         {
-            if (ok) Run(banner, dot, text, Green, okMsg + " ✓", emphasize: false, autoHide: true);
-            else    Run(banner, dot, text, Red,   errMsg,            emphasize: true,  autoHide: false);
+            if (ok) Run(banner, dot, text, Level.Ok,  okMsg + " ✓", emphasize: false, autoHide: true);
+            else    Run(banner, dot, text, Level.Err, errMsg,            emphasize: true,  autoHide: false);
         }
 
         public static void ShowInfo(Border banner, Ellipse dot, TextBlock text, string msg)
-            => Run(banner, dot, text, Grey, msg, emphasize: false, autoHide: true);
+            => Run(banner, dot, text, Level.Info, msg, emphasize: false, autoHide: true);
 
         /// <summary>Retourne l'état cible si la case a changé, sinon null (= ne rien faire).</summary>
         public static bool? Changed(CheckBox box, bool was)
@@ -61,8 +58,11 @@ namespace Optimisation_Tool.Helpers
 
         // ── Cœur : contenu + animation d'entrée (+ auto-disparition) ───────────
         private static void Run(Border banner, Ellipse dot, TextBlock text,
-                                Color accent, string msg, bool emphasize, bool autoHide)
+                                Level level, string msg, bool emphasize, bool autoHide)
         {
+            // Couleur thémable (vive en sombre, assombrie/lisible en clair)
+            var role = level switch { Level.Ok => "ThOk", Level.Warn => "ThWarn", Level.Err => "ThCrit", _ => "ThTextDim" };
+            var accent = ThemeManager.C(role);
             dot.Fill        = new SolidColorBrush(accent);
             text.Text       = msg;
             text.Foreground = emphasize
@@ -108,9 +108,9 @@ namespace Optimisation_Tool.Helpers
                     new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
             }
 
-            // Son cohérent avec le type de notif (gris = silencieux)
-            if (accent == Green)                        UiSound.Success();
-            else if (accent == Orange || accent == Red) UiSound.Warn();
+            // Son cohérent avec le type de notif (info = silencieux)
+            if (level == Level.Ok)                              UiSound.Success();
+            else if (level == Level.Warn || level == Level.Err) UiSound.Warn();
         }
     }
 }
