@@ -50,15 +50,30 @@ namespace Optimisation_Tool.Pages
 
             _main.Log("Nettoyage en cours…");
 
-            long freed = 0; int ops = 0;
+            long freed = 0; int ops = 0; int residues = 0; bool error = false;
+            List<string> details = new();
             try
             {
-                (freed, ops) = await Task.Run(() =>
+                (freed, ops, residues, details) = await Task.Run(() =>
                     RunCleanup(doTemp, doSysTemp, doPrefetch, doDX, doNv, doTrim, doEventLogs, doResidues));
             }
-            catch (Exception ex) { _main.Log($"Nettoyage : erreur — {ex.Message}"); }
+            catch (Exception ex) { error = true; _main.Log($"Nettoyage : erreur — {ex.Message}"); }
 
-            _main.Log($"Nettoyage terminé — {FormatBytes(freed)} libérés ({ops} opérations).");
+            // Détail par opération dans le journal (ex. quel disque a été trim)
+            foreach (var d in details) _main.Log("Nettoyage : " + d);
+            _main.Log($"Nettoyage terminé — {FormatBytes(freed)} libérés ({ops} opération(s)).");
+
+            // Résumé clair : on liste ce qui a été fait, sans « 0 octet » trompeur
+            var parts = new List<string>();
+            if (freed > 0)      parts.Add($"{FormatBytes(freed)} libérés");
+            if (doTrim)         parts.Add("SSD optimisé (TRIM)");
+            if (doEventLogs)    parts.Add("journaux Windows vidés");
+            if (doResidues)     parts.Add(residues > 0 ? $"{residues} résidu(s) retiré(s)" : "aucun résidu sûr");
+            var summary = parts.Count > 0
+                ? "Nettoyage terminé — " + string.Join(" · ", parts)
+                : "Nettoyage terminé — rien à nettoyer";
+            Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, !error, summary,
+                "Erreur pendant le nettoyage — voir le journal.");
 
             // Décocher UNIQUEMENT les cases qui viennent d'être traitées
             if (doTemp)      ChkTemp.IsChecked       = false;
@@ -73,12 +88,14 @@ namespace Optimisation_Tool.Pages
             BtnLancer.IsEnabled = true;
         }
 
-        private static (long freed, int ops) RunCleanup(
+        private static (long freed, int ops, int residues, List<string> details) RunCleanup(
             bool doTemp, bool doSysTemp, bool doPrefetch,
             bool doDX, bool doNv, bool doTrim, bool doEventLogs, bool doResidues)
         {
             long freed = 0;
             int  ops   = 0;
+            int  residues = 0;
+            var  details = new List<string>();   // lignes de journal (détail par opération)
 
             if (doTemp)
             {
@@ -113,17 +130,32 @@ namespace Optimisation_Tool.Pages
 
             if (doTrim)
             {
-                try
+                // TRIM = retrim (defrag /L) par volume fixe. /RETRIM n'existe PAS comme flag → c'était /L le bon.
+                foreach (var di in DriveInfo.GetDrives())
                 {
-                    using var p = Process.Start(new ProcessStartInfo("defrag", "/C /H /U /RETRIM")
+                    if (di.DriveType != DriveType.Fixed || !di.IsReady) continue;
+                    var letter = di.Name.TrimEnd('\\');   // ex. "C:"
+                    try
                     {
-                        UseShellExecute = false,
-                        CreateNoWindow  = true
-                    });
-                    p?.WaitForExit(120_000);
-                    ops++;
+                        var psi = new ProcessStartInfo("defrag", $"{letter} /L")
+                        {
+                            UseShellExecute        = false,
+                            CreateNoWindow         = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError  = true,
+                            StandardOutputEncoding = Encoding.UTF8,
+                        };
+                        using var p = Process.Start(psi);
+                        string outp = (p?.StandardOutput.ReadToEnd() ?? "") + (p?.StandardError.ReadToEnd() ?? "");
+                        p?.WaitForExit(120_000);
+                        bool ok = p != null && p.ExitCode == 0;
+                        details.Add(ok
+                            ? $"TRIM (optimisation SSD) — {letter} : terminé"
+                            : $"TRIM — {letter} : ignoré (volume non compatible ou occupé)");
+                        ops++;
+                    }
+                    catch (Exception ex) { details.Add($"TRIM — {letter} : erreur ({ex.Message})"); }
                 }
-                catch { }
             }
 
             if (doEventLogs)
@@ -133,10 +165,11 @@ namespace Optimisation_Tool.Pages
 
             if (doResidues)
             {
-                ops += CleanSoftwareResidues();
+                residues = CleanSoftwareResidues();
+                ops += residues;
             }
 
-            return (freed, ops);
+            return (freed, ops, residues, details);
         }
 
         private static long CleanFolder(string path, ref int ops)
