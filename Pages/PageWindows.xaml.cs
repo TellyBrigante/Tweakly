@@ -280,6 +280,10 @@ namespace Optimisation_Tool.Pages
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR";
                 Registry.SetValue(pathDVR, "AppCaptureEnabled",
                     doDisableGameBar.Value ? 0 : 1, RegistryValueKind.DWord);
+                // Clé canonique du Game DVR (GameConfigStore) — plus complet, aide aussi à éviter
+                // le popup « ms-gamingoverlay » côté déclencheur.
+                Registry.SetValue(@"HKEY_CURRENT_USER\System\GameConfigStore",
+                    "GameDVR_Enabled", doDisableGameBar.Value ? 0 : 1, RegistryValueKind.DWord);
                 log($"Barre de jeu Xbox : {(doDisableGameBar.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"Barre de jeu : erreur — {ex.Message}"); }
@@ -311,10 +315,11 @@ namespace Optimisation_Tool.Pages
                 }
                 else
                 {
-                    Registry.SetValue(pathGames, "GPU Priority",        2,        RegistryValueKind.DWord);
-                    Registry.SetValue(pathGames, "Priority",            2,        RegistryValueKind.DWord);
-                    Registry.SetValue(pathGames, "Scheduling Category", "Medium", RegistryValueKind.String);
-                    log("Priorité GPU : RESTAURÉE (par défaut).");
+                    // Vrais défauts Windows de la tâche « Games » (avant : 2/2/Medium = sous le défaut)
+                    Registry.SetValue(pathGames, "GPU Priority",        8,      RegistryValueKind.DWord);
+                    Registry.SetValue(pathGames, "Priority",            6,      RegistryValueKind.DWord);
+                    Registry.SetValue(pathGames, "Scheduling Category", "High", RegistryValueKind.String);
+                    log("Priorité GPU : restaurée aux défauts Windows.");
                 }
             }
             catch (Exception ex) { log($"GPU Priority : erreur — {ex.Message}"); }
