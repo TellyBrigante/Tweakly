@@ -179,11 +179,27 @@ namespace Optimisation_Tool.Pages
             {
                 try
                 {
-                    const string tcpPath =
-                        @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters";
-                    Registry.SetValue(tcpPath, "TcpAckFrequency", 2, RegistryValueKind.DWord);
-                    Registry.SetValue(tcpPath, "TcpNoDelay",      0, RegistryValueKind.DWord);
-                    log("Nagle : ACTIVÉ (par défaut).");
+                    // RESTAURATION : on RETIRE les overrides (global ET par-interface) pour que Windows
+                    // reprenne son comportement par défaut. (Avant : seul le global était remis → les
+                    // valeurs par-interface posées à la désactivation restaient = Nagle restait désactivé.)
+                    using (var gp = Registry.LocalMachine.OpenSubKey(
+                        @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", writable: true))
+                    {
+                        gp?.DeleteValue("TcpAckFrequency", false);
+                        gp?.DeleteValue("TcpNoDelay",      false);
+                    }
+                    using var ifRoot = Registry.LocalMachine.OpenSubKey(
+                        @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces", writable: true);
+                    if (ifRoot != null)
+                    {
+                        foreach (var ifName in ifRoot.GetSubKeyNames())
+                        {
+                            using var ifKey = ifRoot.OpenSubKey(ifName, writable: true);
+                            ifKey?.DeleteValue("TcpAckFrequency", false);
+                            ifKey?.DeleteValue("TcpNoDelay",      false);
+                        }
+                    }
+                    log("Nagle : ACTIVÉ (valeurs par défaut restaurées).");
                 }
                 catch (Exception ex) { log($"Nagle : erreur — {ex.Message}"); }
             }

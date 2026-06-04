@@ -158,24 +158,29 @@
                         CornerRadius="10" Padding="18,8,18,12">
                     <StackPanel x:Name="CurrentSettingsPanel"/>
                 </Border>
-                <Button x:Name="BtnApplyGlobal"
-                        Content="APPLIQUER LES MODIFICATIONS"
-                        Click="BtnApplyGlobal_Click"
-                        HorizontalAlignment="Left" Margin="0,18,0,0">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
-                            <Setter Property="Background" Value="#1E7A3C"/>
-                            <Style.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#28A050"/>
-                                </Trigger>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
+                <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                    <Button x:Name="BtnApplyGlobal"
+                            Content="APPLIQUER LES MODIFICATIONS"
+                            Click="BtnApplyGlobal_Click" Margin="0,0,8,0">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
+                                <Setter Property="Background" Value="#1E7A3C"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#28A050"/>
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button x:Name="BtnExportGlobal"
+                            Content="EXPORTER EN .NIP"
+                            Style="{StaticResource SecondaryBtnStyle}"
+                            Click="BtnExportGlobal_Click"/>
+                </StackPanel>
             </StackPanel>
 
             <!-- ══ PARAMÈTRES PAR APPLICATION (.nip) ══ -->

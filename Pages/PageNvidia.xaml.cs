@@ -162,6 +162,34 @@ namespace Optimisation_Tool.Pages
             BtnApplyGlobal.IsEnabled = true;
         }
 
+        // ── Exporter le profil global en .nip (création de profil perso) ───────
+        private void BtnExportGlobal_Click(object sender, RoutedEventArgs e)
+        {
+            var values = new Dictionary<uint, uint>();
+            foreach (var (entry, combo, _) in _globalRows)
+                if (combo.SelectedItem is NvOption opt) values[entry.Id] = opt.Value;
+
+            if (values.Count == 0) { _main.Log("Nvidia : rien à exporter (pilote indisponible)."); return; }
+
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter           = "Profil NVIDIA Inspector (*.nip)|*.nip",
+                FileName         = "MonProfil.nip",
+                InitialDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data"),
+                Title            = "Exporter le profil global en .nip",
+            };
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                var xml = NvidiaDriverSettings.BuildGlobalNip(values);
+                File.WriteAllText(dlg.FileName, xml, System.Text.Encoding.Unicode);
+                _main.Log($"Nvidia : profil exporté → {dlg.FileName}");
+                RefreshProfiles();   // réapparaît dans la liste s'il est sauvé dans data/
+            }
+            catch (Exception ex) { _main.Log($"Nvidia : erreur d'export — {ex.Message}"); }
+        }
+
         // ── Profils NIP ───────────────────────────────────────────────────────
 
         private void RefreshProfiles()

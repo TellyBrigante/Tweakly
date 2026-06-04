@@ -186,6 +186,76 @@ namespace Optimisation_Tool.Pages
             BtnAppliquer.IsEnabled = true;
         }
 
+        // ── Réparation du popup « ms-gamingoverlay » ───────────────────────────
+        // Ré-enregistre la Xbox Game Bar (restaure le gestionnaire du protocole ms-gamingoverlay).
+        private async void BtnFixGamingOverlay_Click(object sender, RoutedEventArgs e)
+        {
+            BtnFixGamingOverlay.IsEnabled = false;
+            _main.Log("Réparation ms-gamingoverlay : ré-enregistrement de la Xbox Game Bar…");
+
+            // Réparation en 3 temps : 1) RESET du package (purge l'état corrompu), 2) RÉ-ENREGISTREMENT
+            // (restaure le gestionnaire ms-gamingoverlay), 3) VÉRIFICATION du statut du package.
+            const string ps =
+                "$ErrorActionPreference='SilentlyContinue';" +
+                "$n='Microsoft.XboxGamingOverlay';" +
+                "$p=Get-AppxPackage -Name $n; if(-not $p){$p=Get-AppxPackage -AllUsers -Name $n};" +
+                "if(-not $p){'NOTINSTALLED'}else{" +
+                "try{Reset-AppxPackage -Package $p[0].PackageFullName}catch{};" +
+                "foreach($pk in $p){$m=Join-Path $pk.InstallLocation 'AppXManifest.xml';" +
+                "if(Test-Path $m){Add-AppxPackage -DisableDevelopmentMode -Register $m}};" +
+                "$a=Get-AppxPackage -Name $n;" +
+                "if($a){'VERIFIED:'+($a|Select-Object -First 1).Status}else{'FAILED'}}";
+
+            string result = await Task.Run(() =>
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo("powershell",
+                        $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"")
+                    {
+                        UseShellExecute        = false,
+                        CreateNoWindow         = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError  = true,
+                    };
+                    using var p = Process.Start(psi);
+                    string outp = p?.StandardOutput.ReadToEnd() ?? "";
+                    p?.WaitForExit(60_000);
+                    return outp;
+                }
+                catch (Exception ex) { return "ERR:" + ex.Message; }
+            });
+
+            if (result.Contains("VERIFIED:Ok"))
+            {
+                _main.Log("Réparation ms-gamingoverlay : reset + ré-enregistrement OK, package vérifié SAIN. Le popup ne devrait plus apparaître.");
+                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                    "Réparé et vérifié — Game Bar réinitialisée + ré-enregistrée (package sain)", "");
+            }
+            else if (result.Contains("VERIFIED:"))
+            {
+                var st = result.Substring(result.IndexOf("VERIFIED:", StringComparison.Ordinal) + 9).Trim();
+                _main.Log($"Réparation ms-gamingoverlay : appliquée, statut du package = « {st} ». Redémarre si le popup persiste.");
+                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                    $"Réparation appliquée (statut : {st}) — redémarre si ça persiste", "");
+            }
+            else if (result.Contains("NOTINSTALLED"))
+            {
+                _main.Log("Réparation ms-gamingoverlay : Xbox Game Bar absente → ouverture du Microsoft Store.");
+                Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText,
+                    "Xbox Game Bar absente — ouverture du Store pour la réinstaller.");
+                try { Process.Start(new ProcessStartInfo("ms-windows-store://search/?query=Xbox Game Bar") { UseShellExecute = true }); } catch { }
+            }
+            else
+            {
+                _main.Log($"Réparation ms-gamingoverlay : échec — {result.Trim()}");
+                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, false, "",
+                    "Réparation impossible — voir le journal d'activité.");
+            }
+
+            BtnFixGamingOverlay.IsEnabled = true;
+        }
+
         private static void ApplyChanges(
             bool? doHAGS, bool? doDisableGameBar, bool? doDisableDVR,
             bool? doGPUPriority, bool? doMSI, bool? doDiscord, bool? doSteam,

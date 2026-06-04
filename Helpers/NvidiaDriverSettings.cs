@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using NvAPIWrapper;
 using NvAPIWrapper.DRS;
 
@@ -139,6 +140,35 @@ namespace Optimisation_Tool.Helpers
                 finally { try { NVIDIA.Unload(); } catch { } }
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// Génère le contenu d'un profil .nip (importable par nvidiaProfileInspector) à partir des
+        /// réglages donnés (ID → valeur). Profil GLOBAL = ProfileName « Base Profile », sans exécutable.
+        /// </summary>
+        public static string BuildGlobalNip(Dictionary<uint, uint> settings)
+        {
+            var sb = new StringBuilder();
+            sb.Append("<?xml version=\"1.0\" encoding=\"utf-16\"?>\r\n");
+            sb.Append("<ArrayOfProfile>\r\n");
+            sb.Append("  <Profile>\r\n");
+            sb.Append("    <ProfileName>Base Profile</ProfileName>\r\n");
+            sb.Append("    <Executeables />\r\n");
+            sb.Append("    <Settings>\r\n");
+            foreach (var e in Catalog)
+            {
+                if (!settings.TryGetValue(e.Id, out var v)) continue;
+                sb.Append("      <ProfileSetting>\r\n");
+                sb.Append($"        <SettingNameInfo>{System.Security.SecurityElement.Escape(e.Name)}</SettingNameInfo>\r\n");
+                sb.Append($"        <SettingID>{e.Id}</SettingID>\r\n");
+                sb.Append($"        <SettingValue>{v}</SettingValue>\r\n");
+                sb.Append("        <ValueType>Dword</ValueType>\r\n");
+                sb.Append("      </ProfileSetting>\r\n");
+            }
+            sb.Append("    </Settings>\r\n");
+            sb.Append("  </Profile>\r\n");
+            sb.Append("</ArrayOfProfile>\r\n");
+            return sb.ToString();
         }
     }
 }
