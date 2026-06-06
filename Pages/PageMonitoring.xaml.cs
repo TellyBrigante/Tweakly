@@ -65,6 +65,36 @@ namespace Optimisation_Tool.Pages
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e) => _timer.Stop();
 
+        // ── Libération de la RAM (cache fichiers + working sets inactifs) ───────
+        private async void BtnFreeRam_Click(object sender, RoutedEventArgs e)
+        {
+            var original = BtnFreeRam.Content;
+            BtnFreeRam.IsEnabled = false;
+            BtnFreeRam.Content   = "...";
+            _main.Log("Monitoring : libération de la mémoire (cache + working sets inactifs)…");
+
+            try
+            {
+                double gained = await Task.Run(MemoryCleaner.FreeMemory);
+
+                await TickAsync();   // rafraîchit la tuile tout de suite → le % descend visiblement
+
+                BtnFreeRam.Content = gained >= 0.1 ? $"✓ {gained:F1} Go" : "✓ Fait";
+                _main.Log(gained >= 0.1
+                    ? $"Monitoring : ~{gained:F1} Go de RAM rendus disponibles."
+                    : "Monitoring : mémoire libérée (peu de RAM récupérable — déjà optimal).");
+            }
+            catch (Exception ex)
+            {
+                BtnFreeRam.Content = "Échec";
+                _main.Log($"Monitoring : échec libération mémoire — {ex.Message}");
+            }
+
+            await Task.Delay(2600);
+            BtnFreeRam.Content   = original;
+            BtnFreeRam.IsEnabled = true;
+        }
+
         private async Task TickAsync()
         {
             if (_busy) return;
@@ -110,20 +140,26 @@ namespace Optimisation_Tool.Pages
             }
             SetBar(BarRam, s.RamPct);
 
-            // GPU
+            // GPU — carte dédiée (données riches via nvidia-smi) ou IGP/AMD (usage + nom, reste « — »)
             if (s.GpuOk)
             {
-                TxtGpuName.Text  = s.GpuName;
+                TxtGpuName.Text  = s.GpuIsIntegrated ? $"{s.GpuName} (intégré)" : s.GpuName;
                 TxtGpuUsage.Text = $"{s.GpuUsage:F0}";
-                TxtGpuVram.Text  = $"{s.GpuVramUsedMB / 1024.0:F1} / {s.GpuVramTotalMB / 1024.0:F1} Go";
-                TxtGpuTemp.Text  = $"{s.GpuTemp:F0} °C";
-                TxtGpuWatts.Text = s.GpuWatts > 0 ? $"{s.GpuWatts:F0} W" : "—";
-                TxtGpuFreq.Text  = s.GpuMHz > 0 ? $"{s.GpuMHz:F0} MHz" : "—";
+                // VRAM : « used / total » si dispo, sinon « total » seule, sinon « — » (IGP sans VRAM dédiée)
+                if (s.GpuVramUsedMB > 0 && s.GpuVramTotalMB > 0)
+                    TxtGpuVram.Text = $"{s.GpuVramUsedMB / 1024.0:F1} / {s.GpuVramTotalMB / 1024.0:F1} Go";
+                else if (s.GpuVramTotalMB > 0)
+                    TxtGpuVram.Text = $"{s.GpuVramTotalMB / 1024.0:F1} Go";
+                else
+                    TxtGpuVram.Text = "—";
+                TxtGpuTemp.Text  = s.GpuTemp  > 0 ? $"{s.GpuTemp:F0} °C"  : "—";
+                TxtGpuWatts.Text = s.GpuWatts > 0 ? $"{s.GpuWatts:F0} W"  : "—";
+                TxtGpuFreq.Text  = s.GpuMHz   > 0 ? $"{s.GpuMHz:F0} MHz"  : "—";
                 SetBar(BarGpu, s.GpuUsage);
             }
             else
             {
-                TxtGpuName.Text  = "GPU NVIDIA non détecté";
+                TxtGpuName.Text  = "Aucun GPU détecté";
                 TxtGpuUsage.Text = "—";
                 TxtGpuVram.Text  = TxtGpuTemp.Text = TxtGpuWatts.Text = TxtGpuFreq.Text = "—";
             }

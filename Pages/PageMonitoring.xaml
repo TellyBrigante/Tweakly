@@ -43,6 +43,36 @@
             <Setter Property="FontSize"   Value="11.5"/>
             <Setter Property="HorizontalAlignment" Value="Right"/>
         </Style>
+
+        <!-- Petit bouton discret « Libérer la RAM » (coin sup. droit de la tuile RAM) -->
+        <Style x:Key="RamFreeBtn" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="6"
+                                Background="{DynamicResource ThTrack}"
+                                BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                                Padding="9,3">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="#254E8C"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="18,16,18,18">
@@ -144,8 +174,17 @@
             <!-- RAM -->
             <Border Grid.Column="4" Style="{StaticResource MTile}">
                 <StackPanel>
-                    <TextBlock Text="M&#201;MOIRE VIVE" Style="{StaticResource MHdr}"/>
-                    <TextBlock x:Name="TxtRamName" Text="&#8212;" Style="{StaticResource MName}"/>
+                    <Grid>
+                        <StackPanel>
+                            <TextBlock Text="M&#201;MOIRE VIVE" Style="{StaticResource MHdr}"/>
+                            <TextBlock x:Name="TxtRamName" Text="&#8212;" Style="{StaticResource MName}"/>
+                        </StackPanel>
+                        <Button x:Name="BtnFreeRam" Content="Nettoyer"
+                                Style="{StaticResource RamFreeBtn}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,0,4,0" Click="BtnFreeRam_Click"
+                                ToolTip="Lib&#232;re la m&#233;moire r&#233;ellement r&#233;cup&#233;rable : cache fichiers (standby list) + working sets inactifs. Comme le Boost de PC Manager."/>
+                    </Grid>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="TxtRamUsage" Text="&#8212;" Style="{StaticResource MBig}"
                                    Foreground="#C08CF0"/>

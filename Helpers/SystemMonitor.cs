@@ -42,6 +42,7 @@ namespace Optimisation_Tool.Helpers
         public double GpuTemp;       // °C
         public double GpuWatts;
         public double GpuMHz;
+        public bool   GpuIsIntegrated;   // true = IGP (Intel/AMD intégré) affiché faute de carte dédiée
 
         public List<NvmeInfo> Nvmes = new();   // disques NVMe + température
     }
@@ -373,9 +374,12 @@ namespace Optimisation_Tool.Helpers
             s.Nvmes        = list;
         }
 
-        // nvidia-smi spawn un process à chaque appel → rafraîchi toutes les ~2 s (cache entre-temps)
+        // ── GPU : carte DÉDIÉE prioritaire (Nvidia via nvidia-smi = données riches), sinon
+        //    AMD dédiée / IGP intégré via WMI (nom + VRAM registre) + compteurs « GPU Engine » (usage).
+        //    Spawn nvidia-smi / requêtes WMI → on met en cache ~2 s entre deux ticks.
         private static DateTime _gpuCacheTime;
-        private static (bool ok, string name, double usage, double vu, double vt, double temp, double watts, double mhz) _gpuCache;
+        private static (bool ok, string name, double usage, double vu, double vt,
+                        double temp, double watts, double mhz, bool igp) _gpuCache;
 
         private static void CollectGpu(MonSnapshot s)
         {
@@ -385,9 +389,47 @@ namespace Optimisation_Tool.Helpers
                 s.GpuOk = _gpuCache.ok; s.GpuName = _gpuCache.name; s.GpuUsage = _gpuCache.usage;
                 s.GpuVramUsedMB = _gpuCache.vu; s.GpuVramTotalMB = _gpuCache.vt;
                 s.GpuTemp = _gpuCache.temp; s.GpuWatts = _gpuCache.watts; s.GpuMHz = _gpuCache.mhz;
+                s.GpuIsIntegrated = _gpuCache.igp;
                 return;
             }
 
+            try
+            {
+                var gpu = SelectDisplayGpu();   // dédiée d'abord, IGP en dernier recours
+                if (gpu == null) { s.GpuOk = false; CacheGpu(s); return; }
+
+                // Carte Nvidia → nvidia-smi (usage + VRAM + temp + watts + horloge). Si le pilote
+                // ne répond pas, on retombe proprement sur la voie WMI/compteurs ci-dessous.
+                if (gpu.Vendor == GpuVendor.Nvidia && TryNvidiaSmi(s))
+                {
+                    s.GpuIsIntegrated = false;
+                    CacheGpu(s);
+                    return;
+                }
+
+                // AMD dédiée ou IGP : nom (WMI) + VRAM totale (registre, 0 pour un IGP) + usage (compteurs).
+                s.GpuName         = gpu.Name;
+                s.GpuIsIntegrated = gpu.IsIntegrated;
+                s.GpuUsage        = GpuEngineBusiestUsage();   // best-effort, source invariante
+                s.GpuVramTotalMB  = gpu.DedicatedVramMB;       // 0 = IGP (pas de VRAM dédiée)
+                s.GpuVramUsedMB   = 0;                          // indispo hors Nvidia → « — »
+                s.GpuTemp = 0; s.GpuWatts = 0; s.GpuMHz = 0;   // idem → « — »
+                s.GpuOk           = true;
+                CacheGpu(s);
+            }
+            catch { s.GpuOk = false; }
+        }
+
+        private static void CacheGpu(MonSnapshot s)
+        {
+            _gpuCache = (s.GpuOk, s.GpuName, s.GpuUsage, s.GpuVramUsedMB, s.GpuVramTotalMB,
+                         s.GpuTemp, s.GpuWatts, s.GpuMHz, s.GpuIsIntegrated);
+            _gpuCacheTime = DateTime.UtcNow;
+        }
+
+        // Remplit s via nvidia-smi. Renvoie false si nvidia-smi absent / muet (pas de carte Nvidia active).
+        private static bool TryNvidiaSmi(MonSnapshot s)
+        {
             try
             {
                 using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
@@ -399,14 +441,14 @@ namespace Optimisation_Tool.Helpers
                     RedirectStandardOutput = true,
                     RedirectStandardError  = true,
                 });
-                if (p == null) return;
+                if (p == null) return false;
 
                 var line = p.StandardOutput.ReadLine();
                 p.WaitForExit(4000);
-                if (string.IsNullOrWhiteSpace(line)) return;
+                if (string.IsNullOrWhiteSpace(line)) return false;
 
                 var parts = line.Split(',');
-                if (parts.Length < 7) return;
+                if (parts.Length < 7) return false;
 
                 double D(string v)
                 {
@@ -422,12 +464,168 @@ namespace Optimisation_Tool.Helpers
                 s.GpuWatts       = D(parts[5]);
                 s.GpuMHz         = D(parts[6]);
                 s.GpuOk          = true;
-
-                _gpuCache = (s.GpuOk, s.GpuName, s.GpuUsage, s.GpuVramUsedMB,
-                             s.GpuVramTotalMB, s.GpuTemp, s.GpuWatts, s.GpuMHz);
-                _gpuCacheTime = DateTime.UtcNow;
+                return true;
             }
-            catch { s.GpuOk = false; }
+            catch { return false; }
+        }
+
+        // ── Énumération des GPU physiques (stable → mise en cache au 1er appel) ────
+        private enum GpuVendor { Nvidia, Amd, Intel, Other }
+
+        private sealed class GpuInfo
+        {
+            public string    Name = "";
+            public GpuVendor  Vendor;
+            public bool       IsIntegrated;
+            public double     DedicatedVramMB;
+        }
+
+        private static List<GpuInfo>? _gpuList;
+
+        private static List<GpuInfo> EnumGpus()
+        {
+            if (_gpuList != null) return _gpuList;
+            var list = new List<GpuInfo>();
+            try
+            {
+                // VRAM dédiée réelle par carte (le WMI AdapterRAM est plafonné à 4 Go → inutilisable).
+                var vram = ReadDedicatedVram();   // DriverDesc -> Mo
+
+                using var q = new ManagementObjectSearcher(
+                    "SELECT Name, PNPDeviceID FROM Win32_VideoController");
+                foreach (ManagementObject o in q.Get())
+                {
+                    var name = o["Name"] as string ?? "";
+                    var pnp  = (o["PNPDeviceID"] as string ?? "").ToUpperInvariant();
+                    o.Dispose();
+
+                    // On ne garde QUE les vraies cartes PCI → exclut les adaptateurs virtuels
+                    // (Parsec, Bureau à distance, Microsoft Basic Render… en ROOT\… ou autre).
+                    if (!pnp.StartsWith("PCI\\")) continue;
+
+                    var vendor =
+                        pnp.Contains("VEN_10DE") ? GpuVendor.Nvidia :
+                        pnp.Contains("VEN_1002") ? GpuVendor.Amd    :
+                        pnp.Contains("VEN_8086") ? GpuVendor.Intel  : GpuVendor.Other;
+
+                    double dedMb = 0;
+                    foreach (var kv in vram)
+                        if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)) { dedMb = kv.Value; break; }
+
+                    // Intégré : Intel (toujours), ou AMD/autre sans VRAM dédiée. Nvidia = toujours dédiée.
+                    bool igp = vendor == GpuVendor.Intel ||
+                               (vendor != GpuVendor.Nvidia && dedMb < 512);
+
+                    list.Add(new GpuInfo { Name = name, Vendor = vendor, IsIntegrated = igp, DedicatedVramMB = dedMb });
+                }
+            }
+            catch { }
+            _gpuList = list;
+            return list;
+        }
+
+        // Lit la VRAM dédiée réelle (qwMemorySize) dans le registre, indexée par DriverDesc.
+        private static Dictionary<string, double> ReadDedicatedVram()
+        {
+            var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                using var classKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                    @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
+                if (classKey == null) return map;
+                foreach (var sub in classKey.GetSubKeyNames())
+                {
+                    if (sub.Length != 4) continue;   // 0000, 0001, …
+                    using var k = classKey.OpenSubKey(sub);
+                    var desc = k?.GetValue("DriverDesc") as string;
+                    var memObj = k?.GetValue("HardwareInformation.qwMemorySize");
+                    if (desc == null || memObj == null) continue;
+                    try
+                    {
+                        double mb = Convert.ToInt64(memObj) / (1024.0 * 1024.0);
+                        if (mb > 0) map[desc] = mb;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            return map;
+        }
+
+        // Choisit la carte à afficher : dédiée (plus grosse VRAM) en priorité, sinon l'IGP.
+        private static GpuInfo? SelectDisplayGpu()
+        {
+            var gpus = EnumGpus();
+            if (gpus.Count == 0) return null;
+
+            GpuInfo? best = null;
+            foreach (var g in gpus)
+                if (!g.IsIntegrated && (best == null || g.DedicatedVramMB > best.DedicatedVramMB))
+                    best = g;
+            return best ?? gpus[0];   // aucune dédiée → premier IGP
+        }
+
+        /// <summary>
+        /// True s'il faut VERROUILLER l'onglet Nvidia : au moins un GPU énuméré, et aucun n'est Nvidia.
+        /// Fail-open : si l'énumération est vide (échec WMI), on NE verrouille PAS (on ne prive pas
+        /// un utilisateur de l'onglet à tort).
+        /// </summary>
+        public static bool ShouldLockNvidiaTab()
+        {
+            var gpus = EnumGpus();
+            if (gpus.Count == 0) return false;
+            foreach (var g in gpus)
+                if (g.Vendor == GpuVendor.Nvidia) return false;
+            return true;
+        }
+
+        // Usage % de l'adaptateur le plus sollicité, via la classe WMI INVARIANTE (pas de piège de
+        // localisation §5). On groupe par luid puis on prend le moteur le plus chargé (façon
+        // Gestionnaire des tâches). Best-effort : 0 si indispo.
+        private static double GpuEngineBusiestUsage()
+        {
+            try
+            {
+                // luid -> (engtype -> somme d'utilisation)
+                var perLuid = new Dictionary<string, Dictionary<string, double>>();
+                using var q = new ManagementObjectSearcher("root\\CIMV2",
+                    "SELECT Name, UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine");
+                foreach (ManagementObject o in q.Get())
+                {
+                    var name = o["Name"] as string;
+                    double u  = o["UtilizationPercentage"] != null ? Convert.ToDouble(o["UtilizationPercentage"]) : 0;
+                    o.Dispose();
+                    if (name == null || u <= 0) continue;
+
+                    var (luid, eng) = ParseEngineInstance(name);
+                    if (luid == null) continue;
+                    if (!perLuid.TryGetValue(luid, out var engMap)) { engMap = new(); perLuid[luid] = engMap; }
+                    engMap[eng] = engMap.TryGetValue(eng, out var cur) ? cur + u : u;
+                }
+
+                double best = 0;
+                foreach (var engMap in perLuid.Values)
+                {
+                    double luidUsage = 0;
+                    foreach (var v in engMap.Values) if (v > luidUsage) luidUsage = v;   // moteur le + chargé
+                    if (luidUsage > best) best = luidUsage;
+                }
+                return Math.Min(100, best);
+            }
+            catch { return 0; }
+        }
+
+        // "pid_24532_luid_0x00000000_0x00017A9C_phys_0_eng_3_engtype_VideoDecode" -> (luid, engtype)
+        private static (string? luid, string eng) ParseEngineInstance(string name)
+        {
+            var t = name.Split('_');
+            string? luid = null; string eng = "?";
+            for (int i = 0; i < t.Length - 1; i++)
+            {
+                if (t[i] == "luid" && i + 2 < t.Length) luid = t[i + 1] + "_" + t[i + 2];
+                if (t[i] == "engtype" && i + 1 < t.Length) eng = t[i + 1];
+            }
+            return (luid, eng);
         }
     }
 }

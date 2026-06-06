@@ -87,6 +87,18 @@ namespace Optimisation_Tool
 
                 Log("Outil prêt.");
 
+                // Onglet Nvidia verrouillé si aucune carte Nvidia (PC en IGP / AMD seul) → pas d'éditeur
+                // de pilote Nvidia inutile. Fail-open : en cas de doute, l'onglet reste accessible.
+                try
+                {
+                    if (Helpers.SystemMonitor.ShouldLockNvidiaTab())
+                    {
+                        BtnNavNvidia.IsEnabled = false;
+                        BtnNavNvidia.ToolTip   = "Aucune carte graphique Nvidia détectée sur ce PC.";
+                    }
+                }
+                catch { }
+
                 // Démarrage : groupe Optimisations replié (état par défaut du XAML) + page Monitoring active
                 NavigateTo(BtnNavMonitoring);
 
