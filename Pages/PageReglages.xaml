@@ -234,6 +234,30 @@
                                   Style="{StaticResource TweakChkStyle}"
                                   Checked="ChkSounds_Changed" Unchecked="ChkSounds_Changed"/>
                     </Grid>
+                    <!-- Séparateur -->
+                    <Border Height="1" Background="{DynamicResource ThBorder}" Margin="0,12,0,12"/>
+                    <!-- Température du CPU (opt-in, pilote PawnIO) -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="Temp&#233;rature du CPU"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock Text="Affiche la temp&#233;rature du processeur dans le Monitoring. N&#233;cessite un petit pilote sign&#233; (PawnIO), install&#233; &#224; l'activation et d&#233;sinstallable &#224; tout moment."
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtCpuTempStatus" Text=""
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkCpuTemp" Grid.Column="1"
+                                  VerticalAlignment="Center"
+                                  Style="{StaticResource TweakChkStyle}"
+                                  Checked="ChkCpuTemp_Changed" Unchecked="ChkCpuTemp_Changed"/>
+                    </Grid>
                 </StackPanel>
             </Border>
 

@@ -65,7 +65,10 @@ namespace Optimisation_Tool
         private void UpdateSystem(MonSnapshot s)
         {
             TxtCpu.Text     = $"{s.CpuUsage:F0}";
-            TxtCpuFreq.Text = s.CpuMHz > 0 ? $"{s.CpuMHz / 1000.0:F2} GHz" : "—";
+            // Température CPU si activée + lisible, sinon repli sur la fréquence
+            TxtCpuFreq.Text = s.CpuTempC.HasValue
+                ? $"{s.CpuTempC.Value:F0} °C"
+                : (s.CpuMHz > 0 ? $"{s.CpuMHz / 1000.0:F2} GHz" : "—");
 
             TxtRam.Text     = $"{s.RamPct:F0}";
             TxtRamFree.Text = s.RamTotalGB > 0 ? $"{s.RamFreeGB:F1} Go libres" : "—";

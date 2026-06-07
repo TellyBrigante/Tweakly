@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.2.4";
+        public const string AppVersion = "1.2.5";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -45,6 +45,7 @@ namespace Optimisation_Tool.Pages
             ChkStartMinimized.IsChecked = MainWindow.Settings.StartMinimized;
             ChkAutoUpdate.IsChecked    = MainWindow.Settings.AutoUpdate;
             ChkSounds.IsChecked        = MainWindow.Settings.SoundsEnabled;
+            ChkCpuTemp.IsChecked       = MainWindow.Settings.CpuTempEnabled;
             UpdateThemeSegment(ThemeManager.Current);
             _loading = false;
         }
@@ -64,6 +65,55 @@ namespace Optimisation_Tool.Pages
             MainWindow.Settings.SoundsEnabled = ChkSounds.IsChecked == true;
             MainWindow.Settings.Save();
             Helpers.UiSound.Enabled = MainWindow.Settings.SoundsEnabled;
+        }
+
+        // ── Toggle température CPU (opt-in) ─────────────────────────────────────
+        // À l'activation : on s'assure que le pilote PawnIO est présent, sinon on l'installe via
+        // l'installeur officiel signé bundlé (en silence — l'app est déjà admin, donc AUCUN prompt
+        // UAC). À la désactivation : on arrête juste la lecture, on NE désinstalle PAS le pilote
+        // (évite le cycle "service marqué pour suppression / reboot").
+        private async void ChkCpuTemp_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool on = ChkCpuTemp.IsChecked == true;
+
+            if (!on)
+            {
+                MainWindow.Settings.CpuTempEnabled = false;
+                MainWindow.Settings.Save();
+                Helpers.CpuTemperature.Enabled = false;
+                TxtCpuTempStatus.Text = "";
+                _main.Log("Réglages : température CPU désactivée (pilote conservé).");
+                return;
+            }
+
+            // Activation : installer le pilote au besoin
+            ChkCpuTemp.IsEnabled  = false;
+            TxtCpuTempStatus.Text = "Installation du pilote de capteur…";
+            _main.Log("Réglages : activation température CPU — vérification/installation du pilote PawnIO…");
+
+            var (ok, msg) = await Helpers.PawnIoDriver.EnsureInstalledAsync();
+
+            if (ok)
+            {
+                MainWindow.Settings.CpuTempEnabled = true;
+                MainWindow.Settings.Save();
+                Helpers.CpuTemperature.Enabled = true;
+                TxtCpuTempStatus.Text = "Activée — la température remplace la fréquence de base dans le Monitoring.";
+                _main.Log($"Réglages : température CPU activée ({msg}).");
+            }
+            else
+            {
+                // Revert silencieux de la case (sans re-déclencher le handler)
+                _loading = true; ChkCpuTemp.IsChecked = false; _loading = false;
+                MainWindow.Settings.CpuTempEnabled = false;
+                MainWindow.Settings.Save();
+                Helpers.CpuTemperature.Enabled = false;
+                TxtCpuTempStatus.Text = "Échec de l'installation du pilote — température indisponible. Voir le journal.";
+                _main.Log($"Réglages : échec activation température CPU — {msg}.");
+            }
+
+            ChkCpuTemp.IsEnabled = true;
         }
 
         // ── Check de MAJ (appelé au démarrage + manuellement) ──────────────────

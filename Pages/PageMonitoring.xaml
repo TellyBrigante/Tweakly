@@ -118,7 +118,7 @@
                         <TextBlock x:Name="TxtCpuFreq" Text="&#8212;" Style="{StaticResource MRowVal}"/>
                     </Grid>
                     <Grid Margin="0,0,0,3">
-                        <TextBlock Text="Fr&#233;q. de base" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock x:Name="TxtCpuBaseLbl" Text="Fr&#233;q. de base" Style="{StaticResource MRowLbl}"/>
                         <TextBlock x:Name="TxtCpuBase" Text="&#8212;" Style="{StaticResource MRowVal}"/>
                     </Grid>
                     <Grid Margin="0,0,0,3">

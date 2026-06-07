@@ -16,6 +16,7 @@ namespace Optimisation_Tool.Helpers
         public double CpuUsage;     // %
         public double CpuMHz;       // fréquence live
         public int    CpuBaseMHz;   // fréquence de base
+        public double? CpuTempC;    // température CPU (°C) si activée + pilote présent, sinon null
         public string CpuName     = "";
         public int    CpuCores;
         public int    CpuThreads;
@@ -231,6 +232,9 @@ namespace Optimisation_Tool.Helpers
                 }
             }
             catch { }
+
+            // Température CPU (opt-in) : null si désactivée / pilote PawnIO absent / non élevé.
+            s.CpuTempC = CpuTemperature.Read();
         }
 
         // Infos RAM statiques (type, fréquence, nb de barrettes, capacité) — lues une fois

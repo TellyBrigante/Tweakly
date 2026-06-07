@@ -78,6 +78,7 @@ namespace Optimisation_Tool
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;
+                Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode);
                 if (Settings.StartMinimized) this.WindowState = WindowState.Minimized;

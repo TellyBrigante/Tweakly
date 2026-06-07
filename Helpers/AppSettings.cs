@@ -22,6 +22,10 @@ namespace Optimisation_Tool.Helpers
         [JsonPropertyName("startMinimized")]
         public bool StartMinimized { get; set; } = false;
 
+        // Température CPU (opt-in) : nécessite l'enregistrement du pilote PawnIO. OFF par défaut.
+        [JsonPropertyName("cpuTempEnabled")]
+        public bool CpuTempEnabled { get; set; } = false;
+
         // ── Chemin du fichier (à côté de l'exe) ───────────────────────────────
         public static string FilePath => Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory, "tweakly-settings.json");

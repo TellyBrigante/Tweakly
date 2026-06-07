@@ -117,11 +117,22 @@ namespace Optimisation_Tool.Pages
             {
                 var cores = s.CpuCores > 0 ? $"  ·  {s.CpuCores} cœur{(s.CpuCores > 1 ? "s" : "")}" : "";
                 TxtCpuName.Text = s.CpuName + cores;
-                TxtCpuBase.Text = s.CpuBaseMHz > 0 ? $"{s.CpuBaseMHz / 1000.0:F2} GHz" : "—";
                 _cpuNameSet = true;
             }
             TxtCpuUsage.Text = $"{s.CpuUsage:F0}";
             TxtCpuFreq.Text  = s.CpuMHz > 0 ? $"{s.CpuMHz / 1000.0:F2} GHz" : "—";
+
+            // Ligne du bas : température CPU si activée + lisible (pilote PawnIO), sinon fréquence de base
+            if (s.CpuTempC.HasValue)
+            {
+                TxtCpuBaseLbl.Text = "Température";
+                TxtCpuBase.Text    = $"{s.CpuTempC.Value:F0} °C";
+            }
+            else
+            {
+                TxtCpuBaseLbl.Text = "Fréq. de base";
+                TxtCpuBase.Text    = s.CpuBaseMHz > 0 ? $"{s.CpuBaseMHz / 1000.0:F2} GHz" : "—";
+            }
             TxtCpuProc.Text  = s.Processes > 0 ? s.Processes.ToString() : "—";
             TxtCpuTop.Text   = s.TopCpuName.Length > 0 ? $"{s.TopCpuName} · {s.TopCpuPct:F0} %" : "—";
             SetBar(BarCpu, s.CpuUsage);
