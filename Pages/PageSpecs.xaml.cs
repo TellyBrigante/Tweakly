@@ -77,8 +77,8 @@ namespace Optimisation_Tool.Pages
 
             StyleTab(BtnTabSpecs, true);   // onglet Spécifications actif par défaut
 
-            // Matériel + score en parallèle au premier affichage
-            await Task.WhenAll(LoadHardwareAsync(), LoadScoreAsync());
+            // Le score d'optimisation a été retiré : le Tweakly Score (page d'accueil) couvre ce rôle.
+            await LoadHardwareAsync();
         }
 
         // ── Matériel ──────────────────────────────────────────────────────────
@@ -586,184 +586,11 @@ namespace Optimisation_Tool.Pages
             return d;
         }
 
-        // ── Score ─────────────────────────────────────────────────────────────
-
-        private async Task LoadScoreAsync()
-        {
-            TxtScoreStatus.Text = "Calcul en cours…";
-
-            var (sys, wmt) = await Task.Run(CalcScore);
-            int total = sys + wmt;
-
-            Anim.CountUp(TxtScoreTotal, total, 800);
-            Anim.CountUp(TxtSysVal, sys, 800, " / 70");
-            Anim.CountUp(TxtWmtVal, wmt, 800, " / 30");
-            TxtScoreStatus.Text = ScoreLabel(total);
-
-            var scoreColor = total switch
-            {
-                >= 80 => Color.FromRgb(0x2E, 0xC4, 0x6A),  // vert
-                >= 60 => Color.FromRgb(0x3B, 0x82, 0xE0),  // bleu
-                >= 40 => Color.FromRgb(0xE0, 0x9A, 0x28),  // orange
-                _     => Color.FromRgb(0xE0, 0x4B, 0x3C)   // rouge
-            };
-            var lighter = Lighten(scoreColor, 40);
-
-            // Barre dégradée
-            FillStop0.Color = scoreColor;
-            FillStop1.Color = lighter;
-
-            var pct = Math.Max(0.0, Math.Min(100.0, (double)total));
-
-            // Barre dégradée — glisse de 0 jusqu'au score
-            var dur = new Duration(TimeSpan.FromMilliseconds(800));
-            ScoreProgressBar.ColumnDefinitions[0].BeginAnimation(ColumnDefinition.WidthProperty,
-                new GridLengthAnimation { From = 0, To = pct, Duration = dur });
-            ScoreProgressBar.ColumnDefinitions[1].BeginAnimation(ColumnDefinition.WidthProperty,
-                new GridLengthAnimation { From = 100, To = 100 - pct, Duration = dur });
-
-            // Anneau circulaire (jauge donut) — remplissage animé
-            RingFill.Stroke = new SolidColorBrush(lighter);
-            RingGlow.Color   = scoreColor;
-            RingGlow.Opacity = 0.6;
-            AnimateRing(pct, 800);
-        }
-
-        /// <summary>Remplit l'anneau de 0 % jusqu'à la cible (easeOut).</summary>
-        private void AnimateRing(double targetPct, int ms)
-        {
-            var sw = Stopwatch.StartNew();
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-            timer.Tick += (_, _) =>
-            {
-                double t = Math.Min(1.0, sw.Elapsed.TotalMilliseconds / ms);
-                double e = 1 - Math.Pow(1 - t, 3);
-                SetRing(targetPct * e);
-                if (t >= 1.0) { SetRing(targetPct); timer.Stop(); }
-            };
-            timer.Start();
-        }
-
-        /// <summary>Pilote le remplissage de l'anneau via StrokeDashArray (0–100 %).</summary>
-        private void SetRing(double pct)
-        {
-            const double size = 94.0, thick = 9.0;          // Ellipse 94px (grid 104 - marge 5), trait 9
-            double r     = (size - thick) / 2.0;
-            double circ  = 2 * Math.PI * r;
-            double units = circ / thick;                    // longueur totale en multiples du trait
-            double on    = units * (Math.Max(0, Math.Min(100, pct)) / 100.0);
-            RingFill.StrokeDashArray = new DoubleCollection { on, 1000 };
-        }
-
-        private static Color Lighten(Color c, int amt) => Color.FromRgb(
-            (byte)Math.Min(255, c.R + amt),
-            (byte)Math.Min(255, c.G + amt),
-            (byte)Math.Min(255, c.B + amt));
-
-        private static string ScoreLabel(int score) => score switch
-        {
-            >= 85 => "Excellent — Système bien optimisé",
-            >= 65 => "Bon — Quelques améliorations possibles",
-            >= 40 => "Moyen — Optimisations recommandées",
-            _     => "Faible — Optimisations nécessaires"
-        };
-
-        // ── Calcul du score (50 pts Système + 50 pts Tweaks WMT) ─────────────
-
-        // GUIDs des plans d'alimentation haute performance (locale-indépendants)
-        private static readonly string[] PerfPlanGuids =
-        {
-            "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",   // Haute performance
-            "e9a42b02-d5df-448d-aa00-03f14749eb61",   // Performances ultra
-        };
-
-        // Lecture DWORD registre, null si absent/erreur
-        private static int? Dw(string path, string name)
-        {
-            try { var v = Registry.GetValue(path, name, null); return v == null ? null : Convert.ToInt32(v); }
-            catch { return null; }
-        }
-
-        private static bool IsPerfPowerPlanActive()
-        {
-            try
-            {
-                using var p = Process.Start(new ProcessStartInfo("powercfg", "/getactivescheme")
-                {
-                    RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
-                });
-                if (p == null) return false;
-                var output = p.StandardOutput.ReadToEnd().ToLowerInvariant();
-                p.WaitForExit(3000);
-                return PerfPlanGuids.Any(g => output.Contains(g))
-                    || output.Contains("ultim") || output.Contains("haute performance")
-                    || output.Contains("hautes performances");
-            }
-            catch { return false; }
-        }
-
-        // Retourne (Performance /70, Confidentialité /30) — pondéré par impact RÉEL.
-        private static (int sys, int wmt) CalcScore()
-        {
-            int perf = 0, priv = 0;
-
-            // ═══════════ PERFORMANCE (70 pts) — impact mesurable ════════════════
-
-            // HVCI / Memory Integrity désactivé — 16  (overhead virtualisation, 5-10% jeux)
-            var hvci = Dw(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity", "Enabled");
-            if (hvci == null || hvci == 0) perf += 16;
-
-            // Plan alimentation Haute perf / Ultimate — 16  (empêche le downclock CPU)
-            if (IsPerfPowerPlanActive()) perf += 16;
-
-            // Power Throttling désactivé — 12  (pas de bridage CPU en arrière-plan)
-            if (Dw(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff") == 1) perf += 12;
-
-            // HAGS — 9  (variable selon GPU, mais réel sur frame pacing)
-            var hags = Dw(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "HwSchMode");
-            if (hags == 2 || (hags == null && Environment.OSVersion.Version.Build >= 22621)) perf += 9;
-
-            // Nagle désactivé — 7  (latence online / ping compétitif)
-            if (Dw(@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters", "TcpAckFrequency") == 1) perf += 7;
-
-            // System Responsiveness = 0 — 4  (marginal, réserve multimédia)
-            if (Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile", "SystemResponsiveness") == 0) perf += 4;
-
-            // GPU Priority MMCSS >= 8 — 3  (marginal)
-            var gpuPrio = Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games", "GPU Priority");
-            if (gpuPrio != null && gpuPrio >= 8) perf += 3;
-
-            // DVR en arrière-plan désactivé — 3  (overhead capture si actif)
-            if (Dw(@"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR", "HistoricalCaptureEnabled") == 0) perf += 3;
-
-            // ═══════════ CONFIDENTIALITÉ (30 pts) — impact perf ~nul, vie privée ═
-
-            // Télémétrie (AllowTelemetry=0) — 8
-            if (Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry") == 0) priv += 8;
-
-            // Identifiant publicitaire (AdvertisingInfo\Enabled=0) — 4
-            if (Dw(@"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled") == 0) priv += 4;
-
-            // Localisation désactivée (DisableLocation=1) — 3
-            if (Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors", "DisableLocation") == 1) priv += 3;
-
-            // Rapport d'erreurs Windows (WER Disabled=1) — 3
-            if (Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting", "Disabled") == 1) priv += 3;
-
-            // Historique d'activité (EnableActivityFeed=0) — 3
-            if (Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System", "EnableActivityFeed") == 0) priv += 3;
-
-            // Bing Search désactivé (BingSearchEnabled=0) — 3
-            if (Dw(@"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled") == 0) priv += 3;
-
-            // Télémétrie applications (AppCompat\DisableInventory=1) — 3
-            if (Dw(@"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat", "DisableInventory") == 1) priv += 3;
-
-            // Game Bar désactivée (GameDVR\AppCaptureEnabled=0) — 3
-            if (Dw(@"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled") == 0) priv += 3;
-
-            return (Math.Min(perf, 70), Math.Min(priv, 30));
-        }
+        // ── Score d'optimisation : SUPPRIMÉ en v1.2.6 ─────────────────────────
+        // Remplacé par le Tweakly Score (Pages/PageBenchmark, page d'accueil) qui mesure pour de
+        // vrai (CPU SHA512 + jitter système + ping) au lieu d'agréger des bits de registre. Toutes
+        // les méthodes liées (LoadScoreAsync, CalcScore, AnimateRing, SetRing, Lighten, ScoreLabel,
+        // PerfPlanGuids, Dw, IsPerfPowerPlanActive, BtnRefreshScore_Click) ont été retirées.
 
         // ── Helpers GPU ───────────────────────────────────────────────────────
 
@@ -823,21 +650,6 @@ namespace Optimisation_Tool.Pages
             }
             catch { }
             return 0;
-        }
-
-        private async void BtnRefreshScore_Click(object sender, RoutedEventArgs e)
-        {
-            BtnRefreshScore.IsEnabled = false;
-            TxtScoreTotal.Text  = "—";
-            TxtSysVal.Text      = "— / 70";
-            TxtWmtVal.Text      = "— / 30";
-            TxtScoreStatus.Text = "Calcul en cours…";
-            RingGlow.Opacity    = 0;
-            SetRing(0);
-            ScoreProgressBar.ColumnDefinitions[0].Width = new GridLength(0,   GridUnitType.Star);
-            ScoreProgressBar.ColumnDefinitions[1].Width = new GridLength(100, GridUnitType.Star);
-            await LoadScoreAsync();
-            BtnRefreshScore.IsEnabled = true;
         }
 
         // ── Compatibilité PCIe / M.2 ────────────────────────────────────────────

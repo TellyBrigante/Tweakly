@@ -1,0 +1,436 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageBenchmark"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+        <Style x:Key="BTile" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="12"/>
+            <Setter Property="Padding"         Value="18,16"/>
+        </Style>
+        <Style x:Key="BSubTile" TargetType="Border" BasedOn="{StaticResource BTile}">
+            <Setter Property="Padding" Value="14,12"/>
+        </Style>
+        <Style x:Key="BCat" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="BLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11.5"/>
+        </Style>
+        <Style x:Key="BValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="18,16,18,18">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 BLOC 1 — TWEAKLY SCORE (thermomètre)
+            ════════════════════════════════════════════════════════════ -->
+            <Border Grid.Row="0" Style="{StaticResource BTile}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Colonne gauche : titre + thermomètre + repères -->
+                    <StackPanel Grid.Column="0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Bottom">
+                                <TextBlock Text="TWEAKLY SCORE" Style="{StaticResource BCat}" VerticalAlignment="Bottom" Margin="0,0,12,4"/>
+                                <TextBlock x:Name="TxtVerdict" Text="—" VerticalAlignment="Bottom"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="11.5"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" x:Name="TxtLastWhen" Text=""
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11"
+                                       VerticalAlignment="Bottom"/>
+                        </Grid>
+
+                        <!-- Thermomètre : barre horizontale graduée 0 / 50 / 100 / 150 -->
+                        <Grid Margin="0,14,0,0" Height="36">
+                            <!-- Piste -->
+                            <Border CornerRadius="6" Background="{DynamicResource ThTrack}" VerticalAlignment="Center" Height="14"/>
+                            <!-- Zone "nominal" (95-105) — repère discret centré sur 100 -->
+                            <Grid VerticalAlignment="Center" Height="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="95*"/>
+                                    <ColumnDefinition Width="10*"/>
+                                    <ColumnDefinition Width="45*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="1" Background="#332EC46A" CornerRadius="2"/>
+                            </Grid>
+                            <!-- Remplissage du score -->
+                            <Grid x:Name="ScoreBar" VerticalAlignment="Center" Height="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="ScoreCol"     Width="0*"/>
+                                    <ColumnDefinition x:Name="ScoreColRest" Width="150*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" CornerRadius="6">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#3B82E0" Offset="0"/>
+                                            <GradientStop Color="#5BA0FF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                            <!-- Curseur (triangle indicateur du score actuel) -->
+                            <Grid x:Name="ScoreMarker" HorizontalAlignment="Left" Width="0">
+                                <Polygon Points="0,8 10,0 -10,0" Fill="{DynamicResource ThTextTitle}"
+                                         VerticalAlignment="Top" Margin="0,-1,0,0"/>
+                            </Grid>
+                        </Grid>
+                        <!-- Graduations 0 / 50 / 100 / 150 -->
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0*"/>
+                                <ColumnDefinition Width="50*"/>
+                                <ColumnDefinition Width="50*"/>
+                                <ColumnDefinition Width="50*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="0"   Style="{StaticResource BLabel}" HorizontalAlignment="Left"/>
+                            <TextBlock Grid.Column="1" Text="50"  Style="{StaticResource BLabel}" HorizontalAlignment="Right" Margin="0,0,-6,0"/>
+                            <TextBlock Grid.Column="2" Text="100" Style="{StaticResource BLabel}" HorizontalAlignment="Right" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource ThOk}" Margin="0,0,-9,0"/>
+                            <TextBlock Grid.Column="3" Text="150" Style="{StaticResource BLabel}" HorizontalAlignment="Right"/>
+                        </Grid>
+
+                        <!-- Explication courte (toujours visible) -->
+                        <Border Background="#1A5BA0FF" CornerRadius="8" Padding="12,8" Margin="0,14,0,0">
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5">
+                                <Run Text="Le score "/><Run Text="100" FontWeight="SemiBold" Foreground="#2EC46A"/><Run Text=" = ton matériel rend sa performance nominale. Au-dessus, tu surperformes (overclock, tweaks). En-dessous, quelque chose te ralentit (chauffe, autostart lourd, throttling)."/>
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Colonne droite : grand score + bouton -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="24,0,0,0">
+                        <TextBlock x:Name="TxtScore" Text="—"
+                                   Foreground="{DynamicResource ThTextTitle}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="64" FontWeight="Bold"
+                                   HorizontalAlignment="Right" LineHeight="64" LineStackingStrategy="BlockLineHeight"/>
+                        <Button x:Name="BtnRun" Grid.Column="1"
+                                Content="LANCER LE BENCHMARK"
+                                Style="{StaticResource PrimaryBtnStyle}"
+                                Margin="0,8,0,0"
+                                Click="BtnRun_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 BLOC 2 — 3 sous-scores (CPU, Système, Réseau) en tuiles
+            ════════════════════════════════════════════════════════════ -->
+            <Grid Grid.Row="1" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- CPU -->
+                <Border Grid.Column="0" Style="{StaticResource BSubTile}" Margin="0,0,4,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="PROCESSEUR" Style="{StaticResource BCat}" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="1" x:Name="TxtCpuScore" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="22" FontWeight="Bold"/>
+                        </Grid>
+                        <!-- Mini-barre 0-150 -->
+                        <Grid Height="6" Margin="0,8,0,8">
+                            <Border CornerRadius="3" Background="{DynamicResource ThTrack}"/>
+                            <Grid x:Name="CpuBar">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="CpuCol"     Width="0*"/>
+                                    <ColumnDefinition x:Name="CpuColRest" Width="150*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" CornerRadius="3" Background="#3B82E0"/>
+                            </Grid>
+                        </Grid>
+                        <TextBlock x:Name="TxtCpuRefModel" Text="—"
+                                   Style="{StaticResource BLabel}" TextTrimming="CharacterEllipsis"
+                                   Margin="0,0,0,6"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Mesuré" Style="{StaticResource BLabel}"/>
+                                <TextBlock x:Name="TxtCpuMeasured" Text="—" Style="{StaticResource BValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Nominal" Style="{StaticResource BLabel}"/>
+                                <TextBlock x:Name="TxtCpuNominal" Text="—" Style="{StaticResource BValue}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Système -->
+                <Border Grid.Column="1" Style="{StaticResource BSubTile}" Margin="4,0,4,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="SYSTÈME (réactivité)" Style="{StaticResource BCat}" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="1" x:Name="TxtSysScore" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="22" FontWeight="Bold"/>
+                        </Grid>
+                        <Grid Height="6" Margin="0,8,0,8">
+                            <Border CornerRadius="3" Background="{DynamicResource ThTrack}"/>
+                            <Grid x:Name="SysBar">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="SysCol"     Width="0*"/>
+                                    <ColumnDefinition x:Name="SysColRest" Width="100*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" CornerRadius="3" Background="#C08CF0"/>
+                            </Grid>
+                        </Grid>
+                        <TextBlock Text="Jitter timer (95e percentile)" Style="{StaticResource BLabel}" Margin="0,0,0,6"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Mesuré" Style="{StaticResource BLabel}"/>
+                                <TextBlock x:Name="TxtSysMeasured" Text="—" Style="{StaticResource BValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Cible (excellent)" Style="{StaticResource BLabel}"/>
+                                <TextBlock Text="&lt; 200 µs" Style="{StaticResource BValue}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Réseau -->
+                <Border Grid.Column="2" Style="{StaticResource BSubTile}" Margin="4,0,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="RÉSEAU (ping vers 1.1.1.1)" Style="{StaticResource BCat}" VerticalAlignment="Bottom"/>
+                            <TextBlock Grid.Column="1" x:Name="TxtNetScore" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="22" FontWeight="Bold"/>
+                        </Grid>
+                        <Grid Height="6" Margin="0,8,0,8">
+                            <Border CornerRadius="3" Background="{DynamicResource ThTrack}"/>
+                            <Grid x:Name="NetBar">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="NetCol"     Width="0*"/>
+                                    <ColumnDefinition x:Name="NetColRest" Width="100*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" CornerRadius="3" Background="#2EC46A"/>
+                            </Grid>
+                        </Grid>
+                        <TextBlock Text="Ping médian / jitter / perte" Style="{StaticResource BLabel}" Margin="0,0,0,6"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Mesuré" Style="{StaticResource BLabel}"/>
+                                <TextBlock x:Name="TxtNetMeasured" Text="—" Style="{StaticResource BValue}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Cible (excellent)" Style="{StaticResource BLabel}"/>
+                                <TextBlock Text="&lt; 15 ms" Style="{StaticResource BValue}"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 BLOC 3 — Historique (avec mini-sparkline en en-tête)
+            ════════════════════════════════════════════════════════════ -->
+            <Border Grid.Row="2" Style="{StaticResource BTile}" Margin="0,12,0,0">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="HISTORIQUE" Style="{StaticResource BCat}" VerticalAlignment="Center"/>
+                        <!-- Sparkline (courbe de l'évolution du score global) -->
+                        <Border Grid.Column="1" Height="36" Margin="20,0,0,0"
+                                Background="{DynamicResource ThTrack}" CornerRadius="6">
+                            <Canvas x:Name="SparkCanvas" ClipToBounds="True"/>
+                        </Border>
+                    </Grid>
+                    <StackPanel x:Name="HistoryPanel"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 BLOC 4 — Comparateur
+            ════════════════════════════════════════════════════════════ -->
+            <Border Grid.Row="3" Style="{StaticResource BTile}" Margin="0,12,0,0">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="COMPARAISON" Style="{StaticResource BCat}"/>
+                        <TextBlock Grid.Column="1" x:Name="TxtCompareRange"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11"/>
+                    </Grid>
+                    <StackPanel x:Name="ComparePanel"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 BLOC 5 — Bouton « Effacer l'historique »
+            ════════════════════════════════════════════════════════════ -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <Button x:Name="BtnClearHistory"
+                        Content="EFFACER L'HISTORIQUE"
+                        Style="{StaticResource SecondaryBtnStyle}"
+                        Padding="16,8"
+                        Click="BtnClearHistory_Click"/>
+            </StackPanel>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 OVERLAY BENCH EN COURS (modal)
+            ════════════════════════════════════════════════════════════ -->
+            <Border x:Name="BenchOverlay" Grid.RowSpan="5"
+                    Background="#CC1A1F36" CornerRadius="12"
+                    Visibility="Collapsed">
+                <Border Style="{StaticResource BTile}" MaxWidth="520"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock x:Name="TxtOverlayTitle" Text="Benchmark en cours…"
+                                   Foreground="{DynamicResource ThTextTitle}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtOverlayPhase" Text="Préparation…"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="12.5" Margin="0,4,0,16"/>
+                        <Grid Height="8" Margin="0,0,0,8">
+                            <Border Background="{DynamicResource ThTrack}" CornerRadius="4"/>
+                            <Grid x:Name="ProgressBar" HorizontalAlignment="Stretch">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="0*"/>
+                                    <ColumnDefinition Width="100*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" CornerRadius="4">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#3B82E0" Offset="0"/>
+                                            <GradientStop Color="#5BA0FF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </Grid>
+                        </Grid>
+                        <TextBlock x:Name="TxtOverlayPct" Text="0 %"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                   HorizontalAlignment="Right"/>
+                        <TextBlock Text="Pour une mesure fiable, ne lance rien d'autre pendant le bench. Le CPU tourne à 100 %."
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                   TextWrapping="Wrap" Margin="0,16,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <!-- ════════════════════════════════════════════════════════════
+                 MODAL CONFIRMATION AVANT BENCH
+            ════════════════════════════════════════════════════════════ -->
+            <Border x:Name="ConfirmOverlay" Grid.RowSpan="5"
+                    Background="#CC1A1F36" CornerRadius="12"
+                    Visibility="Collapsed">
+                <Border Style="{StaticResource BTile}" MaxWidth="540"
+                        VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <StackPanel>
+                        <TextBlock Text="Avant de lancer le benchmark"
+                                   Foreground="{DynamicResource ThTextTitle}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock Text="Pour une mesure fiable, ferme les applications gourmandes :"
+                                   Foreground="{DynamicResource ThTextBody}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="13"
+                                   TextWrapping="Wrap" Margin="0,10,0,6"/>
+                        <TextBlock Text="• Navigateurs (Chrome, Firefox…)&#x0a;• Jeux, Discord, Steam&#x0a;• Logiciels de stream (OBS…)&#x0a;• Téléchargements en cours"
+                                   Foreground="{DynamicResource ThTextBody}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="12.5"
+                                   Margin="6,0,0,12"/>
+                        <TextBlock Text="Le bench dure environ 30 secondes. Le CPU tournera à 100 %."
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,0,0,10"/>
+                        <Border x:Name="NoiseWarn" Background="#33F5C24A" BorderBrush="#F5C24A"
+                                BorderThickness="1" CornerRadius="8" Padding="12,8"
+                                Margin="0,0,0,14" Visibility="Collapsed">
+                            <TextBlock Text="⚠ Activité système détectée — ferme tes apps avant de lancer pour un score fiable."
+                                       Foreground="{DynamicResource ThWarn}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="12"
+                                       TextWrapping="Wrap"/>
+                        </Border>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="ANNULER"
+                                    Style="{StaticResource SecondaryBtnStyle}"
+                                    Padding="18,10" Margin="0,0,10,0"
+                                    Click="BtnCancelConfirm_Click"/>
+                            <Button Content="LANCER"
+                                    Style="{StaticResource PrimaryBtnStyle}"
+                                    Padding="22,10"
+                                    Click="BtnGoConfirm_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

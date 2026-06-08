@@ -58,6 +58,7 @@ namespace Optimisation_Tool
                 ["ReseauMon"] = new Lazy<UserControl>(() => new PageReseauMonitoring(this)),
                 ["Diagnostic"]= new Lazy<UserControl>(() => new PageDiagnostic(this)),
                 ["EventLog"]  = new Lazy<UserControl>(() => new PageEventLog(this)),
+                ["Benchmark"] = new Lazy<UserControl>(() => new PageBenchmark(this)),
                 ["Reglages"]  = new Lazy<UserControl>(() => new PageReglages(this)),
             };
 
@@ -100,8 +101,8 @@ namespace Optimisation_Tool
                 }
                 catch { }
 
-                // Démarrage : groupe Optimisations replié (état par défaut du XAML) + page Monitoring active
-                NavigateTo(BtnNavMonitoring);
+                // Démarrage : page d'accueil = Tweakly Score (Benchmark)
+                NavigateTo(BtnNavBenchmark);
 
 #if !DEBUG
                 // MAJ : vérification au démarrage + périodique (uniquement en build distribué).
