@@ -305,6 +305,13 @@
                                Foreground="{DynamicResource ThTextDim}"
                                FontFamily="{StaticResource AppFont}" FontSize="11"
                                Margin="0,8,0,0" TextWrapping="Wrap"/>
+                    <!-- Remerciements aux testeurs (discret, italique) -->
+                    <TextBlock Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}" FontSize="11"
+                               FontStyle="Italic"
+                               Margin="0,6,0,0" TextWrapping="Wrap">
+                        <Run Text="Ils ont cliqué partout pour toi — "/><Run Text="@Symca" Foreground="{DynamicResource ThTextNav}"/><Run Text=", "/><Run Text="@Elliot" Foreground="{DynamicResource ThTextNav}"/><Run Text=", "/><Run Text="@Théo" Foreground="{DynamicResource ThTextNav}"/><Run Text=", "/><Run Text="@Sekane" Foreground="{DynamicResource ThTextNav}"/><Run Text="."/>
+                    </TextBlock>
                 </StackPanel>
             </Border>
 
