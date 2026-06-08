@@ -43,9 +43,9 @@ namespace Optimisation_Tool.Helpers
             if (_failed) return false;
             try
             {
-                // PawnIOLib.dll (user-mode) est livré dans data\ → on ajoute ce dossier au chemin
-                // de recherche des DLL natives pour que le P/Invoke de LHM la trouve.
-                try { SetDllDirectory(Path.Combine(AppContext.BaseDirectory, "data")); } catch { }
+                // PawnIOLib.dll (user-mode) est livré dans data\drivers\ → on ajoute ce dossier au
+                // chemin de recherche des DLL natives pour que le P/Invoke de LHM la trouve.
+                try { SetDllDirectory(PathLayout.DataDrv); } catch { }
 
                 var c = new Computer { IsCpuEnabled = true };
                 c.Open();

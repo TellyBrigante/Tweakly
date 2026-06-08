@@ -15,8 +15,7 @@ namespace Optimisation_Tool.Helpers
     {
         private sealed class Entry { public string Cpu = ""; public double Composite; public DateTime SetAt; }
 
-        private static string FilePath => Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "tweakly-bench-ref.json");
+        private static string FilePath => PathLayout.BenchRefFile;
 
         // Entry expose ses données en champs publics → IncludeFields=true obligatoire (même
         // piège que BenchmarkStore : sans ça, la référence est silencieusement re-calibrée à
@@ -39,7 +38,11 @@ namespace Optimisation_Tool.Helpers
 
         private static void Save(List<Entry> list)
         {
-            try { File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt)); }
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
+                File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt));
+            }
             catch { }
         }
 

@@ -14,8 +14,7 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     public static class PawnIoDriver
     {
-        private static string SetupPath =>
-            Path.Combine(AppContext.BaseDirectory, "data", "PawnIO_setup.exe");
+        private static string SetupPath => PathLayout.PawnIoSetup;
 
         /// <summary>Le pilote noyau PawnIO est-il enregistré sur la machine ?</summary>
         public static bool IsInstalled()

@@ -175,7 +175,7 @@ namespace Optimisation_Tool.Pages
             {
                 Filter           = "Profil NVIDIA Inspector (*.nip)|*.nip",
                 FileName         = "MonProfil.nip",
-                InitialDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data"),
+                InitialDirectory = Helpers.PathLayout.NipFolder,
                 Title            = "Exporter le profil global en .nip",
             };
             if (dlg.ShowDialog() != true) return;
@@ -197,7 +197,7 @@ namespace Optimisation_Tool.Pages
             ComboProfils.Items.Clear();
             TxtNvStatus.Text = "";
 
-            var dataFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+            var dataFolder = Helpers.PathLayout.NipFolder;
             if (!Directory.Exists(dataFolder))
             {
                 TxtNvStatus.Text = "Dossier 'data' introuvable à côté de l'exécutable.";
@@ -215,7 +215,7 @@ namespace Optimisation_Tool.Pages
             }
             else
             {
-                TxtNvStatus.Text = "Aucun profil .nip trouvé dans le dossier data/.";
+                TxtNvStatus.Text = "Aucun profil .nip trouvé dans data\\nip\\.";
                 BtnAppliquer.IsEnabled = false;
             }
         }
@@ -227,7 +227,7 @@ namespace Optimisation_Tool.Pages
             var selected = ComboProfils.SelectedItem?.ToString();
             if (string.IsNullOrEmpty(selected)) { RecapCard.Visibility = Visibility.Collapsed; return; }
 
-            var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", selected);
+            var path = Path.Combine(Helpers.PathLayout.NipFolder, selected);
             if (!File.Exists(path)) { RecapCard.Visibility = Visibility.Collapsed; return; }
 
             try
@@ -296,13 +296,12 @@ namespace Optimisation_Tool.Pages
                 return;
             }
 
-            var exeDir      = AppDomain.CurrentDomain.BaseDirectory;
-            var inspectorPath = Path.Combine(exeDir, "data", "nvidiaProfileInspector.exe");
-            var profilePath   = Path.Combine(exeDir, "data", selected);
+            var inspectorPath = Helpers.PathLayout.NvidiaInspector;
+            var profilePath   = Path.Combine(Helpers.PathLayout.NipFolder, selected);
 
             if (!File.Exists(inspectorPath))
             {
-                _main.Log("Nvidia : nvidiaProfileInspector.exe introuvable dans data/.");
+                _main.Log("Nvidia : nvidiaProfileInspector.exe introuvable dans data\\tools\\.");
                 return;
             }
             if (!File.Exists(profilePath))

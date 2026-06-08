@@ -71,8 +71,7 @@ namespace Optimisation_Tool.Helpers
 
         private static List<CpuRefEntry>? _cache;
 
-        private static string DataPath =>
-            Path.Combine(AppContext.BaseDirectory, "data", "cpu_reference.json");
+        private static string DataPath => PathLayout.CpuReference;
 
         private static List<CpuRefEntry> Load()
         {

@@ -12,8 +12,7 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     public static class BenchmarkStore
     {
-        public static string FilePath => Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "tweakly-benchmarks.json");
+        public static string FilePath => PathLayout.BenchmarksFile;
 
         // IMPORTANT : BenchmarkResult expose ses données en CHAMPS publics. System.Text.Json
         // ignore les champs par défaut → il faut explicitement IncludeFields=true, sinon tout
@@ -36,7 +35,11 @@ namespace Optimisation_Tool.Helpers
 
         public static void Save(List<BenchmarkResult> list)
         {
-            try { File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt)); }
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
+                File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt));
+            }
             catch { }
         }
 

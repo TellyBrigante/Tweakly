@@ -76,6 +76,10 @@ namespace Optimisation_Tool
 
             Loaded += (_, _) =>
             {
+                // Migration silencieuse vers le layout v1.2.8 (config\ + data\<sous-dossiers>\).
+                // DOIT être appelée AVANT tout helper qui touche aux fichiers. Idempotente, blindée.
+                try { Helpers.PathLayout.MigrateIfNeeded(); } catch { }
+
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;

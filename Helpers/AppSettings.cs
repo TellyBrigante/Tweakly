@@ -26,9 +26,8 @@ namespace Optimisation_Tool.Helpers
         [JsonPropertyName("cpuTempEnabled")]
         public bool CpuTempEnabled { get; set; } = false;
 
-        // ── Chemin du fichier (à côté de l'exe) ───────────────────────────────
-        public static string FilePath => Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "tweakly-settings.json");
+        // ── Chemin du fichier : config\tweakly-settings.json (depuis v1.2.8) ──
+        public static string FilePath => PathLayout.SettingsFile;
 
         // ── Chargement ─────────────────────────────────────────────────────────
         public static AppSettings Load()
@@ -47,6 +46,7 @@ namespace Optimisation_Tool.Helpers
         {
             try
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
                 var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(FilePath, json);
             }
