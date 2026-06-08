@@ -101,12 +101,30 @@ namespace Optimisation_Tool
                     {
                         BtnNavNvidia.IsEnabled = false;
                         BtnNavNvidia.ToolTip   = "Aucune carte graphique Nvidia détectée sur ce PC.";
+                        // Indicateur visuel explicite : préfixe « 🔒 » + suffixe « (indisponible) »
+                        // → l'utilisateur comprend que c'est verrouillé et pourquoi, pas juste « grisé ».
+                        BtnNavNvidia.Content   = "🔒  Nvidia  (indisponible)";
+                        BtnNavNvidia.Opacity   = 0.55;
                     }
                 }
                 catch { }
 
                 // Démarrage : page d'accueil = Tweakly Score (Benchmark)
                 NavigateTo(BtnNavBenchmark);
+
+                // Forcer la fenêtre au premier plan : Windows 10/11 ignore parfois Show() seul
+                // (apps spawnnées via Run ou via tâche planifiée se retrouvent derrière le navigateur).
+                // Flicker Topmost = méthode standard, suffisante et compatible avec StartMinimized.
+                if (!Settings.StartMinimized)
+                {
+                    try
+                    {
+                        Topmost = true;
+                        Activate();
+                        Topmost = false;
+                    }
+                    catch { }
+                }
 
 #if !DEBUG
                 // MAJ : vérification au démarrage + périodique (uniquement en build distribué).
@@ -243,6 +261,21 @@ namespace Optimisation_Tool
             g.Expanded = !g.Expanded;
             g.Panel.Visibility = g.Expanded ? Visibility.Visible : Visibility.Collapsed;
             g.Header.Content   = (g.Expanded ? "▾  " : "▸  ") + g.Label;
+
+            // Si on vient d'ouvrir un groupe, on REPLIE les autres (un seul ouvert à la fois).
+            if (g.Expanded)
+            {
+                foreach (var other in _groups)
+                {
+                    if (other == g || !other.Expanded) continue;
+                    other.Expanded = false;
+                    other.Panel.Visibility = Visibility.Collapsed;
+                    other.Header.Content = "▸  " + other.Label;
+                    // Si un sous-item de l'autre groupe est actif → on resurligne son header replié
+                    bool sub = _selectedNav != null && other.Tags.Contains(_selectedNav.Tag as string ?? "");
+                    ApplyNavStyle(other.Header, selected: sub);
+                }
+            }
 
             // Surligner le groupe si un sous-item est actif ET que le groupe est replié
             bool subActive = _selectedNav != null && g.Tags.Contains(_selectedNav.Tag as string ?? "");
@@ -511,11 +544,33 @@ namespace Optimisation_Tool
             catch (Exception ex) { Log($"Mode mini : erreur — {ex.Message}"); }
         }
 
-        // Place la mini en bas à droite de la zone de travail du moniteur principal.
-        private static void PositionMini(Window w)
+        // Place la mini en bas à droite de la zone de travail du MÊME moniteur que MainWindow.
+        // ⚠️ SystemParameters.WorkArea = écran PRIMAIRE → la mini saute sur l'écran de gauche si la
+        // main est sur l'écran de droite. On résout via MonitorFromWindow + GetMonitorInfo (P/Invoke
+        // déjà présents pour WM_GETMINMAXINFO).
+        private void PositionMini(Window w)
         {
             try
             {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    IntPtr mon = MonitorFromWindow(hwnd, 0x00000002 /*MONITOR_DEFAULTTONEAREST*/);
+                    var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                    if (mon != IntPtr.Zero && GetMonitorInfo(mon, ref mi))
+                    {
+                        // RECT en pixels → conversion en unités WPF (DIP) via le DPI du moniteur courant
+                        var src = System.Windows.Interop.HwndSource.FromHwnd(hwnd);
+                        double sx = src?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                        double sy = src?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+                        double right  = mi.rcWork.right  / sx;
+                        double bottom = mi.rcWork.bottom / sy;
+                        w.Left = right  - w.Width  - 18;
+                        w.Top  = bottom - 220       - 18;
+                        return;
+                    }
+                }
+                // Fallback : écran primaire (comportement historique)
                 var wa = SystemParameters.WorkArea;
                 w.Left = wa.Right  - w.Width  - 18;
                 w.Top  = wa.Bottom - 220       - 18;

@@ -319,6 +319,34 @@ namespace Optimisation_Tool.Pages
 
         // ── Mise à jour individuelle ───────────────────────────────────────────
 
+        // Codes d'erreur winget courants — reconnaître les cas « déjà à jour » et « rien à faire »
+        // pour ne pas afficher « Échec » alors que tout va bien.
+        private static bool WingetIsBenign(int exitCode) =>
+            exitCode ==  -1978335109   // APPINSTALLER_CLI_ERROR_UPDATE_NOT_APPLICABLE
+         || exitCode ==  -1978335146   // ERROR_UPDATE_ALL_HAS_FAILURE … ou no apps to update
+         || exitCode ==  -1978335189;  // ERROR_NO_APPLICABLE_UPDATE_FOUND
+
+        // Process .exe qui doit être fermé pour permettre la MAJ de telle app (mapping conservateur,
+        // ajouts ponctuels au fil du retour utilisateur).
+        private static readonly Dictionary<string, string[]> _appProcesses = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Discord.Discord"]       = new[] { "Discord", "DiscordPTB", "DiscordCanary" },
+            ["TeamSpeakSystems.TeamSpeakClient"] = new[] { "ts3client_win64", "ts3client_win32" },
+            ["Valve.Steam"]           = new[] { "steam", "steamwebhelper" },
+            ["Spotify.Spotify"]       = new[] { "Spotify" },
+            ["Slack.Slack"]           = new[] { "slack" },
+            ["Microsoft.VisualStudioCode"] = new[] { "Code" },
+        };
+
+        private static string[]? RunningProcessesFor(string wingetId)
+        {
+            if (!_appProcesses.TryGetValue(wingetId, out var names)) return null;
+            var running = new List<string>();
+            foreach (var n in names)
+                if (Process.GetProcessesByName(n).Length > 0) running.Add(n);
+            return running.Count > 0 ? running.ToArray() : null;
+        }
+
         private async Task UpdateSingleAppAsync(AppItem app)
         {
             if (string.IsNullOrEmpty(app.WingetId)) return;
@@ -327,30 +355,72 @@ namespace Optimisation_Tool.Pages
             TxtStatus.Text   = $"Mise à jour de « {app.Name} »…";
             _main.Log($"Applications : mise à jour de « {app.Name} »…");
 
-            var ok = await Task.Run(() =>
+            // ── 1) Pré-check : l'app est-elle en cours d'exécution ? ─────────────
+            //    L'installeur winget ne peut pas remplacer un .exe verrouillé →
+            //    cause #1 des « refus de MAJ » pour Discord/TeamSpeak/Steam etc.
+            var running = RunningProcessesFor(app.WingetId);
+            if (running != null)
             {
-                try
-                {
-                    int exit = DeElevatedLauncher.StartAndWait(
-                        "cmd.exe",
-                        $"/c winget upgrade --id \"{app.WingetId}\" --silent --accept-source-agreements --disable-interactivity",
-                        300_000);
-                    return exit == 0;
-                }
-                catch { return false; }
-            });
-
-            if (ok)
-            {
-                app.AvailableVersion = "";
-                app.UpdateStatus     = UpdateStatus.Updated;
-                _main.Log($"Applications : « {app.Name} » mise à jour avec succès.");
-            }
-            else
-            {
+                _main.Log($"Applications : « {app.Name} » est en cours d'exécution ({string.Join(", ", running)}.exe) — ferme-le et réessaie.");
                 app.UpdateStatus = UpdateStatus.Failed;
-                _main.Log($"Applications : échec de la mise à jour de « {app.Name} ».");
+                return;
             }
+
+            // ── 2) Tentative MAJ avec différents scopes (user → machine → défaut) ─
+            //    Discord = user-scope, TeamSpeak = machine-scope, etc. Winget devine
+            //    parfois mal → on retente proprement.
+            int lastExit = 0;
+            string lastOutput = "";
+            foreach (var scope in new[] { "", "--scope user", "--scope machine" })
+            {
+                var scopeArg = scope.Length > 0 ? $" {scope}" : "";
+                var (exit, output) = await Task.Run(() => RunWingetCmd(
+                    $"upgrade --id \"{app.WingetId}\" --silent{scopeArg} --accept-package-agreements --accept-source-agreements --disable-interactivity"));
+                lastExit   = exit;
+                lastOutput = output;
+
+                if (exit == 0)
+                {
+                    app.AvailableVersion = "";
+                    app.UpdateStatus     = UpdateStatus.Updated;
+                    _main.Log($"Applications : « {app.Name} » mise à jour avec succès{(scope.Length>0?$" ({scope})":"")}.");
+                    return;
+                }
+                if (WingetIsBenign(exit) ||
+                    output.Contains("already installed", StringComparison.OrdinalIgnoreCase) ||
+                    output.Contains("déjà install", StringComparison.OrdinalIgnoreCase) ||
+                    output.Contains("No applicable update", StringComparison.OrdinalIgnoreCase))
+                {
+                    app.AvailableVersion = "";
+                    app.UpdateStatus     = UpdateStatus.Updated;
+                    _main.Log($"Applications : « {app.Name} » déjà à jour (winget ec={exit}).");
+                    return;
+                }
+            }
+
+            // ── 3) Tous les scopes ont échoué : log diagnostic + statut Failed ───
+            app.UpdateStatus = UpdateStatus.Failed;
+            string firstLine = lastOutput.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "";
+            _main.Log($"Applications : échec MAJ « {app.Name} » — winget ec={lastExit} | {firstLine}");
+        }
+
+        // Lance winget (DÉ-ÉLEVÉ, contexte user) et capture stdout+stderr + code d'erreur.
+        // Indispensable pour distinguer « rien à faire » d'un vrai échec.
+        private (int exit, string output) RunWingetCmd(string args)
+        {
+            var tmp = Path.Combine(Path.GetTempPath(), $"tweakly_wgu_{Guid.NewGuid():N}.txt");
+            try
+            {
+                int exit = DeElevatedLauncher.StartAndWait(
+                    "cmd.exe",
+                    $"/c chcp 65001 > nul && winget {args} > \"{tmp}\" 2>&1",
+                    300_000);
+                var output = File.Exists(tmp) ? File.ReadAllText(tmp, Encoding.UTF8) : "";
+                output = Regex.Replace(output, "\x1B\\[[0-9;?]*[A-Za-z]", "");
+                return (exit, output);
+            }
+            catch (Exception ex) { return (-1, "exception: " + ex.Message); }
+            finally { try { File.Delete(tmp); } catch { } }
         }
 
         private async void BtnUpdateOne_Click(object sender, RoutedEventArgs e)

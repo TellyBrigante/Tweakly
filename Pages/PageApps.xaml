@@ -353,38 +353,46 @@
                                     </Button.Style>
                                 </Button>
 
-                                <!-- Badge statut -->
+                                <!-- Badge statut (pilule semi-transparente, assortie à la couleur du statut) -->
                                 <Border DockPanel.Dock="Left"
-                                        CornerRadius="4"
+                                        CornerRadius="10"
+                                        BorderThickness="1"
                                         VerticalAlignment="Center">
                                     <Border.Style>
                                         <Style TargetType="Border">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Setter Property="Padding"    Value="0"/>
+                                            <Setter Property="Background"  Value="Transparent"/>
+                                            <Setter Property="BorderBrush" Value="Transparent"/>
+                                            <Setter Property="Padding"     Value="0"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Checking">
-                                                    <Setter Property="Background" Value="#1C2040"/>
-                                                    <Setter Property="Padding"    Value="8,3"/>
+                                                    <Setter Property="Background"  Value="#22B4BBE0"/>
+                                                    <Setter Property="BorderBrush" Value="#55B4BBE0"/>
+                                                    <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="UpToDate">
-                                                    <Setter Property="Background" Value="#0D2418"/>
-                                                    <Setter Property="Padding"    Value="8,3"/>
+                                                    <Setter Property="Background"  Value="#225FD98C"/>
+                                                    <Setter Property="BorderBrush" Value="#555FD98C"/>
+                                                    <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="UpdateAvailable">
-                                                    <Setter Property="Background" Value="#0E1E36"/>
-                                                    <Setter Property="Padding"    Value="8,3"/>
+                                                    <Setter Property="Background"  Value="#225BA0FF"/>
+                                                    <Setter Property="BorderBrush" Value="#555BA0FF"/>
+                                                    <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Updating">
-                                                    <Setter Property="Background" Value="#28200C"/>
-                                                    <Setter Property="Padding"    Value="8,3"/>
+                                                    <Setter Property="Background"  Value="#22F5C24A"/>
+                                                    <Setter Property="BorderBrush" Value="#55F5C24A"/>
+                                                    <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Updated">
-                                                    <Setter Property="Background" Value="#0A2016"/>
-                                                    <Setter Property="Padding"    Value="8,3"/>
+                                                    <Setter Property="Background"  Value="#225FD98C"/>
+                                                    <Setter Property="BorderBrush" Value="#555FD98C"/>
+                                                    <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Failed">
-                                                    <Setter Property="Background" Value="#2A0E0E"/>
-                                                    <Setter Property="Padding"    Value="8,3"/>
+                                                    <Setter Property="Background"  Value="#22E05555"/>
+                                                    <Setter Property="BorderBrush" Value="#55E05555"/>
+                                                    <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>

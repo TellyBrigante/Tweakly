@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.2.8";
+        public const string AppVersion = "1.2.9";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -330,38 +330,26 @@ namespace Optimisation_Tool.Pages
         }
 
         // ── Démarrage avec Windows ─────────────────────────────────────────────
+        // ⚠️ Tweakly est requireAdministrator → la clé HKCU\…\Run ne marche PAS pour les apps
+        // élevées (Windows refuse de les lancer au démarrage). Voie propre = tâche planifiée
+        // avec « Run with highest privileges ». Voir Helpers/StartupManager pour le détail.
 
-        private const string RunKey   = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        private const string RunValue = "Tweakly";
-
-        private static bool IsStartupEnabled()
-        {
-            try
-            {
-                using var k = Registry.CurrentUser.OpenSubKey(RunKey);
-                return k?.GetValue(RunValue) != null;
-            }
-            catch { return false; }
-        }
+        private static bool IsStartupEnabled() => Helpers.StartupManager.IsEnabled();
 
         private void ChkStartup_Changed(object sender, RoutedEventArgs e)
         {
             if (_loading) return;
             bool enable = ChkStartup.IsChecked == true;
-            try
+            bool ok = enable ? Helpers.StartupManager.Enable() : Helpers.StartupManager.Disable();
+            if (ok)
             {
-                using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
-                if (k == null) return;
-                if (enable)
-                    k.SetValue(RunValue, $"\"{Process.GetCurrentProcess().MainModule!.FileName}\"");
-                else
-                    k.DeleteValue(RunValue, throwOnMissingValue: false);
-
-                _main.Log($"Réglages : démarrage Windows {(enable ? "activé" : "désactivé")}.");
+                _main.Log($"Réglages : démarrage Windows {(enable ? "activé (tâche planifiée)" : "désactivé")}.");
             }
-            catch (Exception ex)
+            else
             {
-                _main.Log($"Réglages : erreur démarrage Windows — {ex.Message}");
+                _main.Log($"Réglages : erreur démarrage Windows — opération {(enable ? "activation" : "désactivation")} refusée.");
+                // Revert silencieux de la case sans re-déclencher le handler
+                _loading = true; ChkStartup.IsChecked = !enable; _loading = false;
             }
         }
 

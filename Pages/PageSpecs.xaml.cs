@@ -697,6 +697,17 @@ namespace Optimisation_Tool.Pages
                     col = Color.FromRgb(0x2E, 0xC4, 0x6A);
                     status = $"OPTIMAL — le GPU tourne à pleine vitesse ({pct:F0} %)";
                 }
+                else if (g.atRest)
+                {
+                    // Driver Nvidia downclock le lien PCIe quand le GPU est inactif (ASPM). Comportement
+                    // NORMAL : la vraie vitesse revient en charge. On l'affiche en bleu informatif,
+                    // PAS en jaune alerte — sinon on inquiète l'utilisateur pour rien.
+                    col = Color.FromRgb(0x5B, 0xA0, 0xFF);
+                    status = $"GPU AU REPOS — le lien descend à {GenName[g.curGen]} x{g.curWidth} pour économiser. " +
+                             $"En charge, il revient à {GenName[g.maxGen]} x{g.maxWidth}.";
+                    // On gonfle la barre au max pour refléter la capacité réelle, pas le repos
+                    SetBarPct(CompatGpuBar, 100);
+                }
                 else if (g.curGen < g.maxGen)
                 {
                     col = Color.FromRgb(0xE0, 0x9A, 0x28);
@@ -741,13 +752,46 @@ namespace Optimisation_Tool.Pages
         }
 
         // GPU PCIe via nvidia-smi (name + gen/width max & current)
-        private static (string name, int maxGen, int curGen, int maxWidth, int curWidth) GetGpuPcie()
+        // Vitesse PCIe via nvidia-smi. ⚠️ PIÈGE : au repos, le driver Nvidia downclock le lien PCIe
+        // (ASPM) → on lit alors PCIe 1.x ou 2.x au lieu du max, alors que la carte mère n'est PAS bridée.
+        // GPU-Z et HWiNFO contournent ça avec un « Render Test » qui réveille la carte. Nous : on fait
+        // jusqu'à 3 mesures espacées et on garde le MAXIMUM observé + on lit le pstate (P0..P8 = du plus
+        // chargé au plus idle) pour distinguer « GPU au repos = normal » de « slot réellement bridé ».
+        private static (string name, int maxGen, int curGen, int maxWidth, int curWidth, bool atRest) GetGpuPcie()
+        {
+            string name = "";
+            int maxGen = 0, maxWidth = 0;
+            int bestCurGen = 0, bestCurWidth = 0;
+            int lastPstate = -1;   // P-state observé à la DERNIÈRE mesure
+
+            for (int i = 0; i < 3; i++)
+            {
+                var (n, mg, cg, mw, cw, ps) = QueryGpuPcieOnce();
+                if (n.Length > 0) name = n;
+                if (mg > maxGen)  maxGen = mg;
+                if (mw > maxWidth) maxWidth = mw;
+                if (cg > bestCurGen)   bestCurGen   = cg;
+                if (cw > bestCurWidth) bestCurWidth = cw;
+                if (ps >= 0) lastPstate = ps;
+
+                // Tant qu'on n'est pas au max, on retente jusqu'à 3 fois (le GPU peut se réveiller entre 2 mesures).
+                if (bestCurGen >= maxGen && bestCurWidth >= maxWidth) break;
+                if (i < 2) System.Threading.Thread.Sleep(180);
+            }
+
+            // « Au repos » = on n'a pas atteint le max ET le P-state est élevé (≥ P5 = idle).
+            bool atRest = (bestCurGen < maxGen || bestCurWidth < maxWidth) && lastPstate >= 5;
+            return (name, maxGen, bestCurGen, maxWidth, bestCurWidth, atRest);
+        }
+
+        // Une mesure nvidia-smi : renvoie aussi le pstate (P0=0, P1=1, …, P8=8). pstate=-1 si indispo.
+        private static (string, int, int, int, int, int) QueryGpuPcieOnce()
         {
             try
             {
                 foreach (var genField in new[] { "pcie.link.gen.gpumax", "pcie.link.gen.max" })
                 {
-                    var args = $"--query-gpu=name,{genField},pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current " +
+                    var args = $"--query-gpu=name,{genField},pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current,pstate " +
                                "--format=csv,noheader,nounits";
                     using var p = Process.Start(new ProcessStartInfo("nvidia-smi", args)
                     {
@@ -763,16 +807,22 @@ namespace Optimisation_Tool.Pages
                     if (parts.Length < 5) continue;
                     int I(string v) => int.TryParse(v.Trim(), out var n) ? n : 0;
                     var name = parts[0].Trim();
-                    var maxGen = I(parts[1]); var curGen = I(parts[2]);
-                    var maxW = I(parts[3]);   var curW = I(parts[4]);
-                    if (maxGen > 0 && curGen > 0)
-                        return (name, maxGen, curGen, maxW, curW);
+                    var mg = I(parts[1]); var cg = I(parts[2]);
+                    var mw = I(parts[3]); var cw = I(parts[4]);
+                    int ps = -1;
+                    if (parts.Length >= 6)
+                    {
+                        var psRaw = parts[5].Trim().TrimStart('P', 'p');
+                        if (int.TryParse(psRaw, out var n)) ps = n;
+                    }
+                    if (mg > 0 && cg > 0)
+                        return (name, mg, cg, mw, cw, ps);
                     // nom récupéré mais gen=0 → tenter l'autre champ
-                    if (genField == "pcie.link.gen.max") return (name, 0, 0, 0, 0);
+                    if (genField == "pcie.link.gen.max") return (name, 0, 0, 0, 0, ps);
                 }
             }
             catch { }
-            return ("", 0, 0, 0, 0);
+            return ("", 0, 0, 0, 0, -1);
         }
 
         // Brush figé → utilisable depuis un thread de fond (cross-thread safe)
