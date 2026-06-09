@@ -22,6 +22,11 @@ namespace Optimisation_Tool
         private Button?      _returnNav;     // page à restaurer en sortant du mode mini
         public  bool         ShuttingDown { get; private set; }
 
+        // Tray icon (zone de notification Windows) — gérée par TrayIconManager.
+        // Null si l'init a échoué (cas rare : RDP sans tray, etc.) → on retombe sur le
+        // comportement standard (WindowState.Minimized vers la barre des tâches).
+        private TrayIconManager? _tray;
+
         // Groupes de navigation repliables (Optimisations, Diagnostic)
         private sealed class NavGroup
         {
@@ -42,6 +47,9 @@ namespace Optimisation_Tool
 
             // Sons d'interface : uniquement les notifications (succès / avertissement).
             Helpers.UiSound.Init();
+
+            // ⚠️ Tray icon : init dans OnSourceInitialized (PAS dans le ctor, PAS dans Loaded).
+            // Voir TrayIconManager.cs pour l'historique des tentatives ratées (écran noir).
 
             _pages = new Dictionary<string, Lazy<UserControl>>
             {
@@ -86,7 +94,15 @@ namespace Optimisation_Tool
                 Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode);
-                if (Settings.StartMinimized) this.WindowState = WindowState.Minimized;
+                // Tray déjà initialisé dans le ctor (voir commentaire là-bas). Ici on
+                // applique juste « démarrer minimisé » : si tray dispo → on cache fenêtre
+                // + barre des tâches (seule la tray icon reste visible). Sinon fallback :
+                // minimisation classique.
+                if (Settings.StartMinimized)
+                {
+                    if (_tray?.IsAvailable == true) _tray.HideToTray();
+                    else                            this.WindowState = WindowState.Minimized;
+                }
 
                 // Version affichée = source unique (PageReglages.AppVersion)
                 TxtVersion.Text = "v" + Pages.PageReglages.AppVersion;
@@ -112,16 +128,36 @@ namespace Optimisation_Tool
                 // Démarrage : page d'accueil = Tweakly Score (Benchmark)
                 NavigateTo(BtnNavBenchmark);
 
-                // Forcer la fenêtre au premier plan : Windows 10/11 ignore parfois Show() seul
-                // (apps spawnnées via Run ou via tâche planifiée se retrouvent derrière le navigateur).
-                // Flicker Topmost = méthode standard, suffisante et compatible avec StartMinimized.
+                // Forcer la fenêtre au PREMIER PLAN (pas seulement Topmost flicker, qui ne
+                // suffit pas si une autre app détient le foreground). On utilise
+                // AttachThreadInput pour bypass la protection Win10/11. Voir ForceForeground.
                 if (!Settings.StartMinimized)
                 {
+                    // 1) Tentative immédiate (cas où on est déjà foreground ou rien ne bloque).
                     try
                     {
                         Topmost = true;
-                        Activate();
                         Topmost = false;
+                    }
+                    catch { }
+                    ForceForeground();
+
+                    // 2) Tentative DIFFÉRÉE en priorité ContextIdle : exécutée APRÈS le 1er
+                    //    paint, donc même si une app concurrente nous a volé le focus pendant
+                    //    le chargement, on le récupère. Sert aussi de filet anti-régression
+                    //    pour le rendu (InvalidateVisual rattrape un éventuel paint manqué).
+                    try
+                    {
+                        this.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            try
+                            {
+                                InvalidateVisual();
+                                UpdateLayout();
+                                ForceForeground();
+                            }
+                            catch { }
+                        }), System.Windows.Threading.DispatcherPriority.ContextIdle);
                     }
                     catch { }
                 }
@@ -412,7 +448,12 @@ namespace Optimisation_Tool
         }
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
-            => WindowState = WindowState.Minimized;
+        {
+            // Comportement validé avec l'utilisateur (v1.3.0) : le bouton _ envoie dans
+            // la tray icon (cache fenêtre + barre des tâches). Fallback si tray indispo.
+            if (_tray?.IsAvailable == true) _tray.HideToTray();
+            else                            WindowState = WindowState.Minimized;
+        }
 
         private void BtnMaximize_Click(object sender, RoutedEventArgs e)
             => ToggleMaximize();
@@ -447,10 +488,23 @@ namespace Optimisation_Tool
             base.OnSourceInitialized(e);
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             System.Windows.Interop.HwndSource.FromHwnd(hwnd)?.AddHook(WindowProc);
+
+            // Init tray APRÈS création du HWND de MainWindow (le tray s'y attache,
+            // pas de fenêtre supplémentaire). Voir TrayIconManager pour le pourquoi.
+            try { _tray = new TrayIconManager(this, hwnd); } catch { _tray = null; }
         }
 
-        private static IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        private IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            // 1) Messages tray (clic / double-clic / clic droit sur l'icône tray).
+            //    Le tray utilise WM_USER+1 comme callback custom.
+            if (_tray != null && _tray.TryHandleMessage(msg, lParam))
+            {
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // 2) WM_GETMINMAXINFO : contraindre la maximisation à la zone de travail.
             if (msg == 0x0024)   // WM_GETMINMAXINFO
             {
                 var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
@@ -490,15 +544,109 @@ namespace Optimisation_Tool
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
+        // -- Force au premier plan (anti foreground-lock Windows 10/11) -----------
+        // Le simple Topmost flicker ne suffit pas si une autre app détient activement
+        // le foreground. L'astuce documentée (utilisée par AutoHotkey, Notepad++,
+        // PowerToys…) : on attache temporairement notre thread au thread foreground
+        // pour bypass la protection LockSetForegroundWindow, on prend le focus,
+        // on se détache. C'est la SEULE méthode fiable.
+
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+        [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool BringWindowToTop(IntPtr hWnd);
+        [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+        [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+        private const int SW_SHOW    = 5;
+        private const int SW_RESTORE = 9;
+        private const byte VK_MENU              = 0x12;   // Alt
+        private const uint KEYEVENTF_KEYUP       = 0x0002;
+
+        /// <summary>
+        /// Force MainWindow au PREMIER PLAN (pas seulement Topmost flicker). Bypass de
+        /// la protection foreground-lock de Windows 10/11 via AttachThreadInput.
+        /// Inoffensif si la fenêtre est déjà au premier plan (early return).
+        /// </summary>
+        private void ForceForeground()
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd == IntPtr.Zero) return;
+
+                var foreHwnd = GetForegroundWindow();
+                if (foreHwnd == hwnd) return;   // déjà au premier plan, rien à faire
+
+                uint foreThread = GetWindowThreadProcessId(foreHwnd, out _);
+                uint myThread   = GetCurrentThreadId();
+
+                bool attached = false;
+                if (foreThread != 0 && foreThread != myThread)
+                {
+                    attached = AttachThreadInput(foreThread, myThread, true);
+                }
+
+                try
+                {
+                    // TRICK "ALT FANTÔME" (KB Q97925, utilisé par PowerToys/AutoHotkey) :
+                    // simuler un appui Alt invisible légitimise notre process aux yeux de
+                    // Windows → SetForegroundWindow est ensuite accepté. C'est LE bypass
+                    // documenté de la protection LockSetForegroundWindow Win10/11.
+                    try
+                    {
+                        keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);                // Alt down
+                        keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);  // Alt up
+                    }
+                    catch { }
+
+                    // Si la fenêtre était minimisée, la restaurer avant de la passer devant.
+                    if (WindowState == WindowState.Minimized)
+                        WindowState = WindowState.Normal;
+                    ShowWindow(hwnd, SW_SHOW);
+                    BringWindowToTop(hwnd);
+                    SetForegroundWindow(hwnd);
+                    Activate();
+                }
+                finally
+                {
+                    if (attached) AttachThreadInput(foreThread, myThread, false);
+                }
+            }
+            catch { }
+        }
+
         private void BtnClose_Click(object sender, RoutedEventArgs e)
         {
             ShuttingDown = true;
             Application.Current.Shutdown();
         }
 
+        /// <summary>
+        /// Demande la fermeture propre de l'app (utilisé par le menu « Fermer Tweakly »
+        /// de la tray icon). Pose ShuttingDown pour que la mini ne capture pas le Closing.
+        /// </summary>
+        public void RequestShutdown()
+        {
+            ShuttingDown = true;
+            try { _tray?.Dispose(); } catch { }
+            Application.Current.Shutdown();
+        }
+
+        /// <summary>True si l'overlay mini est actuellement affiché (utilisé par le tray
+        /// pour décider entre Show() main vs ExitMiniMode()).</summary>
+        public bool IsMiniActive() => _mini != null && _mini.IsVisible;
+
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             ShuttingDown = true;
+            // Retire la tray icon AVANT la fermeture (sinon elle reste affichée comme
+            // fantôme jusqu'à un survol souris).
+            try { _tray?.Dispose(); } catch { }
             base.OnClosing(e);
         }
 

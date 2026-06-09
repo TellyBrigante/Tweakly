@@ -9,68 +9,141 @@ using System.Text.RegularExpressions;
 namespace Optimisation_Tool.Helpers
 {
     /// <summary>
-    /// Référence CPU EXTERNE : compare la mesure brute (SHA512 Mio/s) au score nominal attendu
-    /// pour le CPU détecté, à partir d'une base packagée dans data\cpu_reference.json.
+    /// Reference CPU EXTERNE v2 : compare la mesure brute (Mandelbrot Mpx/s) aux
+    /// scores ATTENDUS pour ce modele exact, charges depuis data\cpu_reference.json.
     ///
-    /// Formule : score_mono  = boost_P × coef_génération(P)
-    ///           score_multi = (cœurs_P × boost_P × coef_P) + (cœurs_E × boost_E × coef_E)
-    /// avec un coefficient « Mio/s par GHz par cœur » par génération, calibré empiriquement
-    /// (ancrage : Core Ultra 7 265K mesuré ~12200 Mio/s multi → définit Arrow Lake).
+    /// Format JSON v2 (sup. additif au v1) :
+    /// {
+    ///   "model": "Intel Core Ultra 7 265K",
+    ///   "vendor": "Intel",
+    ///   "gen": "Arrow Lake",
+    ///   "pcores": 8, "ecores": 12,
+    ///   "pboost": 5.5, "eboost": 4.6,
+    ///   // ── Nouveau v2 (scores ancres 265K = 100) ──
+    ///   "exp_single": 100,    // score attendu single-thread (Mandelbrot)
+    ///   "exp_multi":  100,    // score attendu multi-thread
+    ///   "exp_mem":    100,    // score attendu CPU memory access
+    ///   "tier": "Enthusiast desktop 2024-2026",
+    ///   "aliases": [ ... ]
+    /// }
     ///
-    /// Précision attendue : ±15-20 % par CPU. Suffisant pour « tu es dans la norme / tu sous-
-    /// performes / tu surperformes », pas pour un benchmark de précision. Si CPU absent de la base
-    /// → fallback sur la référence personnelle (1er bench = 100). Ne lève jamais.
+    /// LE CPU PIVOT (Core Ultra 7 265K) = ancre 100 pour les 3 sondes. Les autres
+    /// CPUs ont leurs scores attendus calibres proportionnellement, croises avec
+    /// Geekbench 6 / PassMark publics pour rester comparable a ces benchmarks.
     /// </summary>
     public sealed class CpuRefEntry
     {
-        [JsonPropertyName("model")]    public string Model    { get; set; } = "";
-        [JsonPropertyName("vendor")]   public string Vendor   { get; set; } = "";   // Intel / AMD
-        [JsonPropertyName("gen")]      public string Gen      { get; set; } = "";   // Arrow Lake, Zen 4...
-        [JsonPropertyName("pcores")]   public int    PCores   { get; set; }
-        [JsonPropertyName("ecores")]   public int    ECores   { get; set; }
-        [JsonPropertyName("pboost")]   public double PBoost   { get; set; }   // GHz
-        [JsonPropertyName("eboost")]   public double EBoost   { get; set; }   // GHz (0 si pas de E-core)
-        [JsonPropertyName("aliases")]  public List<string>? Aliases { get; set; }   // variantes de nom WMI
+        [JsonPropertyName("model")]      public string Model    { get; set; } = "";
+        [JsonPropertyName("vendor")]     public string Vendor   { get; set; } = "";
+        [JsonPropertyName("gen")]        public string Gen      { get; set; } = "";
+        [JsonPropertyName("pcores")]     public int    PCores   { get; set; }
+        [JsonPropertyName("ecores")]     public int    ECores   { get; set; }
+        [JsonPropertyName("pboost")]     public double PBoost   { get; set; }
+        [JsonPropertyName("eboost")]     public double EBoost   { get; set; }
+        [JsonPropertyName("aliases")]    public List<string>? Aliases { get; set; }
+
+        // v2 - scores attendus pour chaque sonde (ancrage 265K = 100)
+        [JsonPropertyName("exp_single")] public double ExpSingle { get; set; } = 0;
+        [JsonPropertyName("exp_multi")]  public double ExpMulti  { get; set; } = 0;
+        [JsonPropertyName("exp_mem")]    public double ExpMem    { get; set; } = 0;
+        [JsonPropertyName("tier")]       public string Tier     { get; set; } = "";
     }
 
     public sealed class CpuRefNominal
     {
-        public bool   Found;             // true si un CPU de la base a matché
-        public string MatchedModel = ""; // libellé canonique trouvé
-        public double NominalMono;       // Mio/s attendus en mono-thread
-        public double NominalMulti;      // Mio/s attendus en multi-thread
+        public bool   Found;
+        public string MatchedModel = "";
+        public double NominalMono;
+        public double NominalMulti;
+    }
+
+    /// <summary>Retour enrichi pour Benchmark v2 : scores attendus + tier + voisins.</summary>
+    public sealed class CpuRefV2
+    {
+        public bool   Found;
+        public string MatchedModel = "";
+        public string Tier         = "";
+        public double ExpectedSingleMops;   // Mops/s attendus pour ce CPU sur sonde single
+        public double ExpectedMultiMops;
+        public double ExpectedMemMops;
+        public List<(string Name, int Score)> Neighbors = new();
     }
 
     public static class CpuReference
     {
-        // Coefficient « Mio/s SHA512 par GHz par cœur » selon la génération.
-        // Calibré empiriquement, ancré sur la mesure Arrow Lake (Core Ultra 7 265K, 20 cœurs, ~12200).
-        // Mono-thread P-core : on suppose ~148 Mio/s/GHz pour Arrow Lake → les autres générations
-        // suivent les ratios IPC connus (ARK/AnandTech grand public, pas de données propriétaires).
-        // Pas parfait, mais cohérent à ±15 % au sein d'une même génération.
-        private static readonly Dictionary<string, (double pCoef, double eCoef)> GenCoef = new(StringComparer.OrdinalIgnoreCase)
+        // ─── FORMULE THEORIQUE par CPU (corrige le biais de calibration sur 1 user) ──
+        // Pour chaque CPU dans la table, on CALCULE son score nominal a partir de ses
+        // propres specs (cores, boost, generation) au lieu de tout comparer a un pivot
+        // unique. Comme ca un user avec un 7800X3D obtient un score relatif au nominal
+        // d'un 7800X3D, pas au nominal d'un 265K.
+        //
+        // Methodologie :
+        //   single_nominal_mpxs = PBoost_GHz * IPC_factor_single(gen)
+        //   multi_nominal_mpxs  = min(8, cores_actifs) * boost_eff * IPC_factor * efficiency
+        //                         (limite a 8 threads car le bench multi est sur 8 threads max)
+        //   mem_nominal_mhops   = base_mem(gen) * factor_cores_count
+        //
+        // IPC_factor_single : Mpx/s de Mandelbrot par GHz par P-core, calibre
+        //   approximativement sur les ratios IPC publics (Geekbench 6, AnandTech).
+        //   Reference Arrow Lake = 40 Mpx/s/GHz.
+        private static readonly Dictionary<string, double> IpcSingle = new(StringComparer.OrdinalIgnoreCase)
         {
             // AMD
+            ["Zen 1"]       = 22,
+            ["Zen+"]        = 24,
+            ["Zen 2"]       = 28,
+            ["Zen 3"]       = 32,
+            ["Zen 4"]       = 36,
+            ["Zen 5"]       = 42,
+            // Intel
+            ["Skylake"]     = 22,
+            ["Coffee Lake"] = 24,
+            ["Comet Lake"]  = 25,
+            ["Rocket Lake"] = 30,
+            ["Alder Lake"]  = 32,
+            ["Raptor Lake"] = 36,
+            ["Meteor Lake"] = 37,
+            ["Arrow Lake"]  = 40,    // ancre : 265K 5.5 GHz -> 220 Mpx/s = 40 Mpx/s/GHz
+            ["Lunar Lake"]  = 39,
+        };
+
+        // Efficacite multi-thread sur 8 threads : sur P-cores 100%, sur E-cores ~65%.
+        // Le bench multi tourne sur min(8, ProcessorCount) threads. Pour les CPU avec
+        // moins de 8 cores, on a moins de threads mais ils saturent les P-cores.
+        private const double MtEfficiency = 0.92;        // overhead negligeable a 8 threads
+        private const double EcoreFactor  = 0.65;        // un E-core ≈ 65% d'un P-core
+        // Bande passante memoire nominale (Mhops/s pointer-chase) selon archi.
+        // Limite physiquement par la latence DDR (~70 ns DDR5 -> ~14 Mhops/s plafond).
+        private static readonly Dictionary<string, double> MemNominal = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Arrow Lake"]  = 16, ["Lunar Lake"]  = 14,
+            ["Meteor Lake"] = 14, ["Raptor Lake"] = 13, ["Alder Lake"]  = 13,
+            ["Rocket Lake"] = 11, ["Comet Lake"]  = 10, ["Coffee Lake"] = 9, ["Skylake"] = 9,
+            ["Zen 5"]       = 17, ["Zen 4"]       = 14, ["Zen 3"]      = 12,
+            ["Zen 2"]       = 10, ["Zen+"]        = 9,  ["Zen 1"]      = 8,
+        };
+
+        // Coefficient legacy v1 (formule SHA512). Garde pour compat fallback.
+        private static readonly Dictionary<string, (double pCoef, double eCoef)> GenCoef = new(StringComparer.OrdinalIgnoreCase)
+        {
             ["Zen 1"]       = (70,  0),
             ["Zen+"]        = (75,  0),
             ["Zen 2"]       = (85,  0),
             ["Zen 3"]       = (105, 0),
             ["Zen 4"]       = (125, 0),
             ["Zen 5"]       = (140, 0),
-            // Intel desktop / laptop H
             ["Skylake"]     = (70,  0),
             ["Coffee Lake"] = (75,  0),
             ["Comet Lake"]  = (80,  0),
             ["Rocket Lake"] = (95,  0),
-            ["Alder Lake"]  = (115, 75),    // E-core Gracemont ≈ 65 % d'un P-core
-            ["Raptor Lake"] = (130, 85),    // E-core Gracemont amélioré
-            ["Meteor Lake"] = (135, 95),    // Core Ultra 100
-            ["Arrow Lake"]  = (148, 110),   // Core Ultra 200, E-core Skymont (~75 % d'un P-core)
-            ["Lunar Lake"]  = (140, 105),   // Core Ultra 200V (mobile)
+            ["Alder Lake"]  = (115, 75),
+            ["Raptor Lake"] = (130, 85),
+            ["Meteor Lake"] = (135, 95),
+            ["Arrow Lake"]  = (148, 110),
+            ["Lunar Lake"]  = (140, 105),
         };
 
         private static List<CpuRefEntry>? _cache;
-
         private static string DataPath => PathLayout.CpuReference;
 
         private static List<CpuRefEntry> Load()
@@ -82,13 +155,64 @@ namespace Optimisation_Tool.Helpers
                 _cache = JsonSerializer.Deserialize<List<CpuRefEntry>>(File.ReadAllText(DataPath)) ?? new();
             }
             catch { _cache = new(); }
-            return _cache;
+            return _cache!;
         }
 
-        /// <summary>Tente de matcher le nom WMI du CPU avec une entrée de la base.</summary>
+        /// <summary>Reset cache (utile si on edite le JSON a chaud).</summary>
+        public static void Invalidate() { _cache = null; }
+
+        // Bases Mpx/s pour ratio=100 (= Core Ultra 7 265K, moyenne PassMark/GB6).
+        // Publiques : utilisees par PageBenchmark pour convertir la mesure du user
+        // en "points classement" comparables aux exp_* des autres CPUs.
+        public const double BaseSingleMpxsPublic = 220.0;
+        public const double BaseMultiMpxsPublic  = 1800.0;
+
+        /// <summary>
+        /// Classement type Cinebench : CPUs calibres (exp_multi > 0) tries par
+        /// exp_multi decroissant, recentre autour du CPU du user (jusqu'a
+        /// 'around' CPUs au-dessus et en-dessous). Retourne (modele, ratio multi,
+        /// estCpuDuUser). Les ratios sont sur l'echelle 265K = 100.
+        /// </summary>
+        public static List<(string Model, double Ratio, bool IsUser)> GetLadder(string matchedModel, int around = 3)
+        {
+            var all = Load()
+                .Where(e => e.ExpMulti > 0)
+                .GroupBy(e => e.Model).Select(g => g.First())   // dedoublonne
+                .OrderByDescending(e => e.ExpMulti)
+                .ToList();
+            var result = new List<(string, double, bool)>();
+            int idx = all.FindIndex(e => e.Model == matchedModel);
+            if (idx < 0)
+            {
+                // CPU non calibre : top 'around*2' du classement, sans marqueur user
+                foreach (var e in all.Take(around * 2))
+                    result.Add((e.Model, e.ExpMulti, false));
+                return result;
+            }
+            int from = Math.Max(0, idx - around);
+            int to   = Math.Min(all.Count - 1, idx + around);
+            for (int i = from; i <= to; i++)
+                result.Add((all[i].Model, all[i].ExpMulti, i == idx));
+            return result;
+        }
+
+        // ═════ API v1 (gardee pour compat) ════════════════════════════════════
         public static CpuRefNominal Lookup(string cpuName)
         {
-            var result = new CpuRefNominal();
+            var v2 = LookupV2(cpuName, Environment.ProcessorCount);
+            return new CpuRefNominal
+            {
+                Found        = v2.Found,
+                MatchedModel = v2.MatchedModel,
+                NominalMono  = v2.ExpectedSingleMops,
+                NominalMulti = v2.ExpectedMultiMops,
+            };
+        }
+
+        // ═════ API v2 : scores attendus + tier + voisins ══════════════════════
+        public static CpuRefV2 LookupV2(string cpuName, int currentCpuThreads)
+        {
+            var result = new CpuRefV2();
             if (string.IsNullOrWhiteSpace(cpuName)) return result;
 
             string norm = Normalize(cpuName);
@@ -101,7 +225,6 @@ namespace Optimisation_Tool.Helpers
                         if (Normalize(a) == norm) { match = e; break; }
                 if (match != null) break;
             }
-            // Fallback : matching tolérant (le nom WMI contient le modèle, ou inverse)
             if (match == null)
             {
                 foreach (var e in Load())
@@ -112,18 +235,78 @@ namespace Optimisation_Tool.Helpers
             }
             if (match == null) return result;
 
-            if (!GenCoef.TryGetValue(match.Gen, out var coef))
-                return result;   // génération non calibrée → on s'abstient (silencieux)
-
             result.Found        = true;
             result.MatchedModel = match.Model;
-            result.NominalMono  = match.PBoost * coef.pCoef;
-            result.NominalMulti = match.PCores * match.PBoost * coef.pCoef
-                                + match.ECores * match.EBoost * coef.eCoef;
+            result.Tier         = match.Tier;
+
+            // ─── CALIBRATION GEEKBENCH 6 (donnees publiques objectives) ──────
+            // Reference : Intel Core Ultra 7 265K dans la moyenne Geekbench Browser
+            //   ~3300 GB6 ST  /  ~22500 GB6 MT
+            // Dans notre bench Mandelbrot, ca correspond a :
+            //   Single  220 Mpx/s
+            //   Multi   1800 Mpx/s
+            //   Mem      17 Mhops/s   (~70 ns latence DDR5, peu de variation entre CPU)
+            // Ce sont les BASES pour score=100. Chaque CPU a ses exp_single/exp_multi
+            // dans cpu_reference.json, calibres = (GB6_du_CPU / GB6_du_265K) * 100.
+            // Donc nominal_du_CPU = base_265K * exp_du_CPU / 100.
+            const double BaseSingleMpxs = BaseSingleMpxsPublic;
+            const double BaseMultiMpxs  = BaseMultiMpxsPublic;
+            const double BaseMemMhops   = 17.0;
+
+            if (match.ExpSingle > 0)
+            {
+                // Calibration Geekbench presente : on utilise directement le ratio.
+                result.ExpectedSingleMops = BaseSingleMpxs * match.ExpSingle / 100.0;
+            }
+            else
+            {
+                // Fallback formule theorique (CPU pas dans la table calibree).
+                double ipc = IpcSingle.TryGetValue(match.Gen, out var ipcVal) ? ipcVal : 36;
+                result.ExpectedSingleMops = match.PBoost * ipc;
+            }
+
+            if (match.ExpMulti > 0)
+            {
+                result.ExpectedMultiMops = BaseMultiMpxs * match.ExpMulti / 100.0;
+            }
+            else
+            {
+                double ipc = IpcSingle.TryGetValue(match.Gen, out var ipcVal) ? ipcVal : 36;
+                int pUsed = Math.Min(8, match.PCores);
+                int eUsed = Math.Min(8 - pUsed, match.ECores);
+                double multiOps = pUsed * match.PBoost * ipc
+                                + eUsed * match.EBoost * ipc * EcoreFactor;
+                result.ExpectedMultiMops = multiOps * MtEfficiency;
+            }
+
+            if (match.ExpMem > 0)
+            {
+                result.ExpectedMemMops = BaseMemMhops * match.ExpMem / 100.0;
+            }
+            else
+            {
+                double memNom = MemNominal.TryGetValue(match.Gen, out var mn) ? mn : 12;
+                double memMultiplier = 1.0;
+                if (match.Model.Contains("X3D", StringComparison.OrdinalIgnoreCase)) memMultiplier = 1.15;
+                else if (match.Model.EndsWith("K") || match.Model.EndsWith("KF") || match.Model.EndsWith("KS"))
+                    memMultiplier = 1.05;
+                result.ExpectedMemMops = memNom * memMultiplier;
+            }
+
+            // Voisins du meme tier (jusqu'a 4) pour le comparatif
+            if (!string.IsNullOrEmpty(match.Tier))
+            {
+                result.Neighbors = Load()
+                    .Where(e => e.Tier == match.Tier && e.Model != match.Model && e.ExpMulti > 0)
+                    .OrderByDescending(e => e.ExpMulti)
+                    .Take(4)
+                    .Select(e => (e.Model, (int)Math.Round(e.ExpMulti)))
+                    .ToList();
+            }
+
             return result;
         }
 
-        // Normalisation : minuscules, supprime (R)/(TM), espaces multiples, "CPU @ x.xGHz"
         private static string Normalize(string s)
         {
             s = (s ?? "").ToLowerInvariant();

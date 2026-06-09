@@ -87,6 +87,8 @@ namespace Optimisation_Tool.Pages
         {
             var d = await Task.Run(CollectHardware);
 
+            // Compat ascendante : les TxtXxx historiques restent populés au cas où d'autres
+            // bouts de code y accèdent (ils contiennent le bloc texte complet).
             TxtCPU.Text  = d.GetValueOrDefault("cpu",  "Erreur");
             TxtRAM.Text  = d.GetValueOrDefault("ram",  "Erreur");
             TxtGPU.Text  = d.GetValueOrDefault("gpu",  "Erreur");
@@ -94,16 +96,114 @@ namespace Optimisation_Tool.Pages
             TxtDisk.Text = d.GetValueOrDefault("disk", "Erreur");
             TxtMB.Text   = d.GetValueOrDefault("mb",   "Erreur");
 
+            // ── Refonte Bento 2026 : on extrait HEADLINE (gros) + DETAILS (petit)
+            // pour chaque catégorie, afin d'avoir une vraie hiérarchie typographique.
+            // On parse les chaînes existantes (1ère ligne = headline, reste = details)
+            // sauf pour CPU/RAM/GPU où on extrait spécifiquement le "big number" clé.
+            SplitHeadline(TxtCpuHead, TxtCpuBig, TxtCpuDetails,  d.GetValueOrDefault("cpu",  ""), CpuExtract);
+            SplitHeadline(TxtRamHead, TxtRamBig, TxtRamDetails,  d.GetValueOrDefault("ram",  ""), RamExtract);
+            SplitHeadline(TxtGpuHead, TxtGpuBig, TxtGpuDetails,  d.GetValueOrDefault("gpu",  ""), GpuExtract);
+            SplitHeadline(TxtOsHead,  null,      TxtOsDetails,   d.GetValueOrDefault("os",   ""), null);
+            SplitHeadline(TxtDiskHead,TxtDiskBig,TxtDiskDetails, d.GetValueOrDefault("disk", ""), DiskExtract);
+            SplitHeadline(TxtMbHead,  null,      TxtMbDetails,   d.GetValueOrDefault("mb",   ""), null);
+
             // Stocker fabricant + modèle pour le bouton BIOS
             _biosMfr   = d.GetValueOrDefault("mb_mfr",   "");
             _biosModel = d.GetValueOrDefault("mb_model",  "");
             BtnBios.IsEnabled = _biosModel.Length > 0;
 
-            // Teinte les valeurs chargées
+            // Teinte les valeurs chargées (compat)
             foreach (var tb in new[] { TxtCPU, TxtRAM, TxtGPU, TxtOS, TxtDisk, TxtMB })
                 tb.ClearValue(TextBlock.ForegroundProperty);
 
             _main.Log("Informations matérielles chargées.");
+        }
+
+        // ── Helpers d'extraction "big number" pour le layout Bento 2026 ──────────
+
+        /// <summary>Pose Head = 1ère ligne, Big = extracteur (peut être null), Details = reste.</summary>
+        private static void SplitHeadline(System.Windows.Controls.TextBlock? head,
+                                          System.Windows.Controls.TextBlock? big,
+                                          System.Windows.Controls.TextBlock? details,
+                                          string raw, Func<string, (string big, string details)>? extractor)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                if (head != null)    head.Text    = "—";
+                if (big != null)     big.Text     = "";
+                if (details != null) details.Text = "";
+                return;
+            }
+            var lines = raw.Replace("\r", "").Split('\n');
+            string firstLine = lines.Length > 0 ? lines[0].Trim() : "";
+            string rest = lines.Length > 1
+                ? string.Join("\n", lines.Skip(1).Select(s => s.Trim()).Where(s => s.Length > 0))
+                : "";
+
+            if (extractor != null)
+            {
+                var (bigVal, det) = extractor(raw);
+                if (head != null)    head.Text    = firstLine;
+                if (big != null)     big.Text     = bigVal;
+                if (details != null) details.Text = det;
+            }
+            else
+            {
+                if (head != null)    head.Text    = firstLine;
+                if (details != null) details.Text = rest;
+            }
+        }
+
+        // CPU : "Intel Core Ultra 7 265K\n20C / 20T | L3 : 30 Mo | L2 : 36 Mo\nFréq. max : 3,9 GHz\nArrow Lake | Socket : LGA1851"
+        //   big = la fréquence max (genre "3,9 GHz")
+        //   details = MULTI-LIGNE : toutes les lignes après le nom SAUF la fréq. max (qui est dans big)
+        private static (string big, string details) CpuExtract(string raw)
+        {
+            var lines = raw.Replace("\r", "").Split('\n')
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .ToList();
+            var m = System.Text.RegularExpressions.Regex.Match(raw, @"(\d+[,.]?\d*)\s*GHz");
+            string big = m.Success ? m.Groups[1].Value.Replace('.', ',') + " GHz" : "";
+            // Détails = toutes les lignes après la 1ère (nom), sauf "Fréq. max" déjà dans big
+            var detailLines = lines.Skip(1)
+                .Where(l => !l.StartsWith("Fréq.", StringComparison.OrdinalIgnoreCase));
+            string details = string.Join("\n", detailLines);
+            return (big, details);
+        }
+
+        // RAM : "Total : 64 Go (2 x 32 Go)\nType : DDR5 @ 6400 MHz | 1,4V\n..."
+        //   big = "64 Go" (le total)
+        //   details = type DDR5 @ MHz + nb slots etc.
+        private static (string big, string details) RamExtract(string raw)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(raw, @"Total\s*:\s*(\d+\s*Go)");
+            string big = m.Success ? m.Groups[1].Value : "";
+            // Detail : les lignes après la 1ère
+            var lines = raw.Replace("\r", "").Split('\n').Skip(1)
+                .Select(s => s.Trim()).Where(s => s.Length > 0);
+            return (big, string.Join("\n", lines));
+        }
+
+        // GPU : "NVIDIA RTX 4070 SUPER | 12 Go VRAM\nDriver : 32.0.15.9649\nArchitecture : Ada Lovelace"
+        //   big = "12 Go" (la VRAM)
+        //   details = MULTI-LIGNE : driver + architecture
+        private static (string big, string details) GpuExtract(string raw)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(raw, @"(\d+\s*Go)\s*VRAM");
+            string big = m.Success ? m.Groups[1].Value : "";
+            var lines = raw.Replace("\r", "").Split('\n').Skip(1)
+                .Select(s => s.Trim()).Where(s => s.Length > 0);
+            return (big, string.Join("\n", lines));
+        }
+
+        // Stockage : "KINGSTON ... 480 Go\nPNY ... 500 Go\nSamsung ... 1000 Go"
+        //   big = nombre de disques (genre "3")
+        //   details = la liste complète
+        private static (string big, string details) DiskExtract(string raw)
+        {
+            var lines = raw.Replace("\r", "").Split('\n').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            return (lines.Count > 0 ? lines.Count.ToString() : "", string.Join("\n", lines));
         }
 
         private void BtnBios_Click(object sender, RoutedEventArgs e)
@@ -319,7 +419,7 @@ namespace Optimisation_Tool.Pages
             try
             {
                 using var s = new ManagementObjectSearcher(
-                    "SELECT Name, NumberOfCores, ThreadCount, NumberOfLogicalProcessors, MaxClockSpeed, L3CacheSize FROM Win32_Processor");
+                    "SELECT Name, NumberOfCores, ThreadCount, NumberOfLogicalProcessors, MaxClockSpeed, L2CacheSize, L3CacheSize, SocketDesignation FROM Win32_Processor");
                 foreach (ManagementObject o in s.Get())
                 {
                     // Nettoyage du nom : supprimer (R), (TM), "CPU", "@ X.XXGHz"
@@ -335,10 +435,41 @@ namespace Optimisation_Tool.Pages
                                ?? o["NumberOfLogicalProcessors"]?.ToString() ?? "?";
                     var mhz     = o["MaxClockSpeed"] != null ? Convert.ToDouble(o["MaxClockSpeed"]) : 0;
                     var freq    = mhz > 0 ? $"{Math.Round(mhz / 1000.0, 2):0.##} GHz" : "N/A";
+                    var l2kb    = o["L2CacheSize"] != null ? Convert.ToDouble(o["L2CacheSize"]) : 0;
                     var l3kb    = o["L3CacheSize"] != null ? Convert.ToDouble(o["L3CacheSize"]) : 0;
-                    var cache   = l3kb > 0 ? $"  |  L3 : {Math.Round(l3kb / 1024.0, 0)} Mo" : "";
+                    var cache3  = l3kb > 0 ? $"  |  L3 : {Math.Round(l3kb / 1024.0, 0)} Mo" : "";
+                    var cache2  = l2kb > 0 ? $"  |  L2 : {Math.Round(l2kb / 1024.0, 0)} Mo" : "";
+                    var arch    = DeriveCpuArch(name);
+                    var socket  = o["SocketDesignation"]?.ToString()?.Trim() ?? "";
+                    // SocketDesignation WMI = code interne (ex. "U3E1") qui ne dit rien à
+                    // l'utilisateur. On le remplace par le vrai nom du socket déduit du nom
+                    // commercial (LGA1851 pour Core Ultra 2xx, AM5 pour Ryzen 9000…).
+                    var realSocket = DeriveCpuSocket(name);
+                    if (realSocket.Length > 0) socket = realSocket;
 
-                    d["cpu"] = $"{name}\n{cores}C / {threads}T{cache}\nFréq. max : {freq}";
+                    // Hyper-Threading actif si threads > cores
+                    int.TryParse(cores,   out int ic);
+                    int.TryParse(threads, out int it);
+                    var ht = (ic > 0 && it > 0)
+                        ? (it > ic ? "Hyper-Threading actif" : "Hyper-Threading absent / désactivé")
+                        : "";
+
+                    // Lignes 2-4 du bloc CPU :
+                    //   ligne 2 : cœurs/threads + L3 + L2
+                    //   ligne 3 : fréq. max (extraite en big number côté UI)
+                    //   ligne 4 : architecture + socket
+                    //   ligne 5 : hyper-threading (si dispo)
+                    var archLine = "";
+                    if (arch.Length > 0 || socket.Length > 0)
+                    {
+                        var parts = new List<string>();
+                        if (arch.Length > 0)   parts.Add(arch);
+                        if (socket.Length > 0) parts.Add($"Socket : {socket}");
+                        archLine = "\n" + string.Join("  |  ", parts);
+                    }
+                    var htLine = ht.Length > 0 ? "\n" + ht : "";
+
+                    d["cpu"] = $"{name}\n{cores}C / {threads}T{cache3}{cache2}\nFréq. max : {freq}{archLine}{htLine}";
                     o.Dispose();
                     break;
                 }
@@ -390,13 +521,20 @@ namespace Optimisation_Tool.Pages
                     }
                     catch { }
 
-                    // Part number (S/N)
+                    // Configuration channels (déduit du nb de modules vs slots)
+                    var channels = DeriveRamChannels(mods.Count);
+                    if (channels.Length > 0) rt += $"\nConfiguration : {channels}";
+
+                    // Part number (S/N) + déduire le fabricant
                     var pn = first["PartNumber"]?.ToString()?.Trim() ?? "";
                     pn = Regex.Replace(pn, @"\s{2,}", " ");
                     if (pn.Length > 1 && pn != "Array Handle")
                     {
+                        var brand = DeriveRamBrand(pn);
                         if (pn.Length > 30) pn = pn[..30];
-                        rt += $"\nS/N : {pn}";
+                        rt += brand.Length > 0
+                            ? $"\nFabricant : {brand}  |  S/N : {pn}"
+                            : $"\nS/N : {pn}";
                     }
 
                     d["ram"] = rt;
@@ -469,7 +607,11 @@ namespace Optimisation_Tool.Pages
                     : "";
                 var drvStr = drv.Length > 0 ? $"\nDriver : {drv}" : "";
 
-                d["gpu"] = $"{name2}{vramStr}{drvStr}";
+                // Architecture déduite du nom (RTX 4xxx = Ada Lovelace, etc.)
+                var gpuArch = DeriveGpuArch(name2);
+                var archStr = gpuArch.Length > 0 ? $"\nArchitecture : {gpuArch}" : "";
+
+                d["gpu"] = $"{name2}{vramStr}{drvStr}{archStr}";
             }
             catch { d["gpu"] = "Indisponible"; }
 
@@ -477,7 +619,7 @@ namespace Optimisation_Tool.Pages
             try
             {
                 using var s = new ManagementObjectSearcher(
-                    "SELECT Caption, BuildNumber, OSArchitecture, LastBootUpTime FROM Win32_OperatingSystem");
+                    "SELECT Caption, BuildNumber, OSArchitecture, LastBootUpTime, InstallDate FROM Win32_OperatingSystem");
                 foreach (ManagementObject o in s.Get())
                 {
                     var name  = (o["Caption"]?.ToString() ?? "").Replace("Microsoft ", "").Trim();
@@ -515,7 +657,20 @@ namespace Optimisation_Tool.Pages
                     var pcName  = Environment.MachineName;
                     var upLine  = uptimeStr.Length > 0 ? $"\nUptime : {uptimeStr}" : "";
 
-                    d["os"] = $"{name}\nBuild {build}{ubr}  |  {arch}\nPC : {pcName}{upLine}";
+                    // Date d'installation Windows (WMI InstallDate)
+                    var installLine = "";
+                    try
+                    {
+                        var rawInstall = o["InstallDate"]?.ToString() ?? "";
+                        if (rawInstall.Length >= 14)
+                        {
+                            var inst = ManagementDateTimeConverter.ToDateTime(rawInstall);
+                            installLine = $"\nInstallé le : {inst:dd/MM/yyyy}";
+                        }
+                    }
+                    catch { }
+
+                    d["os"] = $"{name}\nBuild {build}{ubr}  |  {arch}\nPC : {pcName}{upLine}{installLine}";
                     o.Dispose();
                     break;
                 }
@@ -525,17 +680,30 @@ namespace Optimisation_Tool.Pages
             // ── Disques ──────────────────────────────────────────────────────
             try
             {
-                var lines = new List<string>();
+                var lines    = new List<string>();
+                long totalB  = 0;
                 using var s = new ManagementObjectSearcher(
-                    "SELECT Model, Size FROM Win32_DiskDrive");
+                    "SELECT Model, Size, InterfaceType, MediaType FROM Win32_DiskDrive");
                 foreach (ManagementObject o in s.Get())
                 {
                     var model = o["Model"]?.ToString()?.Trim() ?? "";
                     if (string.IsNullOrEmpty(model)) { o.Dispose(); continue; }
                     long sizeB  = o["Size"] != null ? Convert.ToInt64(o["Size"].ToString()) : 0L;
+                    totalB += sizeB;
                     var  sizeGb = sizeB > 0 ? $"  {Math.Round(sizeB / 1_000_000_000.0, 0)} Go" : "";
-                    lines.Add($"{model}{sizeGb}");
+                    // Type déduit du modèle + interface
+                    var iface   = o["InterfaceType"]?.ToString() ?? "";
+                    var diskType = DeriveDiskType(model, iface);
+                    var typeTag  = diskType.Length > 0 ? $"  [{diskType}]" : "";
+                    lines.Add($"{model}{sizeGb}{typeTag}");
                     o.Dispose();
+                }
+                if (lines.Count > 0 && totalB > 0)
+                {
+                    var totalStr = totalB >= 1_000_000_000_000L
+                        ? $"{Math.Round(totalB / 1_000_000_000_000.0, 2)} To"
+                        : $"{Math.Round(totalB / 1_000_000_000.0, 0)} Go";
+                    lines.Add($"Capacité totale : {totalStr}");
                 }
                 d["disk"] = lines.Count > 0 ? string.Join("\n", lines) : "Indisponible";
             }
@@ -575,6 +743,15 @@ namespace Optimisation_Tool.Pages
                 var lines = new List<string>();
                 if (mfr.Length  > 0) lines.Add(mfr);
                 if (prod.Length > 0) lines.Add(prod);
+
+                // Chipset extrait du nom du modèle + plateforme
+                var chipset = DeriveChipset(prod);
+                if (chipset.Length > 0)
+                {
+                    var platform = DetectMbPlatform(prod);
+                    lines.Add($"Chipset : {chipset}  |  Plateforme : {platform}");
+                }
+
                 if (biosLine.Length > 0) lines.Add(biosLine);
 
                 d["mb"]       = lines.Count > 0 ? string.Join("\n", lines) : "Indisponible";
@@ -591,6 +768,171 @@ namespace Optimisation_Tool.Pages
         // vrai (CPU SHA512 + jitter système + ping) au lieu d'agréger des bits de registre. Toutes
         // les méthodes liées (LoadScoreAsync, CalcScore, AnimateRing, SetRing, Lighten, ScoreLabel,
         // PerfPlanGuids, Dw, IsPerfPowerPlanActive, BtnRefreshScore_Click) ont été retirées.
+
+        // ── Helpers de déduction (v1.3.0) ────────────────────────────────────
+        // Ces fonctions enrichissent les specs avec des infos déduites des chaînes
+        // produites par WMI. Pas d'I/O supplémentaire, juste du pattern matching.
+
+        /// <summary>Architecture CPU déduite du nom commercial (Arrow Lake, Zen 5, etc.).</summary>
+        private static string DeriveCpuArch(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            var u = name.ToUpperInvariant();
+
+            // INTEL
+            if (u.Contains("CORE ULTRA"))
+            {
+                // Core Ultra 2xx (200-series) = Arrow Lake desktop / Lunar Lake mobile
+                if (Regex.IsMatch(u, @"ULTRA\s+\d+\s+2\d{2}"))
+                {
+                    // Suffixe H/U = Lunar Lake, sinon (K/F/KF) = Arrow Lake desktop
+                    if (Regex.IsMatch(u, @"2\d{2}[HU]")) return "Lunar Lake";
+                    return "Arrow Lake";
+                }
+                // Core Ultra 1xx = Meteor Lake
+                if (Regex.IsMatch(u, @"ULTRA\s+\d+\s+1\d{2}")) return "Meteor Lake";
+            }
+            if (Regex.IsMatch(u, @"\bI\d-15\d{3}"))  return "Arrow Lake";
+            if (Regex.IsMatch(u, @"\bI\d-14\d{3}"))  return "Raptor Lake Refresh";
+            if (Regex.IsMatch(u, @"\bI\d-13\d{3}"))  return "Raptor Lake";
+            if (Regex.IsMatch(u, @"\bI\d-12\d{3}"))  return "Alder Lake";
+            if (Regex.IsMatch(u, @"\bI\d-11\d{3}"))  return "Rocket Lake";
+            if (Regex.IsMatch(u, @"\bI\d-10\d{3}"))  return "Comet Lake";
+            if (Regex.IsMatch(u, @"\bI\d-9\d{3}"))   return "Coffee Lake Refresh";
+            if (Regex.IsMatch(u, @"\bI\d-8\d{3}"))   return "Coffee Lake";
+
+            // AMD RYZEN
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+9\d{3}"))  return "Zen 5";
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+7\d{3}"))  return "Zen 4";
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+5\d{3}"))  return "Zen 3";
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+3\d{3}"))  return "Zen 2";
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+2\d{3}"))  return "Zen+";
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+1\d{3}"))  return "Zen";
+
+            return "";
+        }
+
+        /// <summary>
+        /// Socket CPU déduit du nom commercial (LGA1851, LGA1700, AM5, AM4…). WMI ne donne
+        /// qu'un code interne opaque (ex. "U3E1") — on le remplace par le vrai nom de socket
+        /// que les utilisateurs connaissent (et qui apparaît sur les fiches constructeur).
+        /// </summary>
+        private static string DeriveCpuSocket(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            var u = name.ToUpperInvariant();
+
+            // INTEL
+            // Core Ultra 2xx (Arrow Lake) = LGA1851
+            if (Regex.IsMatch(u, @"ULTRA\s+\d+\s+2\d{2}"))                       return "LGA1851";
+            // Core i 12xxx / 13xxx / 14xxx = LGA1700
+            if (Regex.IsMatch(u, @"\bI\d-1[234]\d{3}"))                          return "LGA1700";
+            // Core i 10xxx / 11xxx = LGA1200
+            if (Regex.IsMatch(u, @"\bI\d-1[01]\d{3}"))                           return "LGA1200";
+            // Core i 8xxx / 9xxx = LGA1151
+            if (Regex.IsMatch(u, @"\bI\d-[89]\d{3}"))                            return "LGA1151";
+
+            // AMD
+            // Ryzen 9000 / 8000 / 7000 = AM5
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+[789]\d{3}"))                   return "AM5";
+            // Ryzen 5000 / 4000 / 3000 / 2000 / 1000 = AM4
+            if (Regex.IsMatch(u, @"RYZEN\s+\d+\s+[12345]\d{3}"))                 return "AM4";
+            // Threadripper = TR4 / sTRX4 / sTR5 (variable, on laisse vide)
+
+            return "";
+        }
+
+        /// <summary>Architecture GPU déduite du nom (Ada Lovelace, RDNA 3, Blackwell, etc.).</summary>
+        private static string DeriveGpuArch(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            var u = name.ToUpperInvariant();
+
+            // NVIDIA
+            if (Regex.IsMatch(u, @"RTX\s*50\d{2}"))     return "Blackwell";
+            if (Regex.IsMatch(u, @"RTX\s*40\d{2}"))     return "Ada Lovelace";
+            if (Regex.IsMatch(u, @"RTX\s*30\d{2}"))     return "Ampere";
+            if (Regex.IsMatch(u, @"RTX\s*20\d{2}"))     return "Turing";
+            if (Regex.IsMatch(u, @"GTX\s*16\d{2}"))     return "Turing";
+            if (Regex.IsMatch(u, @"GTX\s*10\d{2}"))     return "Pascal";
+            if (Regex.IsMatch(u, @"GTX\s*9\d{2}"))      return "Maxwell";
+
+            // AMD
+            if (Regex.IsMatch(u, @"RX\s*9\d{3}"))       return "RDNA 4";
+            if (Regex.IsMatch(u, @"RX\s*7\d{3}"))       return "RDNA 3";
+            if (Regex.IsMatch(u, @"RX\s*6\d{3}"))       return "RDNA 2";
+            if (Regex.IsMatch(u, @"RX\s*5\d{3}"))       return "RDNA";
+            if (Regex.IsMatch(u, @"RADEON.*VEGA"))      return "Vega (GCN 5)";
+
+            // Intel Arc
+            if (u.Contains("ARC B"))                    return "Battlemage";
+            if (u.Contains("ARC A"))                    return "Alchemist";
+
+            return "";
+        }
+
+        /// <summary>Configuration des canaux RAM selon le nombre de modules installés.</summary>
+        private static string DeriveRamChannels(int modules)
+        {
+            return modules switch
+            {
+                1 => "Single channel",
+                2 => "Dual channel",
+                3 => "Triple channel",
+                4 => "Quad channel",
+                _ => modules > 0 ? $"{modules} modules" : "",
+            };
+        }
+
+        /// <summary>Marque de la RAM déduite du préfixe du PartNumber (F4/F5 = G.Skill, etc.).</summary>
+        private static string DeriveRamBrand(string pn)
+        {
+            if (string.IsNullOrEmpty(pn)) return "";
+            var u = pn.ToUpperInvariant().TrimStart();
+
+            // G.Skill : F3/F4/F5
+            if (Regex.IsMatch(u, @"^F[3-5]-"))           return "G.Skill";
+            // Corsair Vengeance : CMK / CMW / CMH / CMT (Dominator)
+            if (Regex.IsMatch(u, @"^CM[KWHT]"))          return "Corsair";
+            // Kingston Fury : KF / HX
+            if (Regex.IsMatch(u, @"^KF\d") || u.StartsWith("HX")) return "Kingston";
+            // Crucial Ballistix : BL / CT
+            if (u.StartsWith("BL") || u.StartsWith("CT")) return "Crucial";
+            // Team Group / T-Force
+            if (u.StartsWith("TFORCE") || u.StartsWith("T-FORCE") || u.StartsWith("TLZ") || u.StartsWith("TF")) return "Team Group";
+            // ADATA : AD / AX
+            if (u.StartsWith("AX") || u.StartsWith("AD")) return "ADATA / XPG";
+            // Patriot : PV
+            if (u.StartsWith("PV"))                       return "Patriot";
+
+            return "";
+        }
+
+        /// <summary>Chipset extrait du nom de la carte mère (B860, X870E, Z790, etc.).</summary>
+        private static string DeriveChipset(string model)
+        {
+            if (string.IsNullOrEmpty(model)) return "";
+            // Intel : Z/H/B/Q + 3 chiffres (ex. Z790, B760, H770)
+            var m = Regex.Match(model, @"\b([ZHBQ]\d{3})\b", RegexOptions.IgnoreCase);
+            if (m.Success) return m.Groups[1].Value.ToUpperInvariant();
+            // AMD : A/B/X + 3 chiffres + suffixe E optionnel (ex. X670E, B650, X870)
+            m = Regex.Match(model, @"\b([ABX]\d{3}E?)\b", RegexOptions.IgnoreCase);
+            if (m.Success) return m.Groups[1].Value.ToUpperInvariant();
+            return "";
+        }
+
+        /// <summary>Type de disque (NVMe / SSD / HDD) déduit du modèle + interface.</summary>
+        private static string DeriveDiskType(string model, string iface)
+        {
+            var u = model.ToUpperInvariant();
+            if (u.Contains("NVME") || u.Contains("PCIE") || u.Contains("M.2"))  return "NVMe";
+            // Patterns NVMe communs (Samsung 980/990, WD Black SN, Crucial P3/P5, Sabrent Rocket)
+            if (Regex.IsMatch(u, @"\b(SN\d{3}|P[1-5]|9[5689]0|MP\d{3}|ROCKET)\b")) return "NVMe";
+            if (u.Contains("SSD"))                                              return "SSD";
+            if (iface == "SCSI" || u.Contains("HDD") || Regex.IsMatch(u, @"\b(WD|SEAGATE|HITACHI|TOSHIBA).*\b(BLUE|BLACK|RED|PURPLE|GOLD|BARRACUDA|IRONWOLF)\b"))
+                return "HDD";
+            return "";
+        }
 
         // ── Helpers GPU ───────────────────────────────────────────────────────
 

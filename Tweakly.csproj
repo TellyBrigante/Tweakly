@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- WinForms NON utilisé : la cohabitation WPF + WinForms NotifyIcon cassait le 1er
+         paint WPF (fenêtre noire au démarrage), même avec le fix officiel
+         SetSynchronizationContext. La tray icon est implémentée en P/Invoke direct
+         (Shell_NotifyIcon) dans Helpers/TrayIconManager.cs — zéro dépendance WinForms. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace>Optimisation_Tool</RootNamespace>
     <AssemblyName>Tweakly</AssemblyName>

@@ -42,6 +42,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- ════════════════════════════════════════════════════════════
@@ -61,11 +62,17 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Bottom">
-                                <TextBlock Text="TWEAKLY SCORE" Style="{StaticResource BCat}" VerticalAlignment="Bottom" Margin="0,0,12,4"/>
-                                <TextBlock x:Name="TxtVerdict" Text="—" VerticalAlignment="Bottom"
+                            <!-- v1.3.0 : alignement baseline corrigé. Avant : BCat (11pt SemiBold) avait
+                                 un Margin="0,0,12,4" qui le faisait monter de 4px par rapport à TxtVerdict
+                                 (11.5pt Normal sans margin) → mal aligné. Maintenant : même FontSize 11,
+                                 VerticalAlignment Center, margin droit seulement sur le titre. -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="TWEAKLY SCORE" Style="{StaticResource BCat}"
+                                           VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <TextBlock x:Name="TxtVerdict" Text="—"
+                                           VerticalAlignment="Center"
                                            Foreground="{DynamicResource ThTextDim}"
-                                           FontFamily="{StaticResource AppFont}" FontSize="11.5"/>
+                                           FontFamily="{StaticResource AppFont}" FontSize="11"/>
                             </StackPanel>
                             <TextBlock Grid.Column="1" x:Name="TxtLastWhen" Text=""
                                        Foreground="{DynamicResource ThTextDim}"
@@ -191,13 +198,17 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Mesuré" Style="{StaticResource BLabel}"/>
-                                <TextBlock x:Name="TxtCpuMeasured" Text="—" Style="{StaticResource BValue}"/>
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="CPU" Style="{StaticResource BLabel}"/>
+                                <TextBlock x:Name="TxtCpuMeasured" Text="—"
+                                           Style="{StaticResource BValue}"
+                                           TextWrapping="Wrap" LineHeight="17"/>
                             </StackPanel>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Text="Nominal" Style="{StaticResource BLabel}"/>
-                                <TextBlock x:Name="TxtCpuNominal" Text="—" Style="{StaticResource BValue}"/>
+                                <TextBlock Text="MÉMOIRE (RAM)" Style="{StaticResource BLabel}"/>
+                                <TextBlock x:Name="TxtCpuNominal" Text="—"
+                                           Style="{StaticResource BValue}"
+                                           TextWrapping="Wrap" LineHeight="17"/>
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -233,13 +244,10 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
-                                <TextBlock Text="Mesuré" Style="{StaticResource BLabel}"/>
-                                <TextBlock x:Name="TxtSysMeasured" Text="—" Style="{StaticResource BValue}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="Cible (excellent)" Style="{StaticResource BLabel}"/>
-                                <TextBlock Text="&lt; 200 µs" Style="{StaticResource BValue}"/>
+                            <StackPanel Grid.Column="0" Grid.ColumnSpan="2">
+                                <TextBlock x:Name="TxtSysMeasured" Text="—"
+                                           Style="{StaticResource BValue}"
+                                           TextWrapping="Wrap" LineHeight="17"/>
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -289,9 +297,32 @@
             </Grid>
 
             <!-- ════════════════════════════════════════════════════════════
+                 BLOC 2bis — CLASSEMENT CPU (type Cinebench) — v1.3.0
+                 Barres horizontales : les CPUs voisins du tien (nominal calibré
+                 sur les données publiques PassMark/Geekbench) + TA mesure réelle
+                 mise en évidence. Rempli par RefreshLadder() en code-behind.
+            ════════════════════════════════════════════════════════════ -->
+            <Border x:Name="LadderTile" Grid.Row="2" Style="{StaticResource BTile}" Margin="0,12,0,0"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="CLASSEMENT CPU" Style="{StaticResource BCat}"/>
+                        <TextBlock Grid.Column="1" Text="référence : moyennes publiques PassMark"
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="10.5"/>
+                    </Grid>
+                    <StackPanel x:Name="LadderPanel"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ════════════════════════════════════════════════════════════
                  BLOC 3 — Historique (avec mini-sparkline en en-tête)
             ════════════════════════════════════════════════════════════ -->
-            <Border Grid.Row="2" Style="{StaticResource BTile}" Margin="0,12,0,0">
+            <Border Grid.Row="3" Style="{StaticResource BTile}" Margin="0,12,0,0">
                 <StackPanel>
                     <Grid Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
@@ -312,7 +343,7 @@
             <!-- ════════════════════════════════════════════════════════════
                  BLOC 4 — Comparateur
             ════════════════════════════════════════════════════════════ -->
-            <Border Grid.Row="3" Style="{StaticResource BTile}" Margin="0,12,0,0">
+            <Border Grid.Row="4" Style="{StaticResource BTile}" Margin="0,12,0,0">
                 <StackPanel>
                     <Grid Margin="0,0,0,10">
                         <Grid.ColumnDefinitions>
@@ -331,7 +362,7 @@
             <!-- ════════════════════════════════════════════════════════════
                  BLOC 5 — Bouton « Effacer l'historique »
             ════════════════════════════════════════════════════════════ -->
-            <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
                 <Button x:Name="BtnClearHistory"
                         Content="EFFACER L'HISTORIQUE"
                         Style="{StaticResource SecondaryBtnStyle}"

@@ -347,7 +347,13 @@ namespace Optimisation_Tool.Pages
             }
             else
             {
-                _main.Log($"Réglages : erreur démarrage Windows — opération {(enable ? "activation" : "désactivation")} refusée.");
+                // On expose le message d'erreur exact (LastError) pour faciliter le diagnostic
+                // chez l'utilisateur. Bug v1.2.9 : Enable() retournait true sans créer la tâche
+                // (cas compte Microsoft) → la case se redécochait au redémarrage de l'app sans
+                // qu'on sache pourquoi. Maintenant on saura.
+                var reason = Helpers.StartupManager.LastError;
+                if (string.IsNullOrWhiteSpace(reason)) reason = "raison inconnue";
+                _main.Log($"Réglages : erreur démarrage Windows ({(enable ? "activation" : "désactivation")}) — {reason}");
                 // Revert silencieux de la case sans re-déclencher le handler
                 _loading = true; ChkStartup.IsChecked = !enable; _loading = false;
             }

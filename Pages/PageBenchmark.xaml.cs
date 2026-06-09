@@ -76,11 +76,16 @@ namespace Optimisation_Tool.Pages
             {
                 TxtOverlayPhase.Text = p.phase switch
                 {
-                    Benchmark.Phase.CpuMono  => "CPU — performance mono-thread…",
-                    Benchmark.Phase.CpuMulti => "CPU — performance multi-thread…",
-                    Benchmark.Phase.System   => "Système — réactivité (jitter timer)…",
-                    Benchmark.Phase.Network  => "Réseau — ping & jitter (1.1.1.1)…",
-                    Benchmark.Phase.Done     => "Calcul du score…",
+                    // v1.3.0 : 7 sondes gaming-oriented x 3 runs (médiane)
+                    Benchmark.Phase.CpuSingle => "CPU — single-thread (Mandelbrot) · 3 runs…",
+                    Benchmark.Phase.CpuMulti  => "CPU — multi-thread (8 cœurs max) · 3 runs…",
+                    Benchmark.Phase.CpuMem    => "CPU — accès mémoire (pointer-chase) · 3 runs…",
+                    Benchmark.Phase.SysFrame  => "Système — stabilité 60 Hz (frame time) · 3 runs…",
+                    Benchmark.Phase.SysInput  => "Système — latence d'entrée (jitter scheduler) · 3 runs…",
+                    Benchmark.Phase.RamBand   => "RAM — bande passante (STREAM Copy+Triad) · 3 runs…",
+                    Benchmark.Phase.RamLat    => "RAM — latence accès aléatoire · 3 runs…",
+                    Benchmark.Phase.Network   => "Réseau — ping & jitter (1.1.1.1)…",
+                    Benchmark.Phase.Done      => "Calcul du score…",
                     _ => "…"
                 };
                 SetProgress(p.pct);
@@ -191,6 +196,34 @@ namespace Optimisation_Tool.Pages
             _      => "très faible — système en souffrance ou bruit pendant la mesure"
         };
 
+        /// <summary>
+        /// Verdict en français clair pour une carte de sous-score (CPU, Système, RAM).
+        /// Multi-ligne : ligne 1 = état général, ligne 2 = piste d'action.
+        /// </summary>
+        private static string Verdict(int score, string axis) => (score, axis) switch
+        {
+            ( >= 105, _      ) => "Au-dessus du nominal.\nTu tires le meilleur de ton matériel.",
+            ( >=  90, _      ) => "Dans la norme.\nRien à signaler, ton matériel rend ce qu'il doit.",
+            ( >=  75, "CPU"      ) => "Légèrement en dessous.\nThrottling thermique ou plan d'alim non Performances ?",
+            ( >=  75, "Système"  ) => "Légèrement en dessous.\nQuelques saccades possibles — réduis l'autostart.",
+            ( >=  75, _          ) => "Légèrement en dessous.\nVoir l'historique pour comparer.",
+            ( >=  60, "CPU"      ) => "Faible.\nVérifie températures CPU, plan d'alim, throttling thermique.",
+            ( >=  60, "Système"  ) => "Faible.\nDésactive HVCI / Power Throttling / autostart lourd.",
+            ( >=  60, _          ) => "Faible.\nQuelque chose t'empêche de rendre ta performance attendue.",
+            (    _,    "CPU"     ) => "Très faible.\nUn truc te ralentit fortement — vérifie chauffe, OC instable, ou bench bruité.",
+            (    _,    "Système" ) => "Très faible.\nSystème en souffrance — services Windows lourds, autostart, pilotes.",
+            (    _,    _         ) => "Très faible.\nRésultat anormal — relance le bench, peut-être bruité."
+        };
+
+        /// <summary>Verdict court pour la RAM (affiché compact à côté du CPU).</summary>
+        private static string ShortRam(int score) => score switch
+        {
+            >= 100 => "bande passante excellente",
+            >=  85 => "bande passante correcte",
+            >=  70 => "RAM un peu lente (XMP/EXPO activé ?)",
+            _      => "RAM faible — vérifie dual channel, XMP",
+        };
+
         // ── BLOC 2 : 3 sous-scores (CPU, Système, Réseau) ────────────────────
 
         private void RefreshSubScores()
@@ -209,29 +242,29 @@ namespace Optimisation_Tool.Pages
             var r = _history[0];
 
             // ── CPU (échelle 0-150) ─────────────────────────────────────────
+            // v1.3.0 bench v2 : 3 sondes (Single Mandelbrot / Multi 8t / Mem pointer-chase)
+            // + 2 sondes RAM affichées dans la même carte pour ne pas casser le layout.
             TxtCpuScore.Text = r.CpuScore.ToString();
             double cpuT = Math.Max(0, Math.Min(150, r.CpuScore));
             CpuCol.Width     = new GridLength(cpuT,         GridUnitType.Star);
             CpuColRest.Width = new GridLength(150.0 - cpuT, GridUnitType.Star);
-            if (r.HasNominalRef)
-            {
-                TxtCpuRefModel.Text = $"Référence : {r.NominalRefModel}";
-                TxtCpuMeasured.Text = $"{r.CpuMultiMops:F0} Mio/s";
-                TxtCpuNominal.Text  = $"{r.NominalMultiMops:F0} Mio/s";
-            }
-            else
-            {
-                TxtCpuRefModel.Text = $"CPU non répertorié — référence personnelle (1re mesure = 100)";
-                TxtCpuMeasured.Text = $"{r.CpuMultiMops:F0} Mio/s";
-                TxtCpuNominal.Text  = "—";
-            }
+
+            // Référence + verdict CPU
+            TxtCpuRefModel.Text = r.HasNominalRef
+                ? $"Référence : {r.NominalRefModel}"
+                  + (string.IsNullOrEmpty(r.CpuTier) ? "" : $"  ·  Tier : {r.CpuTier}")
+                : "CPU non répertorié — score relatif à la 1re mesure (= 100)";
+
+            // Verdict CPU en français clair (pas de chiffres techniques)
+            TxtCpuMeasured.Text = Verdict(r.CpuScore, "CPU");
+            TxtCpuNominal.Text  = $"RAM : {r.RamScore}/150  ·  {ShortRam(r.RamScore)}";
 
             // ── Système (échelle 0-100) ────────────────────────────────────
             TxtSysScore.Text = r.SysScore.ToString();
             double sysT = Math.Max(0, Math.Min(100, r.SysScore));
             SysCol.Width     = new GridLength(sysT,         GridUnitType.Star);
             SysColRest.Width = new GridLength(100.0 - sysT, GridUnitType.Star);
-            TxtSysMeasured.Text = $"{r.SysJitterMicroSec:F0} µs";
+            TxtSysMeasured.Text = Verdict(r.SysScore, "Système");
 
             // ── Réseau (échelle 0-100) ─────────────────────────────────────
             TxtNetScore.Text = r.NetScore.ToString();
@@ -242,6 +275,130 @@ namespace Optimisation_Tool.Pages
                 r.NetPingMs < 0
                     ? "—"
                     : $"{r.NetPingMs:F0} ms · jitter {r.NetJitterMs:F1} ms · perte {r.NetLossPct:F0} %";
+
+            // ── Classement CPU type Cinebench (v1.3.0) ─────────────────────
+            RefreshLadder(r);
+
+            // ── DUMP COMPLET dans le journal (pour calibration des pivots) ──
+            // L'utilisateur peut copier ces lignes pour qu'on ajuste les
+            // Pivot265K_* dans CpuReference.cs et obtenir un score 100 exact.
+            try
+            {
+                _main.Log($"Bench v2 — CPU '{r.CpuName}' threads={r.CpuThreads} ref={(r.HasNominalRef?r.NominalRefModel:"(aucune)")}");
+                _main.Log($"  CPU  Single  = {r.CpuSingleMops:F2} Mpx/s   → score {r.CpuSingleScore}");
+                _main.Log($"  CPU  Multi   = {r.CpuMultiMops:F2} Mpx/s   → score {r.CpuMultiScore}");
+                _main.Log($"  CPU  Mem     = {r.CpuMemMops:F2} Mhops/s → score {r.CpuMemScore}");
+                _main.Log($"  SYS  Frame   = {r.SysFrameJitterMs:F2} ms       → score {r.SysFrameScore}");
+                _main.Log($"  SYS  Input   = {r.SysInputJitterUs:F0} µs       → score {r.SysInputScore}");
+                _main.Log($"  RAM  Bandw.  = {r.RamBandwidthGBs:F2} GB/s     → score {r.RamBandwidthScore}");
+                _main.Log($"  RAM  Latence = {r.RamLatencyNs:F1} ns         → score {r.RamLatencyScore}");
+                _main.Log($"  NET  Ping    = {r.NetPingMs:F0} ms · jitter {r.NetJitterMs:F1} ms · perte {r.NetLossPct:F0}%");
+                _main.Log($"  TOTAL = {r.TotalScore} (CPU {r.CpuScore} · SYS {r.SysScore} · RAM {r.RamScore} · NET {r.NetScore}){(r.Unstable?"  ⚠ INSTABLE (écart >30% entre runs)":"")}");
+            }
+            catch { }
+        }
+
+        // ── BLOC 2bis : Classement CPU type Cinebench ─────────────────────────
+        // Barres horizontales : CPUs voisins du tien (nominal = moyennes publiques
+        // PassMark, échelle 265K = 100) + TA mesure réelle en accent bleu. Le but :
+        // voir d'un coup d'œil où ta machine se situe dans le classement réel.
+
+        private void RefreshLadder(BenchmarkResult r)
+        {
+            LadderPanel.Children.Clear();
+            if (!r.HasNominalRef) { LadderTile.Visibility = Visibility.Collapsed; return; }
+
+            var ladder = Helpers.CpuReference.GetLadder(r.NominalRefModel, around: 3);
+            if (ladder.Count == 0) { LadderTile.Visibility = Visibility.Collapsed; return; }
+
+            // Ta mesure réelle convertie en points classement (échelle 265K = 100)
+            double userPts = r.CpuMultiMops / Helpers.CpuReference.BaseMultiMpxsPublic * 100.0;
+
+            // Échelle = max entre tous les nominaux affichés et ta mesure
+            double maxPts = Math.Max(ladder.Max(e => e.Ratio), userPts) * 1.05;
+
+            // Construire la liste finale ordonnée : on insère TA MESURE à sa place
+            // dans le classement (entre les nominaux), marquée comme "user measure".
+            var rows = new List<(string label, double pts, int kind)>(); // kind: 0=autre, 1=nominal de ton CPU, 2=ta mesure
+            foreach (var (model, ratio, isUser) in ladder)
+                rows.Add((model, ratio, isUser ? 1 : 0));
+            rows.Add(("► TON PC (mesuré)", userPts, 2));
+            rows = rows.OrderByDescending(x => x.pts).ToList();
+
+            foreach (var (label, pts, kind) in rows)
+            {
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(46) });
+
+                // Nom du CPU (ou "TON PC")
+                var name = new TextBlock
+                {
+                    Text         = label,
+                    FontFamily   = (FontFamily)FindResource("AppFont"),
+                    FontSize     = 11.5,
+                    FontWeight   = kind != 0 ? FontWeights.Bold : FontWeights.Normal,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Margin       = new Thickness(0, 0, 10, 0),
+                };
+                if (kind == 2)      name.Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+                else if (kind == 1) name.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
+                else                name.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+                Grid.SetColumn(name, 0); row.Children.Add(name);
+
+                // Barre proportionnelle
+                var barHost = new Grid { Height = 14, VerticalAlignment = VerticalAlignment.Center };
+                barHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.5, pts), GridUnitType.Star) });
+                barHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.5, maxPts - pts), GridUnitType.Star) });
+                var bar = new Border { CornerRadius = new CornerRadius(3) };
+                if (kind == 2)
+                {
+                    bar.Background = new LinearGradientBrush(
+                        Color.FromRgb(0x3B, 0x82, 0xE0), Color.FromRgb(0x5B, 0xA0, 0xFF), 0);
+                }
+                else if (kind == 1)
+                {
+                    bar.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0xC4, 0x6A)) { Opacity = 0.55 };
+                }
+                else
+                {
+                    bar.SetResourceReference(Border.BackgroundProperty, "ThTrack");
+                }
+                Grid.SetColumn(bar, 0); barHost.Children.Add(bar);
+                Grid.SetColumn(barHost, 1); row.Children.Add(barHost);
+
+                // Valeur (points, échelle 265K = 100)
+                var val = new TextBlock
+                {
+                    Text       = pts.ToString("F0"),
+                    FontFamily = (FontFamily)FindResource("AppFont"),
+                    FontSize   = 11.5,
+                    FontWeight = kind != 0 ? FontWeights.Bold : FontWeights.Normal,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment   = VerticalAlignment.Center,
+                };
+                if (kind == 2) val.Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+                else           val.SetResourceReference(TextBlock.ForegroundProperty, kind == 1 ? "ThTextTitle" : "ThTextDim");
+                Grid.SetColumn(val, 2); row.Children.Add(val);
+
+                LadderPanel.Children.Add(row);
+            }
+
+            // Légende discrète
+            var legend = new TextBlock
+            {
+                Text = "Barres grises = score multi attendu des CPUs voisins (moyennes publiques)  ·  vert = ton CPU (nominal)  ·  bleu = ta mesure réelle",
+                FontFamily   = (FontFamily)FindResource("AppFont"),
+                FontSize     = 10.5,
+                TextWrapping = TextWrapping.Wrap,
+                Margin       = new Thickness(0, 8, 0, 0),
+            };
+            legend.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            LadderPanel.Children.Add(legend);
+
+            LadderTile.Visibility = Visibility.Visible;
         }
 
         // ── BLOC 3 : Historique + sparkline ──────────────────────────────────

@@ -90,54 +90,59 @@ namespace Optimisation_Tool.Pages
 
         private void AddIncidentCard(Incident inc, ref int idx)
         {
-            var card  = new Border { Style = (Style)FindResource("DTile"), Margin = new Thickness(0, 0, 0, 10) };
+            // Wrapper : bandeau couleur sévérité à gauche (4px) + carte (refonte UI v1.3.0)
+            var wrapper = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            wrapper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            wrapper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var stripe = new Border { CornerRadius = new CornerRadius(2, 0, 0, 2) };
+            stripe.SetResourceReference(Border.BackgroundProperty, SevRole(inc.Sev));
+            Grid.SetColumn(stripe, 0); wrapper.Children.Add(stripe);
+
+            var card  = new Border { Style = (Style)FindResource("DTile") };
             var stack = new StackPanel();
 
-            // En-tête : pastille + cause racine | date · n events · durée
-            var head = new Grid();
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // ── En-tête : grosse icône + titre 16 + badge sévérité + meta ──
+            stack.Children.Add(BuildHeader(inc.Icon, inc.Title, inc.Sev,
+                $"{inc.Start:dd/MM HH:mm}  ·  {inc.Count} évts  ·  {(int)(inc.End - inc.Start).TotalSeconds}s"));
 
-            var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
-            var hdot = new Ellipse
+            // Enchaînement (sous-titre discret)
+            if (!string.IsNullOrWhiteSpace(inc.Chain))
+                stack.Children.Add(Tb("Enchaînement : " + inc.Chain, "ThTextDim", 12, wrap: true,
+                                      margin: new Thickness(58, 6, 0, 0)));
+
+            // ── Pourquoi (Advice court) ──
+            if (!string.IsNullOrWhiteSpace(inc.Advice))
             {
-                Width = 10, Height = 10,
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
-            };
-            hdot.SetResourceReference(Shape.FillProperty, SevRole(inc.Sev));
-            titleRow.Children.Add(hdot);
-            var title = Tb(inc.Title, "ThTextTitle", 13.5, bold: true);
-            title.TextTrimming = TextTrimming.CharacterEllipsis; title.VerticalAlignment = VerticalAlignment.Center;
-            titleRow.Children.Add(title);
-            Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
+                stack.Children.Add(BuildSectionHeader("", "Pourquoi"));  // Info glyph
+                stack.Children.Add(Tb(inc.Advice, "ThTextBody", 12.5, wrap: true,
+                                      margin: new Thickness(58, 2, 0, 0)));
+            }
 
-            int span = (int)Math.Round((inc.End - inc.Start).TotalSeconds);
-            var meta = Tb($"{inc.Start:dd/MM HH:mm}  ·  {inc.Count} évts  ·  {span}s", "ThTextDim", 11.5,
-                          margin: new Thickness(10, 0, 0, 0));
-            meta.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(meta, 1); head.Children.Add(meta);
-            stack.Children.Add(head);
-
-            // Enchaînement
-            stack.Children.Add(Tb("Enchaînement : " + inc.Chain, "ThTextDim", 12, wrap: true,
-                                  margin: new Thickness(0, 10, 0, 0)));
-
-            // Recommandation (le cœur)
-            stack.Children.Add(new TextBlock
+            // ── Que faire (étapes numérotées) ──
+            if (inc.Steps != null && inc.Steps.Count > 0)
             {
-                Text = "Recommandation",
-                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
-                FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5, FontWeight = FontWeights.SemiBold,
-                Margin = new Thickness(0, 12, 0, 2),
-            });
-            stack.Children.Add(Tb(inc.Advice, "ThTextBody", 12.5, wrap: true, margin: new Thickness(0, 0, 0, 0)));
+                stack.Children.Add(BuildSectionHeader("", "Que faire"));  // Repair glyph
+                var box = BuildStepsList(inc.Steps);
+                box.Margin = new Thickness(58, 2, 0, 0);
+                stack.Children.Add(box);
+            }
 
-            // Détail des événements (capé)
+            // ── Boutons d'action ──
+            if (inc.Actions != null && inc.Actions.Count > 0)
+            {
+                var ar = BuildActionsRow(inc.Actions);
+                ar.Margin = new Thickness(58, 12, 0, 0);
+                stack.Children.Add(ar);
+            }
+
+            // ── Détail des événements (capé) ──
             int showN = Math.Min(8, inc.Events.Count);
             for (int i = 0; i < showN; i++)
             {
                 var (t, ttl, sev) = inc.Events[i];
-                var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, i == 0 ? 10 : 3, 0, 0) };
+                var line = new StackPanel { Orientation = Orientation.Horizontal,
+                                            Margin = new Thickness(58, i == 0 ? 14 : 3, 0, 0) };
                 var edot = new Ellipse
                 {
                     Width = 6, Height = 6,
@@ -150,11 +155,12 @@ namespace Optimisation_Tool.Pages
             }
             if (inc.Events.Count > showN)
                 stack.Children.Add(Tb($"+ {inc.Events.Count - showN} autre(s) événement(s)", "ThTextDim", 11,
-                                      margin: new Thickness(16, 3, 0, 0)));
+                                      margin: new Thickness(74, 3, 0, 0)));
 
             card.Child = stack;
-            ResultsPanel.Children.Add(card);
-            Anim.FadeSlideIn(card, 14, 240, idx++ * 55);
+            Grid.SetColumn(card, 1); wrapper.Children.Add(card);
+            ResultsPanel.Children.Add(wrapper);
+            Anim.FadeSlideIn(wrapper, 14, 240, idx++ * 55);
         }
 
         // ══ VUE PAR SOURCE ═══════════════════════════════════════════════════
@@ -185,37 +191,60 @@ namespace Optimisation_Tool.Pages
 
         private void AddSourceCard(LogEntry it, ref int idx)
         {
-            var card  = new Border { Style = (Style)FindResource("DTile"), Margin = new Thickness(0, 0, 0, 10) };
+            // Wrapper : bandeau couleur sévérité à gauche (4px) + carte
+            var wrapper = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+            wrapper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) });
+            wrapper.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var stripe = new Border { CornerRadius = new CornerRadius(2, 0, 0, 2) };
+            stripe.SetResourceReference(Border.BackgroundProperty, SevRole(it.Sev));
+            Grid.SetColumn(stripe, 0); wrapper.Children.Add(stripe);
+
+            var card  = new Border { Style = (Style)FindResource("DTile") };
             var stack = new StackPanel();
 
-            var head = new Grid();
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // ── En-tête : grosse icône + titre 16 + badge sévérité + meta ──
+            stack.Children.Add(BuildHeader(it.Icon, it.Title, it.Sev,
+                $"{it.Count}×  ·  {it.Last:dd/MM HH:mm}"));
 
-            var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
-            var sdot = new Ellipse
+            // ── Quoi (What) ──
+            stack.Children.Add(Tb(it.What, "ThTextBody", 12.5, wrap: true,
+                                  margin: new Thickness(58, 6, 0, 0)));
+
+            // ── Pourquoi (Cause) ──
+            if (!string.IsNullOrWhiteSpace(it.Cause))
             {
-                Width = 10, Height = 10,
-                VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
-            };
-            sdot.SetResourceReference(Shape.FillProperty, SevRole(it.Sev));
-            titleRow.Children.Add(sdot);
-            var title = Tb(it.Title, "ThTextTitle", 13.5, bold: true);
-            title.TextTrimming = TextTrimming.CharacterEllipsis; title.VerticalAlignment = VerticalAlignment.Center;
-            titleRow.Children.Add(title);
-            Grid.SetColumn(titleRow, 0); head.Children.Add(titleRow);
+                stack.Children.Add(BuildSectionHeader("", "Pourquoi"));
+                stack.Children.Add(Tb(it.Cause, "ThTextBody", 12.5, wrap: true,
+                                      margin: new Thickness(58, 2, 0, 0)));
+            }
 
-            var meta = Tb($"{it.Count}×  ·  {it.Last:dd/MM HH:mm}", "ThTextDim", 11.5, margin: new Thickness(10, 0, 0, 0));
-            meta.VerticalAlignment = VerticalAlignment.Center;
-            Grid.SetColumn(meta, 1); head.Children.Add(meta);
-            stack.Children.Add(head);
+            // ── Que faire ──
+            if (it.Steps != null && it.Steps.Count > 0)
+            {
+                stack.Children.Add(BuildSectionHeader("", "Que faire"));
+                var box = BuildStepsList(it.Steps);
+                box.Margin = new Thickness(58, 2, 0, 0);
+                stack.Children.Add(box);
+            }
+            else if (!string.IsNullOrWhiteSpace(it.Fix))
+            {
+                stack.Children.Add(BuildSectionHeader("", "Que faire"));
+                stack.Children.Add(Tb(it.Fix, "ThTextBody", 12.5, wrap: true,
+                                      margin: new Thickness(58, 2, 0, 0)));
+            }
 
-            stack.Children.Add(Tb(it.What, "ThTextBody", 12.5, wrap: true, margin: new Thickness(0, 10, 0, 0)));
-            stack.Children.Add(Labeled("Cause", it.Cause));
-            stack.Children.Add(Labeled("Piste de correction", it.Fix, accent: true));
+            // ── Boutons d'action ──
+            if (it.Actions != null && it.Actions.Count > 0)
+            {
+                var ar = BuildActionsRow(it.Actions);
+                ar.Margin = new Thickness(58, 12, 0, 0);
+                stack.Children.Add(ar);
+            }
 
             if (!string.IsNullOrWhiteSpace(it.Raw))
-                stack.Children.Add(Tb("Détail : " + it.Raw, "ThTextDim", 11, wrap: true, italic: true, margin: new Thickness(0, 8, 0, 0)));
+                stack.Children.Add(Tb("Détail : " + it.Raw, "ThTextDim", 11, wrap: true, italic: true,
+                                      margin: new Thickness(58, 10, 0, 0)));
 
             if (!it.Known)
             {
@@ -223,7 +252,7 @@ namespace Optimisation_Tool.Pages
                 {
                     Content = "Rechercher sur le web",
                     Style = (Style)FindResource("SecondaryBtnStyle"),
-                    Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(0, 10, 0, 0),
+                    Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(58, 10, 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Left,
                 };
                 string q = it.Provider + " " + it.Id + " event windows";
@@ -236,8 +265,9 @@ namespace Optimisation_Tool.Pages
             }
 
             card.Child = stack;
-            ResultsPanel.Children.Add(card);
-            Anim.FadeSlideIn(card, 14, 240, idx++ * 55);
+            Grid.SetColumn(card, 1); wrapper.Children.Add(card);
+            ResultsPanel.Children.Add(wrapper);
+            Anim.FadeSlideIn(wrapper, 14, 240, idx++ * 55);
         }
 
         private StackPanel Labeled(string label, string value, bool accent = false)
@@ -283,5 +313,316 @@ namespace Optimisation_Tool.Pages
             LogSev.Warning => "ThWarn",
             _              => "ThTextDim",
         };
+
+        // ══ Helpers v1.3.0 : en-tête visuel + sections + étapes + boutons ══════
+
+        /// <summary>
+        /// En-tête de carte : grosse icône (44px) dans un cercle teinté sévérité, titre 16,
+        /// badge "CRITIQUE / ATTENTION / INFO" coloré, meta date alignée à droite.
+        /// </summary>
+        private Grid BuildHeader(string icon, string title, LogSev sev, string meta)
+        {
+            var head = new Grid();
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });           // icône
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // titre + badge
+            head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });           // meta
+
+            // -- Col 0 : icône MDL2 dans un cercle teinté sévérité --
+            // Centrage exact via Viewbox (Segoe MDL2 a un baseline shift qui décale
+            // visuellement les glyphes dans un TextBlock — la Viewbox les normalise).
+            // Glyphe par défaut selon sévérité si l'entrée n'a pas d'icône explicite
+            // → plus jamais de cercle vide (cohérence visuelle v1.3.0).
+            var iconCell = new Grid
+            {
+                Width = 44, Height = 44,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 0, 14, 0),
+            };
+            var iconBg = new Ellipse { Opacity = 0.18 };
+            iconBg.SetResourceReference(Shape.FillProperty, SevRole(sev));
+            iconCell.Children.Add(iconBg);
+
+            // Glyphe : celui de l'entrée, ou un fallback selon sévérité
+            string glyph = !string.IsNullOrEmpty(icon)
+                ? icon
+                : DefaultIconFor(sev);
+
+            var iconText = new TextBlock
+            {
+                Text       = glyph,
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize   = 18,
+                TextAlignment = TextAlignment.Center,
+            };
+            iconText.SetResourceReference(TextBlock.ForegroundProperty, SevRole(sev));
+            // Viewbox : centrage géométrique exact, indépendant du baseline du glyphe
+            var box = new Viewbox
+            {
+                Width  = 22, Height = 22,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment   = VerticalAlignment.Center,
+                Stretch = Stretch.Uniform,
+                Child   = iconText,
+            };
+            iconCell.Children.Add(box);
+
+            Grid.SetColumn(iconCell, 0); head.Children.Add(iconCell);
+
+            // -- Col 1 : badge sévérité (pilule colorée) + titre 16 --
+            var titleCol = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+
+            // Badge "CRITIQUE / ATTENTION / INFO" en pilule "outlined" :
+            // - fond TRÈS PÂLE (Opacity 0.18 sur un Border séparé)
+            // - texte en COULEUR PLEINE de la sévérité
+            // → lisible en clair ET en sombre, indépendant de la teinte (résout le bug
+            //   v1.3.0 "écriture blanche sur fond jaune ThWarn = illisible").
+            var badgeCell = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin              = new Thickness(0, 0, 0, 4),
+            };
+            var badgeBg = new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                Opacity      = 0.18,
+            };
+            badgeBg.SetResourceReference(Border.BackgroundProperty, SevRole(sev));
+            badgeCell.Children.Add(badgeBg);
+
+            var badgeText = new TextBlock
+            {
+                Text       = SevLabel(sev),
+                FontFamily = (FontFamily)FindResource("AppFont"),
+                FontSize   = 9.5,
+                FontWeight = FontWeights.Bold,
+                Margin     = new Thickness(8, 1, 8, 2),
+            };
+            badgeText.SetResourceReference(TextBlock.ForegroundProperty, SevRole(sev));
+            badgeCell.Children.Add(badgeText);
+
+            titleCol.Children.Add(badgeCell);
+
+            // Titre 16 gras
+            var titleTb = new TextBlock
+            {
+                Text         = title,
+                FontFamily   = (FontFamily)FindResource("AppFont"),
+                FontSize     = 15.5,
+                FontWeight   = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            };
+            titleTb.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
+            titleCol.Children.Add(titleTb);
+
+            Grid.SetColumn(titleCol, 1); head.Children.Add(titleCol);
+
+            // -- Col 2 : meta (date + compteur) --
+            var metaTb = Tb(meta, "ThTextDim", 11.5, margin: new Thickness(10, 6, 0, 0));
+            metaTb.VerticalAlignment = VerticalAlignment.Top;
+            Grid.SetColumn(metaTb, 2); head.Children.Add(metaTb);
+
+            return head;
+        }
+
+        /// <summary>
+        /// En-tête de section ("Pourquoi" / "Que faire") avec un glyphe Segoe MDL2
+        /// à gauche et le texte en accent bleu. Aligne à 58px pour rester sous l'icône
+        /// principale de l'en-tête (cohérence visuelle).
+        /// </summary>
+        private StackPanel BuildSectionHeader(string glyph, string label)
+        {
+            var sp = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin      = new Thickness(58, 14, 0, 0),
+            };
+            if (!string.IsNullOrEmpty(glyph))
+            {
+                sp.Children.Add(new TextBlock
+                {
+                    Text       = glyph,
+                    FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                    FontSize   = 13,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
+                    Margin     = new Thickness(0, 0, 8, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+            }
+            sp.Children.Add(new TextBlock
+            {
+                Text       = label,
+                FontFamily = (FontFamily)FindResource("AppFont"),
+                FontSize   = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
+                VerticalAlignment = VerticalAlignment.Center,
+            });
+            return sp;
+        }
+
+        /// <summary>Libellé court de sévérité pour le badge.</summary>
+        private static string SevLabel(LogSev s) => s switch
+        {
+            LogSev.Serious => "CRITIQUE",
+            LogSev.Warning => "ATTENTION",
+            _              => "INFO",
+        };
+
+        /// <summary>
+        /// Glyphe MDL2 par défaut quand l'entrée n'a pas d'icône explicite — selon la
+        /// sévérité (croix d'erreur / triangle warning / info). Évite les cercles vides
+        /// dans les cartes des sources mineures pas encore enrichies (cohérence v1.3.0).
+        /// </summary>
+        private static string DefaultIconFor(LogSev s) => s switch
+        {
+            LogSev.Serious => "",   // ErrorBadge12 (croix dans cercle)
+            LogSev.Warning => "",   // Warning (triangle !)
+            _              => "",   // Info
+        };
+
+        // ══ Anciens helpers (étapes + actions) ════════════════════════════════
+
+        /// <summary>
+        /// Construit une liste d'étapes visuellement claire : chaque étape sur sa propre ligne
+        /// avec un numéro (1. 2. 3.) en couleur accent. Bien plus lisible qu'un bloc de texte
+        /// avec des "1) 2) 3)" embarqués dans une string.
+        /// </summary>
+        private StackPanel BuildStepsList(System.Collections.Generic.List<string> steps)
+        {
+            var container = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+            int n = 1;
+            foreach (var step in steps)
+            {
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var num = new TextBlock
+                {
+                    Text       = n + ".",
+                    FontFamily = (FontFamily)FindResource("AppFont"),
+                    FontSize   = 12.5,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
+                    VerticalAlignment = VerticalAlignment.Top,
+                };
+                Grid.SetColumn(num, 0); row.Children.Add(num);
+
+                var txt = Tb(step, "ThTextBody", 12.5, wrap: true);
+                Grid.SetColumn(txt, 1); row.Children.Add(txt);
+
+                container.Children.Add(row);
+                n++;
+            }
+            return container;
+        }
+
+        /// <summary>
+        /// Construit une ligne de boutons d'action (navigation interne, commandes, URL, diag).
+        /// WrapPanel pour gérer plusieurs boutons qui passent à la ligne sur les petits écrans.
+        /// </summary>
+        private WrapPanel BuildActionsRow(System.Collections.Generic.List<LogAction> actions)
+        {
+            var wp = new WrapPanel { Margin = new Thickness(0, 10, 0, 0) };
+            foreach (var act in actions)
+            {
+                var btn = new Button
+                {
+                    Content  = act.Label,
+                    Style    = (Style)FindResource("SecondaryBtnStyle"),
+                    Padding  = new Thickness(12, 6, 12, 6),
+                    Margin   = new Thickness(0, 0, 8, 6),
+                    ToolTip  = string.IsNullOrWhiteSpace(act.Tooltip) ? null : act.Tooltip,
+                };
+                btn.Click += (_, _) => ExecuteAction(act);
+                wp.Children.Add(btn);
+            }
+            return wp;
+        }
+
+        /// <summary>
+        /// Exécute une action (selon son Kind). Pour les commandes potentiellement longues ou
+        /// risquées (Confirm = true), demande confirmation à l'utilisateur d'abord.
+        /// </summary>
+        private void ExecuteAction(LogAction act)
+        {
+            try
+            {
+                if (act.Confirm)
+                {
+                    var r = MessageBox.Show(
+                        $"Lancer cette commande ?\n\n{act.Target}\n\n{act.Tooltip}",
+                        "Tweakly — Confirmer l'action",
+                        MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                    if (r != MessageBoxResult.OK) return;
+                }
+
+                switch (act.Kind)
+                {
+                    case LogActionKind.Navigate:
+                        // Navigation interne : on cherche le bouton nav par Tag puis on l'invoque.
+                        // MainWindow.NavigateTo prend un Button (BtnNavXxx) en paramètre.
+                        TryNavigate(act.Target);
+                        break;
+
+                    case LogActionKind.Url:
+                        Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true });
+                        break;
+
+                    case LogActionKind.Diag:
+                        // Outils Windows standards (services.msc, devmgmt.msc, appwiz.cpl…)
+                        Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true });
+                        break;
+
+                    case LogActionKind.Command:
+                        // Commande système — on lance via cmd.exe (target est attendu type
+                        // "cmd /k ..." ou "cmd /c ..."). Pas de redirection, fenêtre visible.
+                        var (file, args) = SplitCmd(act.Target);
+                        Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true });
+                        break;
+                }
+                _main.Log($"Erreurs Windows : action exécutée — {act.Label}");
+            }
+            catch (Exception ex)
+            {
+                _main.Log($"Erreurs Windows : action « {act.Label} » impossible — {ex.Message}");
+            }
+        }
+
+        /// <summary>Tente de naviguer vers une page interne via son Tag (ex. "Diagnostic", "Monitoring").</summary>
+        private void TryNavigate(string tag)
+        {
+            // Le sidebar de MainWindow utilise des boutons avec Tag = clé de page. On parcourt
+            // l'arbre logique en cherchant le bouton dont Tag == target, puis on appelle
+            // MainWindow.NavigateTo (public).
+            try
+            {
+                var btn = FindNavButton(_main, tag);
+                if (btn != null) _main.NavigateTo(btn);
+            }
+            catch { }
+        }
+
+        private static Button? FindNavButton(DependencyObject root, string tag)
+        {
+            int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is Button b && b.Tag is string s && s == tag) return b;
+                var found = FindNavButton(child, tag);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        /// <summary>Sépare "cmd /k sfc /scannow" en (file="cmd", args="/k sfc /scannow").</summary>
+        private static (string file, string args) SplitCmd(string s)
+        {
+            s = (s ?? "").Trim();
+            int i = s.IndexOf(' ');
+            if (i <= 0) return (s, "");
+            return (s.Substring(0, i), s.Substring(i + 1));
+        }
     }
 }

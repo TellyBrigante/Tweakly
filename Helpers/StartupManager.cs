@@ -15,64 +15,98 @@ namespace Optimisation_Tool.Helpers
     /// dans le vide. La voie propre = une tâche planifiée avec « Run with highest privileges »,
     /// trigger « At log on », action = lancer Tweakly.exe. C'est ce que font tous les outils
     /// sérieux (AutoHotkey, Discord, etc.).
+    ///
+    /// HISTORIQUE v1.2.9 : on créait la tâche via un XML déclarant encoding="UTF-16" mais
+    /// écrit en UTF-8 BOM (incohérence). Sur certains comptes (notamment compte Microsoft /
+    /// Azure AD), schtasks acceptait le fichier sans vraiment enregistrer la tâche → Enable()
+    /// renvoyait true (exit 0) mais IsEnabled() retournait false ensuite → la case se
+    /// décochait toute seule au redémarrage de l'app.
+    ///
+    /// FIX (>= v1.3.0) : on utilise schtasks en MODE LIGNE DE COMMANDE (plus simple, plus
+    /// fiable, pas de problème d'encodage). On capture stdout/stderr pour exposer un message
+    /// d'erreur exploitable (LastError) et on fait un round-trip de vérification : après
+    /// /create, on relance /query — si la tâche n'existe pas vraiment, Enable() renvoie false
+    /// (au lieu de mentir comme avant).
     /// </summary>
     internal static class StartupManager
     {
         private const string TaskName = "Tweakly_AutoStart";
+
+        /// <summary>Dernier message d'erreur (stderr/stdout de schtasks) — utile au log.</summary>
+        public static string? LastError { get; private set; }
 
         /// <summary>Le démarrage Windows est-il actif ? (existence de la tâche planifiée)</summary>
         public static bool IsEnabled()
         {
             try
             {
-                using var p = Process.Start(new ProcessStartInfo("schtasks", $"/query /tn \"{TaskName}\"")
-                {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                });
-                p?.WaitForExit(5_000);
-                return p?.ExitCode == 0;
+                var (exit, _, _) = RunSchtasks($"/query /tn \"{TaskName}\"");
+                return exit == 0;
             }
             catch { return false; }
         }
 
-        /// <summary>Active : crée la tâche planifiée (admin + at-logon).</summary>
+        /// <summary>
+        /// Active : crée la tâche planifiée (admin + at-logon).
+        /// Vérifie via re-query que la création a VRAIMENT abouti — si la tâche n'existe pas
+        /// après /create, retourne false (et expose LastError pour le diagnostic).
+        /// </summary>
         public static bool Enable()
         {
+            LastError = null;
             try
             {
                 var exe = Process.GetCurrentProcess().MainModule!.FileName;
-                // On écrit un XML de tâche : permet de cocher « Run with highest privileges »,
-                // « Run only when user is logged on », et de supprimer les conditions par défaut
-                // (« stop on battery », « stop after 3 days » qui bloquent Tweakly autrement).
-                var sid = System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? "";
-                var xml = BuildTaskXml(exe, sid);
-                var xmlPath = Path.Combine(Path.GetTempPath(), $"tweakly_task_{Guid.NewGuid():N}.xml");
-                File.WriteAllText(xmlPath, xml, new UTF8Encoding(true));   // UTF-8 BOM (schtasks exige)
-                try
+                if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
                 {
-                    // /F = force (overwrite si existante)
-                    using var p = Process.Start(new ProcessStartInfo("schtasks",
-                        $"/create /tn \"{TaskName}\" /xml \"{xmlPath}\" /F")
-                    {
-                        UseShellExecute        = false,
-                        CreateNoWindow         = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError  = true,
-                    });
-                    p?.WaitForExit(10_000);
-                    return p?.ExitCode == 0;
+                    LastError = "Chemin de l'exécutable Tweakly introuvable.";
+                    return false;
                 }
-                finally { try { File.Delete(xmlPath); } catch { } }
+
+                // Mode ligne de commande (schtasks /create) :
+                //   /tn  : nom de la tâche
+                //   /tr  : commande à lancer (chemin de l'exe entre guillemets internes \"…\")
+                //   /sc ONLOGON : trigger « à l'ouverture de session »
+                //   /rl HIGHEST : équivalent de « Exécuter avec les privilèges les plus élevés »
+                //   /F   : force (overwrite si la tâche existe déjà)
+                // PAS d'XML, donc pas de problème d'encodage UTF-16/UTF-8.
+                // PAS de /ru/rp : la tâche tourne sous l'utilisateur courant par défaut, ce qui
+                // évite les problèmes de SID Azure AD (compte Microsoft) qu'on avait en v1.2.9.
+                var args = $"/create /tn \"{TaskName}\" /tr \"\\\"{exe}\\\"\" /sc ONLOGON /rl HIGHEST /F";
+                var (exit, stdout, stderr) = RunSchtasks(args);
+
+                if (exit != 0)
+                {
+                    // Schtasks a clairement échoué — on remonte la raison.
+                    LastError = Combine(stderr, stdout);
+                    return false;
+                }
+
+                // ⭐ ROUND-TRIP : on RE-vérifie que la tâche existe vraiment. C'est la garantie
+                // qu'on ne ment plus à l'utilisateur (le bug v1.2.9 venait précisément de là :
+                // /create renvoyait 0 sans persister la tâche).
+                if (!IsEnabled())
+                {
+                    LastError = "schtasks a renvoyé OK mais la tâche n'a pas été enregistrée. "
+                              + "Diagnostic stdout=" + (stdout ?? "(vide)").Trim()
+                              + " stderr=" + (stderr ?? "(vide)").Trim();
+                    return false;
+                }
+
+                return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                return false;
+            }
         }
 
         /// <summary>Désactive : supprime la tâche planifiée (et l'ancienne clé Run si présente).</summary>
         public static bool Disable()
         {
+            LastError = null;
+
             // Nettoie aussi la clé HKCU\Run héritée (pré-v1.2.9) pour ne pas laisser de résidu.
             try
             {
@@ -84,67 +118,60 @@ namespace Optimisation_Tool.Helpers
 
             try
             {
-                using var p = Process.Start(new ProcessStartInfo("schtasks", $"/delete /tn \"{TaskName}\" /F")
+                var (exit, stdout, stderr) = RunSchtasks($"/delete /tn \"{TaskName}\" /F");
+                // exit != 0 si la tâche n'existait pas → ce n'est PAS une erreur (idempotent).
+                // On considère que le résultat final = la tâche n'existe plus → succès.
+                if (IsEnabled())
                 {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                });
-                p?.WaitForExit(5_000);
-                return true;   // succès même si la tâche n'existait pas
+                    LastError = "Suppression refusée — " + Combine(stderr, stdout);
+                    return false;
+                }
+                return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                return false;
+            }
         }
 
-        // XML schtasks : RunLevel HighestAvailable + Triggers LogonTrigger + Settings tolérants
-        private static string BuildTaskXml(string exePath, string userSid)
+        // ── Helpers ─────────────────────────────────────────────────────────────
+
+        /// <summary>Lance schtasks et CAPTURE stdout + stderr (5 s timeout).</summary>
+        private static (int exitCode, string stdout, string stderr) RunSchtasks(string args)
         {
-            var workDir  = Path.GetDirectoryName(exePath) ?? "";
-            var safeExe  = System.Security.SecurityElement.Escape(exePath)!;
-            var safeDir  = System.Security.SecurityElement.Escape(workDir)!;
-            var safeSid  = System.Security.SecurityElement.Escape(userSid)!;
-            return
-                "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n" +
-                "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n" +
-                "  <RegistrationInfo><Description>Démarre Tweakly à l'ouverture de session.</Description></RegistrationInfo>\r\n" +
-                "  <Triggers>\r\n" +
-                "    <LogonTrigger>\r\n" +
-                "      <Enabled>true</Enabled>\r\n" +
-                $"      <UserId>{safeSid}</UserId>\r\n" +
-                "      <Delay>PT15S</Delay>\r\n" +   // laisse Windows démarrer avant de spawn Tweakly
-                "    </LogonTrigger>\r\n" +
-                "  </Triggers>\r\n" +
-                "  <Principals>\r\n" +
-                "    <Principal id=\"Author\">\r\n" +
-                $"      <UserId>{safeSid}</UserId>\r\n" +
-                "      <LogonType>InteractiveToken</LogonType>\r\n" +
-                "      <RunLevel>HighestAvailable</RunLevel>\r\n" +   // ← l'équivalent de « Exécuter avec les privilèges les plus élevés »
-                "    </Principal>\r\n" +
-                "  </Principals>\r\n" +
-                "  <Settings>\r\n" +
-                "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\r\n" +
-                "    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\r\n" +
-                "    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\r\n" +
-                "    <AllowHardTerminate>false</AllowHardTerminate>\r\n" +
-                "    <StartWhenAvailable>false</StartWhenAvailable>\r\n" +
-                "    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>\r\n" +
-                "    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>\r\n" +
-                "    <AllowStartOnDemand>true</AllowStartOnDemand>\r\n" +
-                "    <Enabled>true</Enabled>\r\n" +
-                "    <Hidden>false</Hidden>\r\n" +
-                "    <RunOnlyIfIdle>false</RunOnlyIfIdle>\r\n" +
-                "    <WakeToRun>false</WakeToRun>\r\n" +
-                "    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\r\n" +   // 0 = pas de limite
-                "    <Priority>7</Priority>\r\n" +
-                "  </Settings>\r\n" +
-                "  <Actions Context=\"Author\">\r\n" +
-                "    <Exec>\r\n" +
-                $"      <Command>{safeExe}</Command>\r\n" +
-                $"      <WorkingDirectory>{safeDir}</WorkingDirectory>\r\n" +
-                "    </Exec>\r\n" +
-                "  </Actions>\r\n" +
-                "</Task>\r\n";
+            var psi = new ProcessStartInfo("schtasks", args)
+            {
+                UseShellExecute        = false,
+                CreateNoWindow         = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding  = Encoding.UTF8,
+            };
+            using var p = Process.Start(psi);
+            if (p == null) return (-1, "", "Impossible de lancer schtasks.");
+
+            // Lecture asynchrone pour éviter un deadlock si l'un des deux buffers se remplit.
+            var stdoutTask = p.StandardOutput.ReadToEndAsync();
+            var stderrTask = p.StandardError.ReadToEndAsync();
+
+            if (!p.WaitForExit(10_000))
+            {
+                try { p.Kill(true); } catch { }
+                return (-1, "", "schtasks n'a pas répondu (timeout).");
+            }
+            return (p.ExitCode, stdoutTask.Result ?? "", stderrTask.Result ?? "");
+        }
+
+        private static string Combine(string? a, string? b)
+        {
+            a = (a ?? "").Trim();
+            b = (b ?? "").Trim();
+            if (a.Length > 0 && b.Length > 0) return a + " | " + b;
+            if (a.Length > 0) return a;
+            if (b.Length > 0) return b;
+            return "(aucun message)";
         }
     }
 }

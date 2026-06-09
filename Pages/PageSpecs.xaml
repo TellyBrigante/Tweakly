@@ -2,7 +2,12 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="Transparent"
-             Loaded="UserControl_Loaded">
+             Loaded="UserControl_Loaded"
+             TextOptions.TextFormattingMode="Display"
+             TextOptions.TextRenderingMode="ClearType"
+             TextOptions.TextHintingMode="Fixed"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True">
 
     <UserControl.Resources>
 
@@ -83,6 +88,112 @@
             </Setter>
         </Style>
 
+        <!-- ════════ DESIGN 2026 v2 — Bento, glass, typo brutaliste ════════
+             Inspirations : Linear, Vercel dashboards, Apple Bento layouts.
+             Principes :
+               - UNE couleur accent (bleu Tweakly), pas un arc-en-ciel
+               - Cartes glass (background semi-transparent + bordure très fine)
+               - Drop shadows quasi invisibles (BlurRadius 40 / Opacity 0.07)
+               - Layout asymétrique (column spans variables)
+               - Typo hiérarchisée : composant en grand, specs en sous-texte
+               - Zéro icône badge multicolore, juste micro-glyphes monochromes -->
+
+        <!-- Couleur accent unique réutilisée partout -->
+        <SolidColorBrush x:Key="AccentBlue"     Color="#5BA0FF"/>
+        <SolidColorBrush x:Key="AccentBlueDim"  Color="#1F5BA0FF"/>
+
+        <!-- BENTO CARD : glass subtle + ombre quasi invisible + hover discret (compat) -->
+        <Style x:Key="BentoCard" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="16"/>
+            <Setter Property="Padding"         Value="26,22,26,22"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="40" ShadowDepth="2" Direction="270"
+                                      Opacity="0.10" Color="Black" RenderingBias="Quality"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource AccentBlue}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- BENTO 3D v3.1 : élévation qui RESPECTE LE THÈME.
+             - Background = ThPanel (dynamique dark/light)
+             - Highlight border en alpha (marche en dark ET light, indépendant de la teinte)
+             - Drop shadow modérée : l'effet 3D vient de l'ombre + du highlight border
+             - Padding et tailles réduites (~40%) pour ne pas écraser -->
+        <Style x:Key="Bento3D" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="14"/>
+            <Setter Property="Padding"         Value="20,18,20,18"/>
+            <Setter Property="MinHeight"       Value="130"/>
+            <Setter Property="BorderBrush">
+                <Setter.Value>
+                    <!-- Highlight border : alpha-blanc en haut (reflet) → alpha-noir en bas
+                         (ombre). Marche en dark ET light puisque c'est de l'alpha pur, pas
+                         une teinte qui pourrait jurer avec le fond. -->
+                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+                        <GradientStop Color="#26FFFFFF" Offset="0"/>
+                        <GradientStop Color="#08FFFFFF" Offset="0.5"/>
+                        <GradientStop Color="#0A000000" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+            <!-- Drop shadow modérée pour l'élévation 3D (l'ombre porte, le highlight border crée le reflet) -->
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="28" ShadowDepth="6" Direction="270"
+                                      Opacity="0.28" Color="Black" RenderingBias="Quality"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect BlurRadius="38" ShadowDepth="10" Direction="270"
+                                              Opacity="0.38" Color="Black" RenderingBias="Quality"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Micro-glyphe MDL2 en accent bleu, discret (utilisé en haut à gauche
+             des cartes pour signaler le type, à la place des badges colorés). -->
+        <Style x:Key="MicroGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize"   Value="13"/>
+            <Setter Property="Foreground" Value="{StaticResource AccentBlue}"/>
+            <Setter Property="Margin"     Value="0,0,9,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Étiquette de catégorie (8.5pt Bold tracking, ultra discret en haut de carte) -->
+        <Style x:Key="BentoLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="9.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Valeur principale (composant) : grosse typo SemiBold -->
+        <Style x:Key="BentoValue" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="{DynamicResource ThTextTitle}"/>
+            <Setter Property="FontFamily"   Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"     Value="14.5"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="LineHeight"   Value="22"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin"       Value="0,12,0,0"/>
+        </Style>
+
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -122,95 +233,267 @@
                 </StackPanel>
             </Border>
 
-            <!-- ══════════════════ PANNEAU SPÉCIFICATIONS ════════════════════ -->
+                <!-- ════════════ BENTO 2026 v3 — vraie hiérarchie + 3D + big numbers ════════════
+                 Organisation logique : PUISSANCE (CPU+RAM) / CAPACITÉ (GPU+Stockage) / SYSTÈME (OS+MB).
+                 Chaque carte : multi-layer drop shadow + gradient interne + highlight border
+                 (effet d'élévation 3D réel). Big number énorme (chiffre clé) + détails à côté. -->
             <StackPanel x:Name="PanelSpecs">
 
-            <!-- ══ Sp&#233;cifications mat&#233;riel ══════════════════════════════════ -->
-            <Grid Margin="0,0,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="10"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="8"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="8"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+                <!-- Section header : label gauche + ligne décorative qui s'étend à droite
+                     → couvre visuellement les 2 cartes de la rangée (style Linear/Notion).
+                     Marche pour les 3 sections : PUISSANCE / CAPACITÉ / SYSTÈME. -->
+                <Grid Margin="4,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="PERFORMANCE"
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}"
+                               FontSize="9.5" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
+                            Background="{DynamicResource ThBorder}"
+                            VerticalAlignment="Center" Opacity="0.6"/>
+                </Grid>
 
-                <!-- Ligne 1 : Syst&#232;me d'exploitation | Processeur -->
-                <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource TileStyle}">
-                    <StackPanel>
-                        <TextBlock Text="SYST&#200;ME D'EXPLOITATION" Style="{StaticResource TileLabelStyle}"/>
-                        <TextBlock x:Name="TxtOS"
-                                   Text="Chargement&#8230;"
-                                   Foreground="{DynamicResource ThTextDim}"
-                                   Style="{StaticResource TileValueStyle}"/>
-                    </StackPanel>
-                </Border>
+                <!-- ── ROW 1 : CPU + RAM ── -->
+                <Grid Margin="0,0,0,22">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="2" Grid.Row="0" Style="{StaticResource TileStyle}">
-                    <StackPanel>
-                        <TextBlock Text="PROCESSEUR (CPU)" Style="{StaticResource TileLabelStyle}"/>
-                        <TextBlock x:Name="TxtCPU"
-                                   Text="Chargement&#8230;"
-                                   Foreground="{DynamicResource ThTextDim}"
-                                   Style="{StaticResource TileValueStyle}"/>
-                    </StackPanel>
-                </Border>
+                    <!-- ▸ CPU -->
+                    <Border Grid.Column="0" Style="{StaticResource Bento3D}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="&#xE950;" Style="{StaticResource MicroGlyph}"/>
+                                <TextBlock Text="PROCESSEUR" Style="{StaticResource BentoLabel}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtCpuHead" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Bottom">
+                                <TextBlock x:Name="TxtCpuBig" Text="—"
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="22" FontWeight="Bold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="FR&#201;Q. MAX"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="10" FontWeight="Bold"
+                                           Margin="10,0,0,5" VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                            <!-- Details multi-ligne : cœurs/L3/L2 + Architecture/Socket -->
+                            <TextBlock x:Name="TxtCpuDetails" Text="—"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" LineHeight="18"
+                                       Margin="0,10,0,0"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
 
-                <!-- Ligne 2 : Carte M&#232;re &amp; BIOS | M&#233;moire RAM -->
-                <Border Grid.Column="0" Grid.Row="2" Style="{StaticResource TileStyle}">
-                    <StackPanel>
-                        <TextBlock Text="CARTE M&#200;RE &amp; BIOS" Style="{StaticResource TileLabelStyle}"/>
-                        <TextBlock x:Name="TxtMB"
-                                   Text="Chargement&#8230;"
-                                   Foreground="{DynamicResource ThTextDim}"
-                                   Style="{StaticResource TileValueStyle}"/>
-                        <Button x:Name="BtnBios"
-                                Content="&#8599; Page BIOS constructeur"
-                                Style="{StaticResource ActionBtnStyle}"
-                                Margin="0,10,0,0"
-                                IsEnabled="False"
-                                HorizontalAlignment="Left"
-                                Click="BtnBios_Click"/>
-                    </StackPanel>
-                </Border>
+                    <!-- ▸ GPU (perf graphique, on l'aligne ici avec le CPU) -->
+                    <Border Grid.Column="2" Style="{StaticResource Bento3D}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="&#xE7F8;" Style="{StaticResource MicroGlyph}"/>
+                                <TextBlock Text="CARTE GRAPHIQUE" Style="{StaticResource BentoLabel}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtGpuHead" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Bottom">
+                                <TextBlock x:Name="TxtGpuBig" Text="—"
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="22" FontWeight="Bold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="VRAM"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="10" FontWeight="Bold"
+                                           Margin="8,0,0,5" VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtGpuDetails" Text="—"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" LineHeight="18"
+                                       Margin="0,10,0,0"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
 
-                <Border Grid.Column="2" Grid.Row="2" Style="{StaticResource TileStyle}">
-                    <StackPanel>
-                        <TextBlock Text="M&#201;MOIRE (RAM)" Style="{StaticResource TileLabelStyle}"/>
-                        <TextBlock x:Name="TxtRAM"
-                                   Text="Chargement&#8230;"
-                                   Foreground="{DynamicResource ThTextDim}"
-                                   Style="{StaticResource TileValueStyle}"/>
-                    </StackPanel>
-                </Border>
+                <!-- Section CAPACITÉ -->
+                <Grid Margin="4,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="M&#201;MOIRE"
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}"
+                               FontSize="9.5" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
+                            Background="{DynamicResource ThBorder}"
+                            VerticalAlignment="Center" Opacity="0.6"/>
+                </Grid>
 
-                <!-- Ligne 3 : Stockage | Carte Graphique -->
-                <Border Grid.Column="0" Grid.Row="4" Style="{StaticResource TileStyle}">
-                    <StackPanel>
-                        <TextBlock Text="STOCKAGE" Style="{StaticResource TileLabelStyle}"/>
-                        <TextBlock x:Name="TxtDisk"
-                                   Text="Chargement&#8230;"
-                                   Foreground="{DynamicResource ThTextDim}"
-                                   Style="{StaticResource TileValueStyle}"/>
-                    </StackPanel>
-                </Border>
+                <!-- ── ROW 2 : GPU + STOCKAGE ── -->
+                <Grid Margin="0,0,0,22">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="2" Grid.Row="4" Style="{StaticResource TileStyle}">
-                    <StackPanel>
-                        <TextBlock Text="CARTE GRAPHIQUE" Style="{StaticResource TileLabelStyle}"/>
-                        <TextBlock x:Name="TxtGPU"
-                                   Text="Chargement&#8230;"
-                                   Foreground="{DynamicResource ThTextDim}"
-                                   Style="{StaticResource TileValueStyle}"/>
-                    </StackPanel>
-                </Border>
+                    <!-- ▸ RAM (mémoire volatile) -->
+                    <Border Grid.Column="0" Style="{StaticResource Bento3D}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="&#xE88E;" Style="{StaticResource MicroGlyph}"/>
+                                <TextBlock Text="M&#201;MOIRE VIVE (RAM)" Style="{StaticResource BentoLabel}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtRamBig" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="26" FontWeight="Bold"
+                                       LineHeight="28" LineStackingStrategy="BlockLineHeight"/>
+                            <TextBlock x:Name="TxtRamHead" Text="—"
+                                       Foreground="{DynamicResource ThTextSub}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11.5"
+                                       Margin="0,4,0,8"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtRamDetails" Text="—"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" LineHeight="17"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
 
-            </Grid>
+                    <!-- ▸ STOCKAGE (mémoire permanente) -->
+                    <Border Grid.Column="2" Style="{StaticResource Bento3D}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="&#xEDA2;" Style="{StaticResource MicroGlyph}"/>
+                                <TextBlock Text="STOCKAGE" Style="{StaticResource BentoLabel}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Bottom">
+                                <TextBlock x:Name="TxtDiskBig" Text="—"
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="26" FontWeight="Bold"
+                                           LineHeight="28" LineStackingStrategy="BlockLineHeight"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="DISQUES"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="10" FontWeight="Bold"
+                                           Margin="10,0,0,5" VerticalAlignment="Bottom"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtDiskHead" Visibility="Collapsed"/>
+                            <TextBlock x:Name="TxtDiskDetails" Text="—"
+                                       Foreground="{DynamicResource ThTextSub}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" LineHeight="17"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Section SYSTÈME -->
+                <Grid Margin="4,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="PLATEFORME"
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}"
+                               FontSize="9.5" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
+                            Background="{DynamicResource ThBorder}"
+                            VerticalAlignment="Center" Opacity="0.6"/>
+                </Grid>
+
+                <!-- ── ROW 3 : OS + CARTE MÈRE ── -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="18"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- ▸ OS -->
+                    <Border Grid.Column="0" Style="{StaticResource Bento3D}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="&#xE770;" Style="{StaticResource MicroGlyph}"/>
+                                <TextBlock Text="SYST&#200;ME D'EXPLOITATION" Style="{StaticResource BentoLabel}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtOsHead" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtOsDetails" Text="—"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" LineHeight="18"
+                                       Margin="0,8,0,0"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- ▸ CARTE MÈRE -->
+                    <Border Grid.Column="2" Style="{StaticResource Bento3D}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="&#xE964;" Style="{StaticResource MicroGlyph}"/>
+                                <TextBlock Text="CARTE M&#200;RE" Style="{StaticResource BentoLabel}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtMbHead" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtMbDetails" Text="—"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11" LineHeight="18"
+                                       Margin="0,8,0,10"
+                                       TextWrapping="Wrap"/>
+                            <Button x:Name="BtnBios"
+                                    Content="&#8599; Page BIOS constructeur"
+                                    Style="{StaticResource ActionBtnStyle}"
+                                    Margin="0,0,0,0"
+                                    IsEnabled="False"
+                                    HorizontalAlignment="Left"
+                                    Click="BtnBios_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- TextBlocks LEGACY (cachés) — populés en compat pour ne pas casser le code-behind -->
+                <TextBlock x:Name="TxtCPU"  Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtRAM"  Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtGPU"  Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtOS"   Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtDisk" Visibility="Collapsed"/>
+                <TextBlock x:Name="TxtMB"   Visibility="Collapsed"/>
 
             </StackPanel><!-- fin PanelSpecs -->
 
