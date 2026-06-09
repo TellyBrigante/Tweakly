@@ -1,0 +1,25 @@
+# CI minimale (audit I-5) : vérifie que chaque push sur main COMPILE en Release.
+# Pas de tests (il n'y en a pas encore), pas de publish : juste le filet de
+# sécurité "ce commit ne casse pas le build". Le protocole de release local
+# (MISE_A_JOUR_PROTOCOLE.txt) reste la seule voie de publication.
+name: build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build Release
+        run: dotnet build Tweakly.csproj -c Release --nologo

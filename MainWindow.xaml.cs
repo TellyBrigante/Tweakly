@@ -206,18 +206,20 @@ namespace Optimisation_Tool
             if (UpdateOverlay.Visibility == Visibility.Visible) return; // déjà en cours
             try
             {
-                var (hasUpdate, tag, _, assetUrl) = await PageReglages.CheckForUpdateAsync();
+                var (hasUpdate, tag, _, assetUrl, sha256) = await PageReglages.CheckForUpdateAsync();
                 if (hasUpdate && !string.IsNullOrEmpty(assetUrl))
                 {
                     Log($"Mise à jour disponible : {tag}.");
-                    StartUpdate(assetUrl, tag);   // overlay + téléchargement direct
+                    StartUpdate(assetUrl, tag, sha256);   // overlay + téléchargement direct
                 }
             }
             catch (Exception ex) { Log($"MAJ auto : erreur — {ex.Message}"); }
         }
 
-        /// <summary>Affiche l'overlay, télécharge la MAJ avec progression, puis propose CONTINUER.</summary>
-        public async void StartUpdate(string assetUrl, string tag)
+        /// <summary>Affiche l'overlay, télécharge la MAJ avec progression, puis propose CONTINUER.
+        /// sha256 (optionnel) : hash publié dans le body de la release — vérifié après téléchargement,
+        /// mismatch = échec propre (aucun fichier remplacé). Vide = pas de vérification (compat).</summary>
+        public async void StartUpdate(string assetUrl, string tag, string sha256 = "")
         {
             UpdateOverlay.Visibility  = Visibility.Visible;
             TxtUpdTitle.Text          = $"Mise à jour {tag}";
@@ -228,7 +230,7 @@ namespace Optimisation_Tool
             try
             {
                 var progress = new Progress<double>(SetUpdateBar);
-                _pendingBat = await PageReglages.PrepareUpdateAsync(assetUrl, progress);
+                _pendingBat = await PageReglages.PrepareUpdateAsync(assetUrl, progress, sha256);
 
                 SetUpdateBar(100);
                 TxtUpdStatus.Text         = "Téléchargement terminé. Clique sur CONTINUER pour redémarrer.";

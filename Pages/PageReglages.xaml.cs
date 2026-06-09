@@ -28,6 +28,7 @@ namespace Optimisation_Tool.Pages
         private string _updateUrl = "";   // page de la release (fallback)
         private string _assetUrl  = "";   // .zip à télécharger
         private string _lastTag   = "";   // tag de la dernière MAJ détectée
+        private string _sha256    = "";   // hash SHA-256 publié dans le body (vide = pas de vérif)
 
         private static readonly HttpClient Http = new();
 
@@ -118,7 +119,7 @@ namespace Optimisation_Tool.Pages
 
         // ── Check de MAJ (appelé au démarrage + manuellement) ──────────────────
 
-        public static async Task<(bool hasUpdate, string tag, string url, string assetUrl)> CheckForUpdateAsync()
+        public static async Task<(bool hasUpdate, string tag, string url, string assetUrl, string sha256)> CheckForUpdateAsync()
         {
             try
             {
@@ -128,7 +129,7 @@ namespace Optimisation_Tool.Pages
                 req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var resp = await Http.SendAsync(req);
-                if (!resp.IsSuccessStatusCode) return (false, "", "", "");
+                if (!resp.IsSuccessStatusCode) return (false, "", "", "", "");
 
                 var json = await resp.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
@@ -137,8 +138,12 @@ namespace Optimisation_Tool.Pages
                 var tag = root.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
                 var url = root.TryGetProperty("html_url", out var h) ? h.GetString() ?? RepoUrl : RepoUrl;
 
-                // Trouver le 1er asset .zip
+                // Trouver le 1er asset .zip.
+                // SÉCURITÉ (audit C-2d) : on n'accepte QUE les assets hébergés sur les
+                // releases de NOTRE repo — défense en profondeur si la réponse API était
+                // altérée (un asset pointant ailleurs serait ignoré).
                 var assetUrl = "";
+                var expectedPrefix = $"https://github.com/{RepoOwner}/{RepoName}/releases/";
                 if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var a in assets.EnumerateArray())
@@ -147,20 +152,37 @@ namespace Optimisation_Tool.Pages
                         if (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
                             a.TryGetProperty("browser_download_url", out var d))
                         {
-                            assetUrl = d.GetString() ?? "";
+                            var candidate = d.GetString() ?? "";
+                            if (!candidate.StartsWith(expectedPrefix, StringComparison.OrdinalIgnoreCase))
+                                continue;   // asset hors repo → ignoré
+                            assetUrl = candidate;
                             break;
                         }
                     }
+                }
+
+                // SÉCURITÉ (audit C-2a) : hash SHA-256 du zip publié dans le body de la
+                // release (ligne « SHA256: <64 hex> »). S'il est présent, PrepareUpdateAsync
+                // REFUSERA un zip dont le hash ne correspond pas. S'il est absent (anciennes
+                // releases), on reste compatible : pas de vérification (fail-open assumé,
+                // la vérification devient effective dès que le protocole publie le hash).
+                var sha256 = "";
+                if (root.TryGetProperty("body", out var b))
+                {
+                    var body = b.GetString() ?? "";
+                    var m = System.Text.RegularExpressions.Regex.Match(
+                        body, @"SHA256\s*[:=]\s*([0-9a-fA-F]{64})");
+                    if (m.Success) sha256 = m.Groups[1].Value.ToLowerInvariant();
                 }
 
                 var remote = ParseVersion(tag);
                 var local  = ParseVersion(AppVersion);
 
                 if (remote != null && local != null && remote > local)
-                    return (true, tag, url, assetUrl);
+                    return (true, tag, url, assetUrl, sha256);
             }
             catch { }
-            return (false, "", "", "");
+            return (false, "", "", "", "");
         }
 
         // Colore le segment actif (fond accent) et grise l'inactif
@@ -195,13 +217,14 @@ namespace Optimisation_Tool.Pages
 
             try
             {
-                var (hasUpdate, tag, url, assetUrl) = await CheckForUpdateAsync();
+                var (hasUpdate, tag, url, assetUrl, sha256) = await CheckForUpdateAsync();
 
                 if (hasUpdate)
                 {
                     _updateUrl = url;
                     _assetUrl  = assetUrl;
                     _lastTag   = tag;
+                    _sha256    = sha256;
                     TxtUpdateStatus.Text = $"Mise à jour disponible : {tag}  —  vous avez v{AppVersion}";
                     BtnDownloadUpdate.Visibility = Visibility.Visible;
                     _main.Log($"Réglages : mise à jour disponible — {tag}.");
@@ -229,14 +252,15 @@ namespace Optimisation_Tool.Pages
                 return;
             }
             // Délègue à l'overlay plein écran de MainWindow
-            _main.StartUpdate(_assetUrl, _lastTag);
+            _main.StartUpdate(_assetUrl, _lastTag, _sha256);
         }
 
         /// <summary>
         /// Télécharge le ZIP (avec progression %), l'extrait et écrit le script de
         /// remplacement. Ne redémarre PAS — retourne le chemin du script à lancer.
         /// </summary>
-        public static async Task<string> PrepareUpdateAsync(string assetUrl, IProgress<double> progress)
+        public static async Task<string> PrepareUpdateAsync(string assetUrl, IProgress<double> progress,
+                                                            string expectedSha256 = "")
         {
             var tmp = Path.Combine(Path.GetTempPath(), "Tweakly_update");
             if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
@@ -261,6 +285,21 @@ namespace Optimisation_Tool.Pages
                     if (total > 0) progress.Report((double)readTotal / total * 100.0);
                 }
                 progress.Report(100);
+            }
+
+            // SÉCURITÉ (audit C-2a) : vérification d'intégrité SHA-256 du zip téléchargé.
+            // Si la release publie un hash (body « SHA256: … ») et qu'il ne correspond pas,
+            // on REFUSE d'aller plus loin : aucun batch écrit, aucun fichier remplacé.
+            // L'exception remonte à StartUpdate (catch → message d'échec, app intacte).
+            if (!string.IsNullOrEmpty(expectedSha256))
+            {
+                using var sha = System.Security.Cryptography.SHA256.Create();
+                using var zfs = File.OpenRead(zipPath);
+                var actual = Convert.ToHexString(await sha.ComputeHashAsync(zfs)).ToLowerInvariant();
+                if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new Exception(
+                        "Échec de la vérification d'intégrité du téléchargement (SHA-256 différent). " +
+                        "Mise à jour annulée par sécurité.");
             }
 
             // Extraction
