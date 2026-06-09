@@ -161,11 +161,16 @@ namespace Optimisation_Tool.Helpers
         /// <summary>Reset cache (utile si on edite le JSON a chaud).</summary>
         public static void Invalidate() { _cache = null; }
 
-        // Bases Mpx/s pour ratio=100 (= Core Ultra 7 265K, moyenne PassMark/GB6).
-        // Publiques : utilisees par PageBenchmark pour convertir la mesure du user
-        // en "points classement" comparables aux exp_* des autres CPUs.
-        public const double BaseSingleMpxsPublic = 220.0;
-        public const double BaseMultiMpxsPublic  = 1800.0;
+        // FACTEUR DE CONVERSION D'UNITES : "ratio PassMark 100" -> Mpx/s de NOTRE bench.
+        // Determine UNE FOIS sur un Core Ultra 7 265K de reference (build RELEASE —
+        // jamais Debug, le JIT Release est ~2,9x plus rapide sur Mandelbrot, c'etait
+        // le bug de la v1.3.0 : pivots calibres en Debug -> tout le monde a ~270).
+        // Ce facteur est FIGE et identique pour tous les users ; la comparaison entre
+        // CPUs reste 100% basee sur les ratios PassMark publics du JSON (exp_*).
+        // Harness : bench_spike\calib (660/5257/16.7 brut), ajuste ~ -7% pour le
+        // contexte in-app (overlay WPF + progress reporting pendant le bench reel).
+        public const double BaseSingleMpxsPublic = 620.0;
+        public const double BaseMultiMpxsPublic  = 4950.0;
 
         /// <summary>
         /// Classement type Cinebench : CPUs calibres (exp_multi > 0) tries par
@@ -251,7 +256,7 @@ namespace Optimisation_Tool.Helpers
             // Donc nominal_du_CPU = base_265K * exp_du_CPU / 100.
             const double BaseSingleMpxs = BaseSingleMpxsPublic;
             const double BaseMultiMpxs  = BaseMultiMpxsPublic;
-            const double BaseMemMhops   = 17.0;
+            const double BaseMemMhops   = 16.0;   // pointer-chase memory-bound, peu sensible au JIT
 
             if (match.ExpSingle > 0)
             {
@@ -261,7 +266,10 @@ namespace Optimisation_Tool.Helpers
             else
             {
                 // Fallback formule theorique (CPU pas dans la table calibree).
-                double ipc = IpcSingle.TryGetValue(match.Gen, out var ipcVal) ? ipcVal : 36;
+                // JitScale : la table IpcSingle date de l'echelle Debug (Arrow Lake = 40
+                // Mpx/s/GHz) ; en Release le JIT donne ~113 Mpx/s/GHz -> x2.82.
+                const double JitScale = 2.82;
+                double ipc = (IpcSingle.TryGetValue(match.Gen, out var ipcVal) ? ipcVal : 36) * JitScale;
                 result.ExpectedSingleMops = match.PBoost * ipc;
             }
 
@@ -271,7 +279,8 @@ namespace Optimisation_Tool.Helpers
             }
             else
             {
-                double ipc = IpcSingle.TryGetValue(match.Gen, out var ipcVal) ? ipcVal : 36;
+                const double JitScale = 2.82;
+                double ipc = (IpcSingle.TryGetValue(match.Gen, out var ipcVal) ? ipcVal : 36) * JitScale;
                 int pUsed = Math.Min(8, match.PCores);
                 int eUsed = Math.Min(8 - pUsed, match.ECores);
                 double multiOps = pUsed * match.PBoost * ipc

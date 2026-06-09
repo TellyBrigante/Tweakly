@@ -215,13 +215,11 @@ namespace Optimisation_Tool.Helpers
             r.SysScore      = (int)Math.Round((r.SysFrameScore + r.SysInputScore) / 2.0);
 
             // RAM : bandwidth direct, latency inverse
-            // Bandwidth : 4 GB/s = mauvais (DDR3 single-channel),
-            //             16 GB/s = excellent (DDR5 dual high freq, plafond C# sans SIMD).
-            // Note : la mesure single-thread C# plafonne ~15 GB/s meme sur DDR5 64Go
-            //        dual channel 6400 MHz, parce qu'on n'utilise pas AVX-512. C'est OK,
-            //        on mesure le throughput pratique d'une appli normale, pas du STREAM
-            //        avec instructions vectorielles.
-            r.RamBandwidthScore = ScoreDirect(r.RamBandwidthGBs, worst: 4, best: 16);
+            // Bandwidth : 5 GB/s = mauvais (DDR3 single-channel),
+            //             22 GB/s = excellent (DDR5 dual 6400, mesure en BUILD RELEASE —
+            //             le JIT Release vectorise mieux les boucles STREAM que le Debug
+            //             sur lequel l'ancien bareme 16 etait cale).
+            r.RamBandwidthScore = ScoreDirect(r.RamBandwidthGBs, worst: 5, best: 22);
             // Latency : excellent < 60ns, mauvais > 150ns
             r.RamLatencyScore   = ScoreInverse(r.RamLatencyNs, best: 60, worst: 150);
             r.RamScore          = (int)Math.Round((r.RamBandwidthScore + r.RamLatencyScore) / 2.0);
