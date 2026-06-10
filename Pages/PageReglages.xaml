@@ -272,7 +272,13 @@
                     <Button x:Name="BtnOpenFolder"
                             Content="Dossier de l'application"
                             Style="{StaticResource SecondaryBtnStyle}"
+                            Margin="0,0,8,0"
                             Click="BtnOpenFolder_Click"/>
+                    <Button x:Name="BtnOpenLog"
+                            Content="Journal technique"
+                            ToolTip="Ouvre le fichier de logs local (config\tweakly-log.txt) — utile pour diagnostiquer un problème. Rien n'est envoyé nulle part."
+                            Style="{StaticResource SecondaryBtnStyle}"
+                            Click="BtnOpenLog_Click"/>
                 </StackPanel>
             </Border>
 

@@ -402,7 +402,7 @@ namespace Optimisation_Tool
                 ico.Text = goingToLight ? "\uE706" : "\uE708";   // E706 soleil, E708 lune (MDL2)
                 ico.Foreground = new SolidColorBrush(goingToLight
                     ? Color.FromRgb(0xF5, 0xC2, 0x4A)            // soleil doré
-                    : Color.FromRgb(0xAE, 0xB8, 0xE8));          // lune bleu clair
+                    : Color.FromRgb(0x3F, 0x4E, 0x96));          // lune indigo FONCE — l'ancien #AEB8E8 pale etait invisible sur le fond clair
             }
             if (BtnTheme.Template.FindName("ThemeLbl", BtnTheme) is System.Windows.Controls.TextBlock lbl)
                 lbl.Text = goingToLight ? "Mode clair" : "Mode sombre";
@@ -564,10 +564,59 @@ namespace Optimisation_Tool
         private static extern bool BringWindowToTop(IntPtr hWnd);
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
         [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-        private const int SW_SHOW    = 5;
-        private const int SW_RESTORE = 9;
+        private const int SW_SHOW     = 5;
+        private const int SW_MINIMIZE = 6;
+        private const int SW_RESTORE  = 9;
         private const byte VK_MENU              = 0x12;   // Alt
         private const uint KEYEVENTF_KEYUP       = 0x0002;
+
+        /// <summary>
+        /// v1.3.3 : les tentatives faites dans Loaded/ContextIdle arrivaient TROP TÔT
+        /// (fenêtre pas encore peinte ; après l'élévation UAC, Windows rend le foreground
+        /// à explorer). OnContentRendered = la fenêtre est RÉELLEMENT affichée → on
+        /// attaque ici, avec 3 tentatives espacées (0 / 350 / 900 ms) pour couvrir le cas
+        /// où une autre app reprend le focus pendant la première seconde.
+        /// </summary>
+        protected override void OnContentRendered(EventArgs e)
+        {
+            base.OnContentRendered(e);
+            if (Settings.StartMinimized) return;
+
+            ForceForeground();
+            int attempt = 0;
+            var t = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(350),
+            };
+            t.Tick += (_, _) =>
+            {
+                attempt++;
+                ForceForeground();
+                if (attempt == 1) t.Interval = TimeSpan.FromMilliseconds(550);
+                if (attempt >= 2)
+                {
+                    t.Stop();
+                    // FILET FINAL « minimize/restore » : si Windows refuse toujours le focus
+                    // (AttachThreadInput + Alt fantôme insuffisants après l'élévation UAC),
+                    // on minimise puis restaure par programme — Windows donne TOUJOURS le
+                    // foreground à une fenêtre qui se restaure depuis l'état minimisé.
+                    // Le flash est imperceptible au démarrage. Seule méthode 100 % fiable.
+                    try
+                    {
+                        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                        if (GetForegroundWindow() != hwnd)
+                        {
+                            ShowWindow(hwnd, SW_MINIMIZE);
+                            ShowWindow(hwnd, SW_RESTORE);
+                            SetForegroundWindow(hwnd);
+                            Activate();
+                        }
+                    }
+                    catch { }
+                }
+            };
+            t.Start();
+        }
 
         /// <summary>
         /// Force MainWindow au PREMIER PLAN (pas seulement Topmost flicker). Bypass de
@@ -742,6 +791,10 @@ namespace Optimisation_Tool
 
         public void Log(string message)
         {
+            // v1.3.3 : tout message du journal d'activité est AUSSI persisté dans le
+            // journal fichier local (Helpers/AppLog, config\tweakly-log.txt) — permet
+            // le diagnostic a posteriori sans rien envoyer nulle part.
+            Helpers.AppLog.Write(message);
             Dispatcher.BeginInvoke(() =>
             {
                 var ts = DateTime.Now.ToString("HH:mm:ss");

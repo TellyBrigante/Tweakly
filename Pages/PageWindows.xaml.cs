@@ -193,37 +193,69 @@ namespace Optimisation_Tool.Pages
             BtnFixGamingOverlay.IsEnabled = false;
             _main.Log("Réparation ms-gamingoverlay : ré-enregistrement de la Xbox Game Bar…");
 
-            // Réparation en 3 temps : 1) RESET du package (purge l'état corrompu), 2) RÉ-ENREGISTREMENT
-            // (restaure le gestionnaire ms-gamingoverlay), 3) VÉRIFICATION du statut du package.
-            const string ps =
+            // ⚠️ FIX v1.3.3 — POURQUOI ça ne marchait pas avant : Tweakly tourne en ADMIN
+            // (requireAdministrator), or les opérations AppX (Reset/Add-AppxPackage -Register)
+            // s'appliquent au PROFIL DE L'UTILISATEUR COURANT. Exécutées depuis le contexte
+            // élevé, elles « réussissaient » sans réparer le profil utilisateur réel.
+            // → On exécute désormais le PowerShell DÉ-ÉLEVÉ (token d'explorer.exe, via
+            //   Helpers/DeElevatedLauncher), dans le vrai contexte utilisateur.
+            // Comme on ne peut pas capturer la sortie d'un process à token différent,
+            // le script écrit son verdict dans un fichier temporaire qu'on relit.
+            var outFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tweakly_gamingoverlay.txt");
+            try { System.IO.File.Delete(outFile); } catch { }
+
+            string ps =
                 "$ErrorActionPreference='SilentlyContinue';" +
+                $"$out='{outFile.Replace("\\", "\\\\")}';" +
                 "$n='Microsoft.XboxGamingOverlay';" +
-                "$p=Get-AppxPackage -Name $n; if(-not $p){$p=Get-AppxPackage -AllUsers -Name $n};" +
-                "if(-not $p){'NOTINSTALLED'}else{" +
+                "$p=Get-AppxPackage -Name $n;" +
+                "if(-not $p){Set-Content -Path $out -Value 'NOTINSTALLED'}else{" +
                 "try{Reset-AppxPackage -Package $p[0].PackageFullName}catch{};" +
                 "foreach($pk in $p){$m=Join-Path $pk.InstallLocation 'AppXManifest.xml';" +
                 "if(Test-Path $m){Add-AppxPackage -DisableDevelopmentMode -Register $m}};" +
                 "$a=Get-AppxPackage -Name $n;" +
-                "if($a){'VERIFIED:'+($a|Select-Object -First 1).Status}else{'FAILED'}}";
+                "if($a){Set-Content -Path $out -Value ('VERIFIED:'+($a|Select-Object -First 1).Status)}" +
+                "else{Set-Content -Path $out -Value 'FAILED'}}";
 
             string result = await Task.Run(() =>
             {
                 try
                 {
-                    var psi = new ProcessStartInfo("powershell",
-                        $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"")
-                    {
-                        UseShellExecute        = false,
-                        CreateNoWindow         = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError  = true,
-                    };
-                    using var p = Process.Start(psi);
-                    string outp = p?.StandardOutput.ReadToEnd() ?? "";
-                    p?.WaitForExit(60_000);
-                    return outp;
+                    // Voie principale : DÉ-ÉLEVÉ (contexte utilisateur — la bonne façon pour AppX)
+                    int code = Helpers.DeElevatedLauncher.StartAndWait(
+                        "powershell.exe",
+                        $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"",
+                        timeoutMs: 90_000);
+                    if (System.IO.File.Exists(outFile))
+                        return System.IO.File.ReadAllText(outFile).Trim();
+                    return $"ERR:pas de résultat (exit {code})";
                 }
-                catch (Exception ex) { return "ERR:" + ex.Message; }
+                catch (Exception exDe)
+                {
+                    // Fallback : voie élevée historique (moins fiable pour AppX, mais mieux que rien
+                    // si le lancement dé-élevé échoue — ex. session sans explorer).
+                    try
+                    {
+                        var psi = new ProcessStartInfo("powershell",
+                            $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"")
+                        {
+                            UseShellExecute        = false,
+                            CreateNoWindow         = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError  = true,
+                        };
+                        using var p = Process.Start(psi);
+                        p?.WaitForExit(60_000);
+                        if (System.IO.File.Exists(outFile))
+                            return System.IO.File.ReadAllText(outFile).Trim() + " (mode élevé — fallback)";
+                        return "ERR:" + exDe.Message;
+                    }
+                    catch (Exception ex) { return "ERR:" + ex.Message; }
+                }
+                finally
+                {
+                    try { System.IO.File.Delete(outFile); } catch { }
+                }
             });
 
             if (result.Contains("VERIFIED:Ok"))

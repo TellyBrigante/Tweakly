@@ -153,27 +153,37 @@ namespace Optimisation_Tool.Helpers
             var all = ReadRaw(days);
             var incidents = new List<Incident>();
 
+            // ── RÉCURRENCE par type de problème (v1.3.3) ────────────────────────
+            // Nb de JOURS DISTINCTS où chaque Kind apparaît sur la période. C'est ce
+            // qui pilote l'intensité des conseils : un TDR GPU sur UN seul soir et
+            // jamais reproduit ≠ des TDR étalés sur 3 jours. Avant, on conseillait
+            // « DDU + check PSU » même pour un épisode ponctuel → générique/inutile
+            // pour un utilisateur qui a déjà une config saine.
+            var recurrenceDays = all
+                .GroupBy(e => KindOf(e.Provider, e.Id))
+                .ToDictionary(g => g.Key, g => g.Select(e => e.Time.Date).Distinct().Count());
+
             var cluster = new List<RawEvent>();
             DateTime? prev = null;
             foreach (var ev in all)
             {
                 if (prev != null && (ev.Time - prev.Value).TotalSeconds > gapSeconds)
                 {
-                    var inc = Analyze(cluster);
+                    var inc = Analyze(cluster, recurrenceDays);
                     if (inc != null) incidents.Add(inc);
                     cluster = new List<RawEvent>();
                 }
                 cluster.Add(ev);
                 prev = ev.Time;
             }
-            var last = Analyze(cluster);
+            var last = Analyze(cluster, recurrenceDays);
             if (last != null) incidents.Add(last);
 
             return incidents.OrderByDescending(i => i.Start).ToList();
         }
 
         // ── Analyse d'un cluster → incident (cause racine + conseil) ───────────
-        private static Incident? Analyze(List<RawEvent> cluster)
+        private static Incident? Analyze(List<RawEvent> cluster, Dictionary<Kind, int>? recurrenceDays = null)
         {
             if (cluster.Count == 0) return null;
 
@@ -210,7 +220,9 @@ namespace Optimisation_Tool.Helpers
                 Events = decoded.OrderBy(d => d.Time)
                                 .Select(d => (d.Time, d.Info.Title, d.Info.Sev)).ToList(),
             };
-            Recommend(root.Kind, root.Info, rootCount, span, app, decoded.Count, inc);
+            int recDays  = recurrenceDays != null && recurrenceDays.TryGetValue(root.Kind, out var rd) ? rd : 1;
+            double daysAgo = Math.Max(0, (DateTime.Now - inc.End).TotalDays);
+            Recommend(root.Kind, root.Info, rootCount, span, app, decoded.Count, inc, recDays, daysAgo);
             return inc;
         }
 
@@ -237,10 +249,14 @@ namespace Optimisation_Tool.Helpers
         };
 
         // Recommandation raisonnée selon la cause racine + les preuves.
-        // Pose directement les champs Title / Advice / Icon / Steps / Actions sur l'incident
-        // (au lieu d'un tuple comme avant) pour profiter de l'enrichissement v1.3.0.
+        // v1.3.3 : SENSIBLE À LA RÉCURRENCE (recDays = jours distincts avec ce type de
+        // problème sur la période, daysAgo = ancienneté de l'incident) et au CONTEXTE
+        // machine (version du driver NVIDIA détectée). Un épisode isolé n'appelle pas
+        // les mêmes actions qu'un problème récurrent — fini le « DDU + check ton alim »
+        // pour un hoquet ponctuel.
         private static void Recommend(
-            Kind k, LogEntry root, int rootCount, int span, string app, int total, Incident inc)
+            Kind k, LogEntry root, int rootCount, int span, string app, int total, Incident inc,
+            int recDays = 1, double daysAgo = 0)
         {
             string rafale = rootCount >= 3 ? $" {rootCount}× en {Math.Max(span,1)} s — ce n'est pas un hoquet isolé, ça a vraiment lâché"
                                            : (rootCount > 1 ? $" {rootCount}×" : "");
@@ -249,22 +265,63 @@ namespace Optimisation_Tool.Helpers
             switch (k)
             {
                 case Kind.Gpu:
-                    inc.Title  = "Effondrement du pilote graphique" + (rootCount >= 3 ? " (en rafale)" : "");
+                {
+                    var drv = GetNvidiaDriverVersion();
+                    string drvLine = drv.Length > 0 ? $" Pilote installé : NVIDIA {drv}." : "";
+
+                    if (recDays <= 1)
+                    {
+                        // ÉPISODE ISOLÉ (un seul jour concerné sur toute la période) → pas
+                        // d'action lourde, quel que soit son âge.
+                        string since = daysAgo >= 2 ? $"rien depuis {Math.Floor(daysAgo)} j"
+                                     : daysAgo >= 1 ? "rien depuis"
+                                     : "aucune récidive pour l'instant";
+                        inc.Title  = "Plantage ponctuel du pilote graphique";
+                        inc.Icon   = "";
+                        inc.Advice = $"Le pilote GPU a planté{rafale}{appPart} — mais c'est un épisode ISOLÉ "
+                                   + $"(un seul jour concerné sur la période, {since}).{drvLine} "
+                                   + "Un pilote peut crasher une fois (un jeu précis, une sortie de veille, un pic ponctuel) "
+                                   + "sans que ta config soit en cause. Inutile de sortir l'artillerie.";
+                        inc.Steps  = new List<string>
+                        {
+                            "Rien d'urgent : note ce que tu faisais à ce moment-là (quel jeu / quelle appli) et surveille si ça revient.",
+                            "Si ça se reproduit DANS LE MÊME jeu : le coupable est ce jeu ou le pilote pour ce jeu — pas ton matériel.",
+                            drv.Length > 0
+                                ? $"Si ça se reproduit dans plusieurs jeux : bascule du pilote {drv} vers le Studio Driver équivalent (plus conservateur que le Game Ready)."
+                                : "Si ça se reproduit dans plusieurs jeux : teste le Studio Driver (plus conservateur que le Game Ready).",
+                            "Relance une analyse ici dans quelques jours : si cette carte ne réapparaît pas, classe l'affaire.",
+                        };
+                        inc.Actions = new List<LogAction>
+                        {
+                            new LogAction { Label = "Voir Monitoring", Tooltip = "Températures GPU en temps réel.",          Kind = LogActionKind.Navigate, Target = "Monitoring" },
+                            new LogAction { Label = "Pilotes NVIDIA",  Tooltip = "Page officielle de téléchargement.",       Kind = LogActionKind.Url,      Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
+                        };
+                        return;
+                    }
+
+                    // RÉCURRENT (plusieurs jours distincts) → escalade complète.
+                    inc.Title  = $"Effondrements répétés du pilote graphique ({recDays} jours concernés)";
                     inc.Icon   = "";
-                    inc.Advice = $"Le pilote GPU a cessé de répondre{rafale}{appPart}.";
+                    inc.Advice = $"Le pilote GPU a cessé de répondre{rafale}{appPart} — et ce n'est pas la première fois : "
+                               + $"des TDR sur {recDays} jours différents de la période analysée.{drvLine} "
+                               + "Là, c'est un vrai problème à traiter.";
                     inc.Steps  = new List<string>
                     {
-                        "Désinstaller le pilote graphique proprement avec DDU en mode sans échec, puis réinstaller une version STABLE (Studio Driver NVIDIA, ou Adrenalin précédente AMD).",
+                        drv.Length > 0
+                            ? $"Désinstaller le pilote {drv} proprement avec DDU en mode sans échec, puis réinstaller une version STABLE (Studio Driver, ou la version précédente)."
+                            : "Désinstaller le pilote graphique proprement avec DDU en mode sans échec, puis réinstaller une version STABLE.",
                         "Tweakly > Surveillance > Monitoring système : vérifier la température GPU sous charge. Au-delà de ~83 °C, revoir flux d'air / pâte thermique.",
-                        "Retirer tout overclock GPU (Afterburner Core/Memory à 0). Un léger UNDERVOLT stabilise souvent les TDR.",
-                        "Si ça persiste : suspecter l'alimentation (PSU sous-dimensionnée ou âgée → TDR sur les pics de charge).",
+                        "Retirer tout overclock GPU le temps du diagnostic (même un undervolt « stable » peut devenir limite avec un nouveau pilote — re-valide-le).",
+                        "Si ça persiste après tout ça : suspecter l'alimentation (TDR sur les pics de charge) ou un problème matériel GPU — tester sur un autre PC si possible.",
                     };
                     inc.Actions = new List<LogAction>
                     {
-                        new LogAction { Label = "Voir Monitoring",   Tooltip = "Températures GPU en temps réel.",                       Kind = LogActionKind.Navigate, Target = "Monitoring" },
-                        new LogAction { Label = "Télécharger DDU",   Tooltip = "Page Wagnardsoft (DDU officiel).",                       Kind = LogActionKind.Url,      Target = "https://www.wagnardsoft.com/" },
+                        new LogAction { Label = "Voir Monitoring",   Tooltip = "Températures GPU en temps réel.",     Kind = LogActionKind.Navigate, Target = "Monitoring" },
+                        new LogAction { Label = "Télécharger DDU",   Tooltip = "Page Wagnardsoft (DDU officiel).",     Kind = LogActionKind.Url,      Target = "https://www.wagnardsoft.com/" },
+                        new LogAction { Label = "Pilotes NVIDIA",    Tooltip = "Page officielle de téléchargement.",   Kind = LogActionKind.Url,      Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
                     };
                     return;
+                }
 
                 case Kind.Whea:
                     inc.Title  = "Erreur matérielle (WHEA)";
@@ -287,15 +344,36 @@ namespace Optimisation_Tool.Helpers
                     return;
 
                 case Kind.Power:
-                    inc.Title  = "Arrêt brutal du PC";
+                    if (recDays <= 1)
+                    {
+                        // UN arrêt brutal isolé : souvent un reset volontaire (bouton),
+                        // une coupure secteur ponctuelle ou un plantage unique.
+                        inc.Title  = "Arrêt brutal isolé";
+                        inc.Icon   = "";
+                        inc.Advice = "Le PC s'est éteint sans arrêt propre — un seul jour concerné sur la période, "
+                                   + "pas de récidive. Si c'était toi (reset, bouton power maintenu, coupure de courant), "
+                                   + "c'est simplement la trace de cet événement : rien à faire.";
+                        inc.Steps  = new List<string>
+                        {
+                            "Si tu te souviens de la cause (reset volontaire, orage, multiprise débranchée) : ignore cette carte.",
+                            "Sinon : Tweakly > Diagnostic > Bilan de santé pour voir si un BSOD coïncide avec cette heure-là.",
+                            "Surveille : c'est la RÉPÉTITION des arrêts brutaux qui est un signal matériel, pas un épisode unique.",
+                        };
+                        inc.Actions = new List<LogAction>
+                        {
+                            new LogAction { Label = "Voir Bilan de santé", Tooltip = "BSOD, stabilité système.", Kind = LogActionKind.Navigate, Target = "Diagnostic" },
+                        };
+                        return;
+                    }
+                    inc.Title  = $"Arrêts brutaux répétés ({recDays} jours concernés)";
                     inc.Icon   = "";
-                    inc.Advice = "Le PC s'est éteint/redémarré sans arrêt propre.";
+                    inc.Advice = $"Le PC s'est éteint/redémarré sans arrêt propre sur {recDays} jours différents — ce n'est plus un accident, il faut chercher la cause.";
                     inc.Steps  = new List<string>
                     {
-                        "Tweakly > Diagnostic > Bilan de santé : regarder si un BSOD coïncide. Si oui → plantage logiciel/pilote, PAS coupure de courant.",
-                        "Tweakly > Surveillance > Monitoring système : températures CPU/GPU sous charge.",
+                        "Tweakly > Diagnostic > Bilan de santé : regarder si des BSOD coïncident. Si oui → plantage logiciel/pilote, PAS coupure de courant.",
+                        "Tweakly > Surveillance > Monitoring système : températures CPU/GPU sous charge (un arrêt d'urgence thermique est brutal et silencieux).",
                         "Tester une autre prise murale ; PC portable : tester sans la batterie.",
-                        "Si tour : suspecter la PSU (vieille >5 ans, ou sous-dimensionnée).",
+                        "Si tour : suspecter la PSU (vieille >5 ans, ou sous-dimensionnée pour le GPU).",
                         "Retirer overclock CPU/GPU/RAM (XMP off) pour isoler.",
                     };
                     inc.Actions = new List<LogAction>
@@ -344,11 +422,26 @@ namespace Optimisation_Tool.Helpers
                             "Si module fautif système (ntdll, kernelbase…) : tester la RAM (MemTest86) et lancer Windows Update.",
                         };
                     }
+                    else if (recDays <= 1)
+                    {
+                        // Crash unique, pas reproduit → ne pas en faire un drame.
+                        inc.Title  = $"Plantage ponctuel{(app.Length > 0 ? " — " + app : "")}";
+                        inc.Icon   = "";
+                        inc.Advice = $"Une application{who} a planté — un seul jour concerné sur la période. "
+                                   + "Les applications plantent parfois, ce n'est pas un signal en soi : aucune action nécessaire si ça ne se répète pas.";
+                        inc.Steps  = new List<string>
+                        {
+                            "Rien à faire pour l'instant — relance une analyse dans quelques jours.",
+                            "Si la même appli replante régulièrement : la mettre à jour ou la réinstaller.",
+                        };
+                    }
                     else
                     {
                         inc.Title  = $"Plantage d'application{(app.Length > 0 ? " — " + app : "")}";
                         inc.Icon   = "";
-                        inc.Advice = $"Une application{who} a planté.";
+                        inc.Advice = recDays >= 3
+                            ? $"Une application{who} a planté — et des crashs d'applis reviennent sur {recDays} jours différents de la période. À traiter."
+                            : $"Une application{who} a planté.";
                         inc.Steps  = new List<string>
                         {
                             "Tweakly > Boîte à outils > Applications : mettre à jour l'appli concernée.",
@@ -950,6 +1043,38 @@ namespace Optimisation_Tool.Helpers
             e.Cause = "Source non répertoriée par Tweakly — voir le détail brut.";
             e.Fix   = "Rechercher « " + prov + " " + id + " » sur le web.";
             return e;
+        }
+
+        // ── Contexte machine : version du driver NVIDIA installée (v1.3.3) ──────
+        // WMI donne « 32.0.15.9649 » ; le format public NVIDIA = les 5 derniers
+        // chiffres avec un point avant les 2 derniers → « 596.49 ». Cache statique
+        // (une requête WMI par session suffit). Chaîne vide si pas de GPU NVIDIA.
+        private static string? _nvDriverCache;
+
+        private static string GetNvidiaDriverVersion()
+        {
+            if (_nvDriverCache != null) return _nvDriverCache;
+            try
+            {
+                using var s = new System.Management.ManagementObjectSearcher(
+                    "SELECT Name, DriverVersion FROM Win32_VideoController");
+                foreach (System.Management.ManagementObject o in s.Get())
+                {
+                    var name = o["Name"]?.ToString() ?? "";
+                    var ver  = o["DriverVersion"]?.ToString() ?? "";
+                    o.Dispose();
+                    if (!name.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase)) continue;
+
+                    var digits = new string(ver.Where(char.IsDigit).ToArray());
+                    if (digits.Length >= 5)
+                    {
+                        var five = digits[^5..];
+                        return _nvDriverCache = $"{five[..3]}.{five[3..]}";
+                    }
+                }
+            }
+            catch { }
+            return _nvDriverCache = "";
         }
 
         private static string Extract(string text, string pattern)

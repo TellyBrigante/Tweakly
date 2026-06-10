@@ -183,15 +183,49 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
-        <!-- Valeur principale (composant) : grosse typo SemiBold -->
-        <Style x:Key="BentoValue" TargetType="TextBlock">
-            <Setter Property="Foreground"   Value="{DynamicResource ThTextTitle}"/>
-            <Setter Property="FontFamily"   Value="{StaticResource AppFont}"/>
-            <Setter Property="FontSize"     Value="14.5"/>
-            <Setter Property="FontWeight"   Value="SemiBold"/>
-            <Setter Property="LineHeight"   Value="22"/>
-            <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin"       Value="0,12,0,0"/>
+        <!-- ════════ SCHÉMA MACHINE (v1.3.3) ════════ -->
+
+        <!-- Nœud du schéma : carte cliquable, glow accent au survol (effet « circuit alimenté ») -->
+        <Style x:Key="SchemaNode" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="12"/>
+            <Setter Property="Padding"         Value="16,12"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#5BA0FF"/>
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect Color="#5BA0FF" BlurRadius="18" ShadowDepth="0" Opacity="0.45"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Nœud CPU : le cœur du schéma — bordure accent permanente + fond légèrement teinté -->
+        <Style x:Key="SchemaNodeCpu" TargetType="Border" BasedOn="{StaticResource SchemaNode}">
+            <Setter Property="BorderBrush"     Value="#555BA0FF"/>
+            <Setter Property="Background"      Value="#0D5BA0FF"/>
+            <Setter Property="BorderThickness" Value="1.5"/>
+        </Style>
+
+        <!-- Étiquette de catégorie d'un nœud -->
+        <Style x:Key="SchemaCat" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="9.5"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <!-- Étiquette de lien (bus) sur une trace -->
+        <Style x:Key="SchemaLink" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#5BA0FF"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="9.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
     </UserControl.Resources>
@@ -233,261 +267,453 @@
                 </StackPanel>
             </Border>
 
-                <!-- ════════════ BENTO 2026 v3 — vraie hiérarchie + 3D + big numbers ════════════
-                 Organisation logique : PUISSANCE (CPU+RAM) / CAPACITÉ (GPU+Stockage) / SYSTÈME (OS+MB).
-                 Chaque carte : multi-layer drop shadow + gradient interne + highlight border
-                 (effet d'élévation 3D réel). Big number énorme (chiffre clé) + détails à côté. -->
+            <!-- ════════════ CARTE MÈRE ILLUSTRÉE (v1.3.3) ════════════
+                 Une carte mère ATX stylisée dessinée en vectoriel : socket CPU, slots RAM
+                 (remplis selon la config RÉELLE de l'utilisateur), slots PCIe (le GPU est
+                 « branché » dans le x16), M.2, chipset, SATA, ATX 24-pin, pile CMOS, vis.
+                 Les composants réels sont en callouts reliés aux zones, tout est cliquable
+                 (zones de la carte ET callouts) → détail dans SpecDetailZone.
+                 L'illustration garde des couleurs PCB sombres fixes dans les deux thèmes
+                 (c'est une illustration, comme une image). -->
             <StackPanel x:Name="PanelSpecs">
 
-                <!-- Section header : label gauche + ligne décorative qui s'étend à droite
-                     → couvre visuellement les 2 cartes de la rangée (style Linear/Notion).
-                     Marche pour les 3 sections : PUISSANCE / CAPACITÉ / SYSTÈME. -->
-                <Grid Margin="4,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="PERFORMANCE"
-                               Foreground="{DynamicResource ThTextDim}"
-                               FontFamily="{StaticResource AppFont}"
-                               FontSize="9.5" FontWeight="Bold"
-                               VerticalAlignment="Center"/>
-                    <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
-                            Background="{DynamicResource ThBorder}"
-                            VerticalAlignment="Center" Opacity="0.6"/>
-                </Grid>
+                <!-- Conteneur tuile : encadre l'illustration (sombre par design) pour
+                     qu'elle s'integre aussi en MODE CLAIR (sinon le PCB sombre jure
+                     directement sur le fond clair de la page). -->
+                <Border Background="{DynamicResource ThPanel}"
+                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                        CornerRadius="12" Padding="10,14">
+                <Viewbox Stretch="Uniform" MaxHeight="530">
+                    <Grid Width="900" Height="600">
 
-                <!-- ── ROW 1 : CPU + RAM ── -->
-                <Grid Margin="0,0,0,22">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="18"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                        <!-- ═════ LA CARTE MÈRE (PCB) ═════ -->
+                        <Border Width="380" Height="560" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                CornerRadius="8" BorderThickness="1.5" BorderBrush="#46557F">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#1A2542" Offset="0"/>
+                                    <GradientStop Color="#131D38" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <!-- Ombre portée : détache la carte du fond de page -->
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="32" ShadowDepth="8" Direction="270"
+                                                  Opacity="0.55" Color="Black"/>
+                            </Border.Effect>
+                            <Canvas Width="377" Height="557" ClipToBounds="True">
 
-                    <!-- ▸ CPU -->
-                    <Border Grid.Column="0" Style="{StaticResource Bento3D}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="&#xE950;" Style="{StaticResource MicroGlyph}"/>
-                                <TextBlock Text="PROCESSEUR" Style="{StaticResource BentoLabel}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtCpuHead" Text="—"
-                                       Foreground="{DynamicResource ThTextTitle}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="15" FontWeight="SemiBold"
-                                       TextWrapping="Wrap"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Bottom">
-                                <TextBlock x:Name="TxtCpuBig" Text="—"
-                                           Foreground="{DynamicResource ThTextTitle}"
-                                           FontFamily="{StaticResource AppFont}"
-                                           FontSize="22" FontWeight="Bold"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="FR&#201;Q. MAX"
-                                           Foreground="{DynamicResource ThTextDim}"
-                                           FontFamily="{StaticResource AppFont}"
-                                           FontSize="10" FontWeight="Bold"
-                                           Margin="10,0,0,5" VerticalAlignment="Bottom"/>
-                            </StackPanel>
-                            <!-- Details multi-ligne : cœurs/L3/L2 + Architecture/Socket -->
-                            <TextBlock x:Name="TxtCpuDetails" Text="—"
-                                       Foreground="{DynamicResource ThTextDim}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11" LineHeight="18"
-                                       Margin="0,10,0,0"
-                                       TextWrapping="Wrap"/>
+                                <!-- Traces décoratives en filigrane -->
+                                <Polyline Points="20,520 20,470 70,470 70,430" Stroke="#27335C" StrokeThickness="1.5"/>
+                                <Polyline Points="34,520 34,484 84,484 84,440" Stroke="#27335C" StrokeThickness="1.5"/>
+                                <Polyline Points="330,30 330,80 290,80 290,120" Stroke="#27335C" StrokeThickness="1.5"/>
+                                <Polyline Points="344,36 344,94 304,94 304,130" Stroke="#27335C" StrokeThickness="1.5"/>
+                                <Polyline Points="120,460 180,460 180,500 240,500" Stroke="#27335C" StrokeThickness="1.5"/>
+
+                                <!-- Vis de fixation (4 coins + centre) -->
+                                <Ellipse Canvas.Left="8"   Canvas.Top="8"   Width="10" Height="10" Fill="#3A4870" Stroke="#56689E" StrokeThickness="1"/>
+                                <Ellipse Canvas.Left="359" Canvas.Top="8"   Width="10" Height="10" Fill="#3A4870" Stroke="#56689E" StrokeThickness="1"/>
+                                <Ellipse Canvas.Left="8"   Canvas.Top="539" Width="10" Height="10" Fill="#3A4870" Stroke="#56689E" StrokeThickness="1"/>
+                                <Ellipse Canvas.Left="359" Canvas.Top="539" Width="10" Height="10" Fill="#3A4870" Stroke="#56689E" StrokeThickness="1"/>
+
+                                <!-- Panneau I/O (bord gauche haut) -->
+                                <Border Canvas.Left="14" Canvas.Top="26" Width="44" Height="150"
+                                        Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="3">
+                                    <StackPanel Margin="7,9">
+                                        <Border Height="11" Background="#0E1526" BorderBrush="#46557F" BorderThickness="1" Margin="0,0,0,5" CornerRadius="1"/>
+                                        <Border Height="11" Background="#0E1526" BorderBrush="#46557F" BorderThickness="1" Margin="0,0,0,5" CornerRadius="1"/>
+                                        <Border Height="8"  Background="#0E1526" BorderBrush="#46557F" BorderThickness="1" Margin="0,0,0,5" CornerRadius="1"/>
+                                        <Border Height="8"  Background="#0E1526" BorderBrush="#46557F" BorderThickness="1" Margin="0,0,0,5" CornerRadius="1"/>
+                                        <Border Height="11" Background="#0E1526" BorderBrush="#46557F" BorderThickness="1" Margin="0,0,0,5" CornerRadius="1"/>
+                                        <Border Height="8"  Background="#0E1526" BorderBrush="#46557F" BorderThickness="1" CornerRadius="1"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Radiateurs VRM (autour du socket) -->
+                                <Border Canvas.Left="72" Canvas.Top="26" Width="150" Height="26"
+                                        Background="#2C3962" BorderBrush="#4C5C94" BorderThickness="1" CornerRadius="3">
+                                    <UniformGrid Rows="1" Columns="9" Margin="3">
+                                        <Border Background="#384670" Margin="1,0"/><Border Background="#384670" Margin="1,0"/>
+                                        <Border Background="#384670" Margin="1,0"/><Border Background="#384670" Margin="1,0"/>
+                                        <Border Background="#384670" Margin="1,0"/><Border Background="#384670" Margin="1,0"/>
+                                        <Border Background="#384670" Margin="1,0"/><Border Background="#384670" Margin="1,0"/>
+                                        <Border Background="#384670" Margin="1,0"/>
+                                    </UniformGrid>
+                                </Border>
+                                <Border Canvas.Left="66" Canvas.Top="62" Width="24" Height="120"
+                                        Background="#2C3962" BorderBrush="#4C5C94" BorderThickness="1" CornerRadius="3">
+                                    <UniformGrid Columns="1" Rows="8" Margin="3">
+                                        <Border Background="#384670" Margin="0,1"/><Border Background="#384670" Margin="0,1"/>
+                                        <Border Background="#384670" Margin="0,1"/><Border Background="#384670" Margin="0,1"/>
+                                        <Border Background="#384670" Margin="0,1"/><Border Background="#384670" Margin="0,1"/>
+                                        <Border Background="#384670" Margin="0,1"/><Border Background="#384670" Margin="0,1"/>
+                                    </UniformGrid>
+                                </Border>
+
+                                <!-- ▸ SOCKET CPU (cliquable) -->
+                                <Border x:Name="ZoneCpu" Canvas.Left="100" Canvas.Top="64" Width="118" Height="118"
+                                        Background="#1B2440" BorderBrush="#56689E" BorderThickness="1.5" CornerRadius="4"
+                                        Cursor="Hand" MouseLeftButtonUp="NodeCpu_Click">
+                                    <Grid>
+                                        <!-- trous de fixation -->
+                                        <Ellipse Width="6" Height="6" Fill="#0E1526" HorizontalAlignment="Left"  VerticalAlignment="Top"    Margin="5"/>
+                                        <Ellipse Width="6" Height="6" Fill="#0E1526" HorizontalAlignment="Right" VerticalAlignment="Top"    Margin="5"/>
+                                        <Ellipse Width="6" Height="6" Fill="#0E1526" HorizontalAlignment="Left"  VerticalAlignment="Bottom" Margin="5"/>
+                                        <Ellipse Width="6" Height="6" Fill="#0E1526" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5"/>
+                                        <!-- le die (IHS) -->
+                                        <Border Width="64" Height="64" CornerRadius="3" BorderBrush="#4A5880" BorderThickness="1">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#3C4B7A" Offset="0"/>
+                                                    <GradientStop Color="#2B3860" Offset="0.5"/>
+                                                    <GradientStop Color="#3C4B7A" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <TextBlock Text="CPU" Foreground="#8193CC"
+                                                       FontFamily="{StaticResource AppFont}" FontSize="10" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <!-- ▸ SLOTS RAM ×4 (cliquables, remplis selon la config réelle) -->
+                                <Border x:Name="ZoneRam" Canvas.Left="240" Canvas.Top="40" Width="104" Height="220"
+                                        Background="Transparent" Cursor="Hand" MouseLeftButtonUp="NodeRam_Click">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <Border x:Name="RamStick0" Width="15" Height="216" Margin="0,2,9,0"
+                                                CornerRadius="2" BorderThickness="1"
+                                                BorderBrush="#46557F" Background="#0E1526"/>
+                                        <Border x:Name="RamStick1" Width="15" Height="216" Margin="0,2,9,0"
+                                                CornerRadius="2" BorderThickness="1"
+                                                BorderBrush="#46557F" Background="#0E1526"/>
+                                        <Border x:Name="RamStick2" Width="15" Height="216" Margin="0,2,9,0"
+                                                CornerRadius="2" BorderThickness="1"
+                                                BorderBrush="#46557F" Background="#0E1526"/>
+                                        <Border x:Name="RamStick3" Width="15" Height="216" Margin="0,2,0,0"
+                                                CornerRadius="2" BorderThickness="1"
+                                                BorderBrush="#46557F" Background="#0E1526"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- ATX 24-pin (bord droit) -->
+                                <Border Canvas.Left="352" Canvas.Top="290" Width="16" Height="86"
+                                        Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="2">
+                                    <UniformGrid Columns="2" Rows="12" Margin="2">
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                        <Ellipse Fill="#0E1526" Margin="1"/><Ellipse Fill="#0E1526" Margin="1"/>
+                                    </UniformGrid>
+                                </Border>
+
+                                <!-- ▸ M.2 (cliquable → stockage) -->
+                                <Border x:Name="ZoneM2" Canvas.Left="100" Canvas.Top="206" Width="150" Height="18"
+                                        Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="2"
+                                        Cursor="Hand" MouseLeftButtonUp="NodeSto_Click">
+                                    <Grid>
+                                        <Border Width="120" Height="10" HorizontalAlignment="Left" Margin="4,0,0,0"
+                                                Background="#33406A" CornerRadius="1"/>
+                                        <Ellipse Width="7" Height="7" Fill="#3A4870" Stroke="#56689E" StrokeThickness="1"
+                                                 HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                                        <TextBlock Text="M.2" Foreground="#8193CC" FontSize="7" FontWeight="Bold"
+                                                   FontFamily="{StaticResource AppFont}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- ▸ PCIe x16 avec GPU branché (cliquable → GPU) -->
+                                <Border x:Name="ZoneGpu" Canvas.Left="24" Canvas.Top="248" Width="300" Height="40"
+                                        Background="Transparent" Cursor="Hand" MouseLeftButtonUp="NodeGpu_Click">
+                                    <Grid>
+                                        <!-- le slot -->
+                                        <Border VerticalAlignment="Bottom" Height="14"
+                                                Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="2"/>
+                                        <!-- la carte graphique enfichée (de profil) -->
+                                        <Border VerticalAlignment="Top" Height="26" Margin="10,0,30,0" CornerRadius="3,3,1,1"
+                                                BorderBrush="#5468A8" BorderThickness="1">
+                                            <Border.Background>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                                    <GradientStop Color="#243056" Offset="0"/>
+                                                    <GradientStop Color="#243052" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Border.Background>
+                                            <Grid>
+                                                <!-- ventilateurs -->
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,8,0">
+                                                    <Ellipse Width="16" Height="16" Stroke="#5468A8" StrokeThickness="1.5" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                                    <Ellipse Width="16" Height="16" Stroke="#5468A8" StrokeThickness="1.5" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <TextBlock Text="GPU" Foreground="#5BA0FF" FontSize="9" FontWeight="Bold"
+                                                           FontFamily="{StaticResource AppFont}"
+                                                           HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                                <TextBlock Canvas.Left="26" Canvas.Top="290" Text="PCIe ×16" Foreground="#56689E"
+                                           FontSize="7.5" FontWeight="Bold" FontFamily="{StaticResource AppFont}"/>
+
+                                <!-- PCIe x1 + 2e x16 (vides, décoratifs) -->
+                                <Border Canvas.Left="24" Canvas.Top="312" Width="80" Height="11"
+                                        Background="#1C2747" BorderBrush="#33406A" BorderThickness="1" CornerRadius="2"/>
+                                <Border Canvas.Left="24" Canvas.Top="338" Width="300" Height="13"
+                                        Background="#1C2747" BorderBrush="#33406A" BorderThickness="1" CornerRadius="2"/>
+
+                                <!-- 2e M.2 (décoratif, sous les PCIe) -->
+                                <Border Canvas.Left="100" Canvas.Top="368" Width="150" Height="16"
+                                        Background="#1C2747" BorderBrush="#33406A" BorderThickness="1" CornerRadius="2"/>
+
+                                <!-- ▸ CHIPSET avec heatsink (cliquable → carte mère) -->
+                                <Border x:Name="ZoneMb" Canvas.Left="252" Canvas.Top="400" Width="92" Height="92"
+                                        BorderBrush="#4C5C94" BorderThickness="1.5" CornerRadius="6"
+                                        Cursor="Hand" MouseLeftButtonUp="NodeMb_Click">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#2F3C66" Offset="0"/>
+                                            <GradientStop Color="#243052" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Grid>
+                                        <!-- stries diagonales du heatsink -->
+                                        <Line X1="14" Y1="0" X2="0" Y2="14" Stroke="#46557F" StrokeThickness="2"/>
+                                        <Line X1="38" Y1="0" X2="0" Y2="38" Stroke="#46557F" StrokeThickness="2"/>
+                                        <Line X1="62" Y1="0" X2="0" Y2="62" Stroke="#46557F" StrokeThickness="2"/>
+                                        <Line X1="86" Y1="0" X2="0" Y2="86" Stroke="#46557F" StrokeThickness="2"/>
+                                        <Line X1="89" Y1="22" X2="22" Y2="89" Stroke="#46557F" StrokeThickness="2"/>
+                                        <Line X1="89" Y1="46" X2="46" Y2="89" Stroke="#46557F" StrokeThickness="2"/>
+                                        <Line X1="89" Y1="70" X2="70" Y2="89" Stroke="#46557F" StrokeThickness="2"/>
+                                        <TextBlock Text="CHIPSET" Foreground="#8193CC" FontSize="8" FontWeight="Bold"
+                                                   FontFamily="{StaticResource AppFont}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- ▸ Connecteurs SATA (cliquables → stockage) -->
+                                <Border x:Name="ZoneSata" Canvas.Left="346" Canvas.Top="420" Width="22" Height="78"
+                                        Background="Transparent" Cursor="Hand" MouseLeftButtonUp="NodeSto_Click">
+                                    <StackPanel>
+                                        <Border Height="14" Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="1" Margin="0,0,0,5">
+                                            <Border Width="10" Height="4" Background="#0E1526" HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <Border Height="14" Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="1" Margin="0,0,0,5">
+                                            <Border Width="10" Height="4" Background="#0E1526" HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <Border Height="14" Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="1" Margin="0,0,0,5">
+                                            <Border Width="10" Height="4" Background="#0E1526" HorizontalAlignment="Center"/>
+                                        </Border>
+                                        <Border Height="14" Background="#243052" BorderBrush="#46557F" BorderThickness="1" CornerRadius="1">
+                                            <Border Width="10" Height="4" Background="#0E1526" HorizontalAlignment="Center"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Canvas.Left="340" Canvas.Top="500" Text="SATA" Foreground="#56689E"
+                                           FontSize="7.5" FontWeight="Bold" FontFamily="{StaticResource AppFont}"/>
+
+                                <!-- Pile CMOS -->
+                                <Ellipse Canvas.Left="44" Canvas.Top="430" Width="30" Height="30"
+                                         Stroke="#56689E" StrokeThickness="1.5">
+                                    <Ellipse.Fill>
+                                        <RadialGradientBrush>
+                                            <GradientStop Color="#33406A" Offset="0"/>
+                                            <GradientStop Color="#243052" Offset="1"/>
+                                        </RadialGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <TextBlock Canvas.Left="50" Canvas.Top="440" Text="CR2032" Foreground="#56689E"
+                                           FontSize="6" FontWeight="Bold" FontFamily="{StaticResource AppFont}"/>
+
+                                <!-- Sérigraphie : modèle de la carte (en bas à gauche) -->
+                                <TextBlock x:Name="TxtMbSilk" Canvas.Left="100" Canvas.Top="520" Text="TWEAKLY BOARD"
+                                           Foreground="#54659C" FontSize="9" FontWeight="Bold"
+                                           FontFamily="{StaticResource AppFont}"/>
+                            </Canvas>
+                        </Border>
+
+                        <!-- ═════ LIGNES DE RAPPEL (zone → callout) ═════ -->
+                        <Canvas>
+                            <!-- OS → panneau I/O -->
+                            <Line X1="222" Y1="118" X2="278" Y2="118" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="274" Canvas.Top="114" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- GPU → slot PCIe -->
+                            <Line X1="222" Y1="288" X2="300" Y2="288" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="296" Canvas.Top="284" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- Stockage → M.2 -->
+                            <Line X1="222" Y1="455" X2="320" Y2="455" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="320" Y1="455" X2="320" Y2="240" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="316" Canvas.Top="236" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- CPU → socket -->
+                            <Line X1="678" Y1="118" X2="600" Y2="118" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="600" Y1="118" X2="600" Y2="130" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="596" Canvas.Top="128" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- RAM → slots -->
+                            <Line X1="678" Y1="288" X2="616" Y2="288" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="616" Y1="288" X2="616" Y2="170" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="612" Canvas.Top="166" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- Carte mère → chipset -->
+                            <Line X1="678" Y1="465" X2="610" Y2="465" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="606" Canvas.Top="461" Width="7" Height="7" Fill="#5BA0FF"/>
+                        </Canvas>
+
+                        <!-- ═════ CALLOUTS GAUCHE ═════ -->
+                        <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Width="212" Margin="8,60,0,0">
+                            <!-- OS -->
+                            <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeOs_Click" Margin="0,0,0,0">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                                        <Ellipse Width="7" Height="7" Fill="#2EC46A" VerticalAlignment="Center" Margin="0,1,7,0"/>
+                                        <TextBlock Text="SYSTÈME" Style="{StaticResource SchemaCat}"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtOsHead" Text="Chargement…"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <!-- GPU -->
+                            <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeGpu_Click" Margin="0,96,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="CARTE GRAPHIQUE" Style="{StaticResource SchemaCat}" Margin="0,0,0,5"/>
+                                    <TextBlock x:Name="TxtGpuHead" Text="Chargement…"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <TextBlock x:Name="TxtGpuBig" Text="—"
+                                                   Foreground="{DynamicResource ThTextTitle}"
+                                                   FontFamily="{StaticResource AppFont}"
+                                                   FontSize="17" FontWeight="Bold"/>
+                                        <TextBlock Text="VRAM" Foreground="{DynamicResource ThTextDim}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="9" FontWeight="Bold"
+                                                   Margin="6,0,0,3" VerticalAlignment="Bottom"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <!-- STOCKAGE -->
+                            <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeSto_Click" Margin="0,72,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="STOCKAGE" Style="{StaticResource SchemaCat}" Margin="0,0,0,5"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="TxtDiskBig" Text="—"
+                                                   Foreground="{DynamicResource ThTextTitle}"
+                                                   FontFamily="{StaticResource AppFont}"
+                                                   FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock Text="DISQUES" Foreground="{DynamicResource ThTextDim}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="9" FontWeight="Bold"
+                                                   Margin="7,0,0,4" VerticalAlignment="Bottom"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtDiskHead" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                    </Border>
 
-                    <!-- ▸ GPU (perf graphique, on l'aligne ici avec le CPU) -->
-                    <Border Grid.Column="2" Style="{StaticResource Bento3D}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="&#xE7F8;" Style="{StaticResource MicroGlyph}"/>
-                                <TextBlock Text="CARTE GRAPHIQUE" Style="{StaticResource BentoLabel}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtGpuHead" Text="—"
-                                       Foreground="{DynamicResource ThTextTitle}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="15" FontWeight="SemiBold"
-                                       TextWrapping="Wrap"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Bottom">
-                                <TextBlock x:Name="TxtGpuBig" Text="—"
-                                           Foreground="{DynamicResource ThTextTitle}"
-                                           FontFamily="{StaticResource AppFont}"
-                                           FontSize="22" FontWeight="Bold"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="VRAM"
-                                           Foreground="{DynamicResource ThTextDim}"
-                                           FontFamily="{StaticResource AppFont}"
-                                           FontSize="10" FontWeight="Bold"
-                                           Margin="8,0,0,5" VerticalAlignment="Bottom"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtGpuDetails" Text="—"
-                                       Foreground="{DynamicResource ThTextDim}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11" LineHeight="18"
-                                       Margin="0,10,0,0"
-                                       TextWrapping="Wrap"/>
+                        <!-- ═════ CALLOUTS DROITE ═════ -->
+                        <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Width="212" Margin="0,60,8,0">
+                            <!-- CPU -->
+                            <Border Style="{StaticResource SchemaNodeCpu}" MouseLeftButtonUp="NodeCpu_Click">
+                                <StackPanel>
+                                    <TextBlock Text="PROCESSEUR" Style="{StaticResource SchemaCat}" Margin="0,0,0,5"/>
+                                    <TextBlock x:Name="TxtCpuHead" Text="Chargement…"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="13.5" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                                        <TextBlock x:Name="TxtCpuBig" Text="—"
+                                                   Foreground="{DynamicResource ThTextTitle}"
+                                                   FontFamily="{StaticResource AppFont}"
+                                                   FontSize="17" FontWeight="Bold"/>
+                                        <TextBlock Text="FRÉQ. MAX" Foreground="{DynamicResource ThTextDim}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="9" FontWeight="Bold"
+                                                   Margin="6,0,0,3" VerticalAlignment="Bottom"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <!-- RAM -->
+                            <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeRam_Click" Margin="0,68,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="MÉMOIRE" Style="{StaticResource SchemaCat}" Margin="0,0,0,5"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="TxtRamBig" Text="—"
+                                                   Foreground="{DynamicResource ThTextTitle}"
+                                                   FontFamily="{StaticResource AppFont}"
+                                                   FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="TxtRamHead" Text=""
+                                                   Foreground="{DynamicResource ThTextDim}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                                   Margin="8,0,0,3" VerticalAlignment="Bottom" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtRamSlots" Text=""
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                               Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </Border>
+                            <!-- CARTE MÈRE -->
+                            <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeMb_Click" Margin="0,86,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="CARTE MÈRE" Style="{StaticResource SchemaCat}" Margin="0,0,0,5"/>
+                                    <TextBlock x:Name="TxtMbHead" Text="Chargement…"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
-                    </Border>
-                </Grid>
+                    </Grid>
+                </Viewbox>
+                </Border>
 
-                <!-- Section CAPACITÉ -->
-                <Grid Margin="4,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="M&#201;MOIRE"
-                               Foreground="{DynamicResource ThTextDim}"
-                               FontFamily="{StaticResource AppFont}"
-                               FontSize="9.5" FontWeight="Bold"
-                               VerticalAlignment="Center"/>
-                    <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
-                            Background="{DynamicResource ThBorder}"
-                            VerticalAlignment="Center" Opacity="0.6"/>
-                </Grid>
+                <!-- Hint + zone de détail (clic sur un composant / une zone de la carte) -->
+                <TextBlock x:Name="TxtSchemaHint"
+                           Text="Clique un composant — ou directement une zone de la carte — pour afficher son détail."
+                           Foreground="{DynamicResource ThTextDim}"
+                           FontFamily="{StaticResource AppFont}" FontSize="11"
+                           HorizontalAlignment="Center" Margin="0,8,0,0"/>
 
-                <!-- ── ROW 2 : GPU + STOCKAGE ── -->
-                <Grid Margin="0,0,0,22">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="18"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- ▸ RAM (mémoire volatile) -->
-                    <Border Grid.Column="0" Style="{StaticResource Bento3D}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="&#xE88E;" Style="{StaticResource MicroGlyph}"/>
-                                <TextBlock Text="M&#201;MOIRE VIVE (RAM)" Style="{StaticResource BentoLabel}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtRamBig" Text="—"
-                                       Foreground="{DynamicResource ThTextTitle}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="26" FontWeight="Bold"
-                                       LineHeight="28" LineStackingStrategy="BlockLineHeight"/>
-                            <TextBlock x:Name="TxtRamHead" Text="—"
-                                       Foreground="{DynamicResource ThTextSub}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11.5"
-                                       Margin="0,4,0,8"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtRamDetails" Text="—"
-                                       Foreground="{DynamicResource ThTextDim}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11" LineHeight="17"
-                                       TextWrapping="Wrap"/>
+                <Border x:Name="SpecDetailZone" Style="{StaticResource TileStyle}"
+                        Margin="0,10,0,0" Visibility="Collapsed">
+                    <Grid>
+                        <StackPanel x:Name="DetCpu" Visibility="Collapsed">
+                            <TextBlock Text="PROCESSEUR — DÉTAIL" Style="{StaticResource SchemaCat}" Margin="0,0,0,7"/>
+                            <TextBlock x:Name="TxtCpuDetails" Text="—" Style="{StaticResource TileValueStyle}"/>
                         </StackPanel>
-                    </Border>
-
-                    <!-- ▸ STOCKAGE (mémoire permanente) -->
-                    <Border Grid.Column="2" Style="{StaticResource Bento3D}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="&#xEDA2;" Style="{StaticResource MicroGlyph}"/>
-                                <TextBlock Text="STOCKAGE" Style="{StaticResource BentoLabel}"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Bottom">
-                                <TextBlock x:Name="TxtDiskBig" Text="—"
-                                           Foreground="{DynamicResource ThTextTitle}"
-                                           FontFamily="{StaticResource AppFont}"
-                                           FontSize="26" FontWeight="Bold"
-                                           LineHeight="28" LineStackingStrategy="BlockLineHeight"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="DISQUES"
-                                           Foreground="{DynamicResource ThTextDim}"
-                                           FontFamily="{StaticResource AppFont}"
-                                           FontSize="10" FontWeight="Bold"
-                                           Margin="10,0,0,5" VerticalAlignment="Bottom"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtDiskHead" Visibility="Collapsed"/>
-                            <TextBlock x:Name="TxtDiskDetails" Text="—"
-                                       Foreground="{DynamicResource ThTextSub}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11" LineHeight="17"
-                                       TextWrapping="Wrap"/>
+                        <StackPanel x:Name="DetRam" Visibility="Collapsed">
+                            <TextBlock Text="MÉMOIRE — DÉTAIL" Style="{StaticResource SchemaCat}" Margin="0,0,0,7"/>
+                            <TextBlock x:Name="TxtRamDetails" Text="—" Style="{StaticResource TileValueStyle}"/>
                         </StackPanel>
-                    </Border>
-                </Grid>
-
-                <!-- Section SYSTÈME -->
-                <Grid Margin="4,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="PLATEFORME"
-                               Foreground="{DynamicResource ThTextDim}"
-                               FontFamily="{StaticResource AppFont}"
-                               FontSize="9.5" FontWeight="Bold"
-                               VerticalAlignment="Center"/>
-                    <Border Grid.Column="1" Height="1" Margin="14,0,0,0"
-                            Background="{DynamicResource ThBorder}"
-                            VerticalAlignment="Center" Opacity="0.6"/>
-                </Grid>
-
-                <!-- ── ROW 3 : OS + CARTE MÈRE ── -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="18"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- ▸ OS -->
-                    <Border Grid.Column="0" Style="{StaticResource Bento3D}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="&#xE770;" Style="{StaticResource MicroGlyph}"/>
-                                <TextBlock Text="SYST&#200;ME D'EXPLOITATION" Style="{StaticResource BentoLabel}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtOsHead" Text="—"
-                                       Foreground="{DynamicResource ThTextTitle}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="15" FontWeight="SemiBold"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtOsDetails" Text="—"
-                                       Foreground="{DynamicResource ThTextDim}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11" LineHeight="18"
-                                       Margin="0,8,0,0"
-                                       TextWrapping="Wrap"/>
+                        <StackPanel x:Name="DetGpu" Visibility="Collapsed">
+                            <TextBlock Text="CARTE GRAPHIQUE — DÉTAIL" Style="{StaticResource SchemaCat}" Margin="0,0,0,7"/>
+                            <TextBlock x:Name="TxtGpuDetails" Text="—" Style="{StaticResource TileValueStyle}"/>
                         </StackPanel>
-                    </Border>
-
-                    <!-- ▸ CARTE MÈRE -->
-                    <Border Grid.Column="2" Style="{StaticResource Bento3D}">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <TextBlock Text="&#xE964;" Style="{StaticResource MicroGlyph}"/>
-                                <TextBlock Text="CARTE M&#200;RE" Style="{StaticResource BentoLabel}"/>
-                            </StackPanel>
-                            <TextBlock x:Name="TxtMbHead" Text="—"
-                                       Foreground="{DynamicResource ThTextTitle}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="15" FontWeight="SemiBold"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtMbDetails" Text="—"
-                                       Foreground="{DynamicResource ThTextDim}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="11" LineHeight="18"
-                                       Margin="0,8,0,10"
-                                       TextWrapping="Wrap"/>
+                        <StackPanel x:Name="DetSto" Visibility="Collapsed">
+                            <TextBlock Text="STOCKAGE — DÉTAIL" Style="{StaticResource SchemaCat}" Margin="0,0,0,7"/>
+                            <TextBlock x:Name="TxtDiskDetails" Text="—" Style="{StaticResource TileValueStyle}"/>
+                        </StackPanel>
+                        <StackPanel x:Name="DetMb" Visibility="Collapsed">
+                            <TextBlock Text="CARTE MÈRE &amp; BIOS — DÉTAIL" Style="{StaticResource SchemaCat}" Margin="0,0,0,7"/>
+                            <TextBlock x:Name="TxtMbDetails" Text="—" Style="{StaticResource TileValueStyle}"/>
                             <Button x:Name="BtnBios"
                                     Content="&#8599; Page BIOS constructeur"
                                     Style="{StaticResource ActionBtnStyle}"
-                                    Margin="0,0,0,0"
+                                    Margin="0,10,0,0"
                                     IsEnabled="False"
                                     HorizontalAlignment="Left"
                                     Click="BtnBios_Click"/>
                         </StackPanel>
-                    </Border>
-                </Grid>
+                        <StackPanel x:Name="DetOs" Visibility="Collapsed">
+                            <TextBlock Text="SYSTÈME D'EXPLOITATION — DÉTAIL" Style="{StaticResource SchemaCat}" Margin="0,0,0,7"/>
+                            <TextBlock x:Name="TxtOsDetails" Text="—" Style="{StaticResource TileValueStyle}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
 
-                <!-- TextBlocks LEGACY (cachés) — populés en compat pour ne pas casser le code-behind -->
+                <!-- TextBlocks LEGACY (cachés) — populés en compat par LoadHardwareAsync -->
                 <TextBlock x:Name="TxtCPU"  Visibility="Collapsed"/>
                 <TextBlock x:Name="TxtRAM"  Visibility="Collapsed"/>
                 <TextBlock x:Name="TxtGPU"  Visibility="Collapsed"/>

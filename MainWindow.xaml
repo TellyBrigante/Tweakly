@@ -214,7 +214,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.3.2"
+                            <TextBlock x:Name="TxtVersion" Text="v1.3.3"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>

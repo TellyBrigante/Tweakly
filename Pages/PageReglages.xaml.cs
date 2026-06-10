@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.3.2";
+        public const string AppVersion = "1.3.3";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -458,6 +458,18 @@ namespace Optimisation_Tool.Pages
         {
             try { Process.Start("explorer.exe", AppDomain.CurrentDomain.BaseDirectory); }
             catch (Exception ex) { _main.Log($"Réglages : erreur ouverture dossier — {ex.Message}"); }
+        }
+
+        /// <summary>Ouvre le journal technique local (config\tweakly-log.txt) dans le Bloc-notes.</summary>
+        private void BtnOpenLog_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var f = Helpers.AppLog.LogFile;
+                if (!File.Exists(f)) { _main.Log("Réglages : aucun journal technique pour l'instant."); return; }
+                Process.Start(new ProcessStartInfo("notepad.exe", $"\"{f}\"") { UseShellExecute = true });
+            }
+            catch (Exception ex) { _main.Log($"Réglages : erreur ouverture journal — {ex.Message}"); }
         }
 
         private void OpenUrl(string url)
