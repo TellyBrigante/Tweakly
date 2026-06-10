@@ -141,49 +141,36 @@ namespace Optimisation_Tool.Pages
             TxtOverlayPct.Text = $"{pct:F0} %";
         }
 
-        // ── BLOC 1 : Tweakly Score (thermomètre + grand chiffre + verdict) ────
+        // ── BLOC 1 : hero compact (grand chiffre + verdict). Refonte v1.3.2 :
+        // le thermomètre 0-150 a été RETIRÉ — le classement type Cinebench montre la
+        // position bien mieux (SetScoreBar/ScoreMarker supprimés avec lui).
 
         private void RefreshHeader()
         {
             if (_history.Count == 0)
             {
                 TxtScore.Text     = "—";
-                TxtVerdict.Text   = "aucune mesure encore — lance ton premier bench";
+                TxtVerdict.Text   = "Lance ton premier benchmark pour mesurer ta machine.";
                 TxtLastWhen.Text  = "";
-                SetScoreBar(0);
                 return;
             }
             var last = _history[0];
             TxtScore.Text    = last.TotalScore.ToString();
             TxtVerdict.Text  = ScoreVerdict(last.TotalScore);
             TxtLastWhen.Text = $"dernière mesure : {last.Timestamp:dd/MM/yyyy HH:mm}";
-            SetScoreBar(last.TotalScore);
-        }
 
-        // Thermomètre 0-150 (au-dessus de 100 = surperformance, contenu dans la zone "ThOk")
-        private void SetScoreBar(int score)
-        {
-            double t = Math.Max(0, Math.Min(150, score));
-            // Les DEUX colonnes doivent être ajustées ensemble pour garder un ratio correct :
-            // sinon avec ScoreColRest figé à 150*, le remplissage = t/(t+150) au lieu de t/150.
-            ScoreCol.Width     = new GridLength(t,         GridUnitType.Star);
-            ScoreColRest.Width = new GridLength(150.0 - t, GridUnitType.Star);
-            ScoreMarker.Margin = new Thickness(MarkerOffset(t), -4, 0, 0);
-        }
-
-        private double MarkerOffset(double scoreFrom0to150)
-        {
-            // ScoreBar a 150 colonnes étoile (0-150). Le marker doit suivre la même proportion.
-            // Largeur réelle de la piste = celle du contrôle parent — on prend celle de ScoreBar à l'arrange.
-            double w = ScoreBar.ActualWidth;
-            if (w <= 0) return 0;
-            return Math.Max(0, Math.Min(w, w * scoreFrom0to150 / 150.0));
+#if DEBUG
+            // Garde-fou anti-confusion : les pivots du bench sont calibrés sur le JIT
+            // RELEASE (~2,9× plus rapide sur Mandelbrot). En Debug les scores CPU/RAM
+            // s'effondrent mécaniquement (~36 au lieu de ~100) — on l'affiche pour ne
+            // plus jamais croire à un bug de calibration en testant le build de dev.
+            TxtVerdict.Text  = "⚠ BUILD DEBUG — scores non représentatifs (pivots calibrés Release)";
+#endif
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo info)
         {
             base.OnRenderSizeChanged(info);
-            if (_history.Count > 0) SetScoreBar(_history[0].TotalScore);
             RefreshSparkline();
         }
 
@@ -224,40 +211,37 @@ namespace Optimisation_Tool.Pages
             _      => "RAM faible — vérifie dual channel, XMP",
         };
 
-        // ── BLOC 2 : 3 sous-scores (CPU, Système, Réseau) ────────────────────
+        // ── BLOC 3 : 4 pills compactes (CPU, Système, RAM, Réseau) ────────────
+        // Refonte v1.3.2 : les 3 grosses cartes verbeuses sont devenues des pills
+        // (score + mini-barre). Le détail (verdict, mesures) s'affiche au CLIC dans
+        // la zone DetailZone partagée — voir Pill*_Click.
 
         private void RefreshSubScores()
         {
             if (_history.Count == 0)
             {
-                TxtCpuScore.Text = TxtSysScore.Text = TxtNetScore.Text = "—";
+                TxtCpuScore.Text = TxtSysScore.Text = TxtRamScore.Text = TxtNetScore.Text = "—";
                 TxtCpuRefModel.Text = "—";
-                TxtCpuMeasured.Text = TxtCpuNominal.Text = "—";
-                TxtSysMeasured.Text = TxtNetMeasured.Text = "—";
-                CpuCol.Width = SysCol.Width = NetCol.Width = new GridLength(0, GridUnitType.Star);
+                TxtCpuMeasured.Text = TxtSysMeasured.Text = TxtRamDetail.Text = TxtNetMeasured.Text = "—";
+                CpuCol.Width = SysCol.Width = RamCol.Width = NetCol.Width = new GridLength(0, GridUnitType.Star);
                 CpuColRest.Width = new GridLength(150, GridUnitType.Star);
-                SysColRest.Width = NetColRest.Width = new GridLength(100, GridUnitType.Star);
+                SysColRest.Width = RamColRest.Width = NetColRest.Width = new GridLength(100, GridUnitType.Star);
+                _openDetail = null;
+                DetailZone.Visibility = Visibility.Collapsed;
                 return;
             }
             var r = _history[0];
 
             // ── CPU (échelle 0-150) ─────────────────────────────────────────
-            // v1.3.0 bench v2 : 3 sondes (Single Mandelbrot / Multi 8t / Mem pointer-chase)
-            // + 2 sondes RAM affichées dans la même carte pour ne pas casser le layout.
             TxtCpuScore.Text = r.CpuScore.ToString();
             double cpuT = Math.Max(0, Math.Min(150, r.CpuScore));
             CpuCol.Width     = new GridLength(cpuT,         GridUnitType.Star);
             CpuColRest.Width = new GridLength(150.0 - cpuT, GridUnitType.Star);
-
-            // Référence + verdict CPU
             TxtCpuRefModel.Text = r.HasNominalRef
                 ? $"Référence : {r.NominalRefModel}"
                   + (string.IsNullOrEmpty(r.CpuTier) ? "" : $"  ·  Tier : {r.CpuTier}")
                 : "CPU non répertorié — score relatif à la 1re mesure (= 100)";
-
-            // Verdict CPU en français clair (pas de chiffres techniques)
             TxtCpuMeasured.Text = Verdict(r.CpuScore, "CPU");
-            TxtCpuNominal.Text  = $"RAM : {r.RamScore}/150  ·  {ShortRam(r.RamScore)}";
 
             // ── Système (échelle 0-100) ────────────────────────────────────
             TxtSysScore.Text = r.SysScore.ToString();
@@ -265,6 +249,14 @@ namespace Optimisation_Tool.Pages
             SysCol.Width     = new GridLength(sysT,         GridUnitType.Star);
             SysColRest.Width = new GridLength(100.0 - sysT, GridUnitType.Star);
             TxtSysMeasured.Text = Verdict(r.SysScore, "Système");
+
+            // ── RAM (échelle 0-100) ────────────────────────────────────────
+            TxtRamScore.Text = r.RamScore.ToString();
+            double ramT = Math.Max(0, Math.Min(100, r.RamScore));
+            RamCol.Width     = new GridLength(ramT,         GridUnitType.Star);
+            RamColRest.Width = new GridLength(100.0 - ramT, GridUnitType.Star);
+            TxtRamDetail.Text = $"{ShortRam(r.RamScore)}\n"
+                              + $"{r.RamBandwidthGBs:F1} GB/s · latence {r.RamLatencyNs:F0} ns";
 
             // ── Réseau (échelle 0-100) ─────────────────────────────────────
             TxtNetScore.Text = r.NetScore.ToString();
@@ -298,6 +290,33 @@ namespace Optimisation_Tool.Pages
             catch { }
         }
 
+        // ── Pills : détail au clic (zone partagée, un panneau à la fois) ──────
+        // Re-cliquer sur la même pill referme la zone. Cliquer sur une autre bascule.
+
+        private System.Windows.Controls.StackPanel? _openDetail;
+
+        private void TogglePillDetail(System.Windows.Controls.StackPanel panel)
+        {
+            if (_history.Count == 0) return;   // rien à détailler avant le 1er bench
+            foreach (var p in new[] { DetailCpu, DetailSys, DetailRam, DetailNet })
+                p.Visibility = Visibility.Collapsed;
+
+            if (_openDetail == panel)
+            {
+                _openDetail = null;
+                DetailZone.Visibility = Visibility.Collapsed;
+                return;
+            }
+            _openDetail = panel;
+            panel.Visibility      = Visibility.Visible;
+            DetailZone.Visibility = Visibility.Visible;
+        }
+
+        private void PillCpu_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => TogglePillDetail(DetailCpu);
+        private void PillSys_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => TogglePillDetail(DetailSys);
+        private void PillRam_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => TogglePillDetail(DetailRam);
+        private void PillNet_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) => TogglePillDetail(DetailNet);
+
         // ── BLOC 2bis : Classement CPU type Cinebench ─────────────────────────
         // Barres horizontales : CPUs voisins du tien (nominal = moyennes publiques
         // PassMark, échelle 265K = 100) + TA mesure réelle en accent bleu. Le but :
@@ -306,10 +325,22 @@ namespace Optimisation_Tool.Pages
         private void RefreshLadder(BenchmarkResult r)
         {
             LadderPanel.Children.Clear();
-            if (!r.HasNominalRef) { LadderTile.Visibility = Visibility.Collapsed; return; }
+            // Refonte v1.3.2 : la tuile reste TOUJOURS visible (c'est le bloc central de
+            // la page d'accueil). Sans référence/données → message TxtLadderEmpty.
+            if (!r.HasNominalRef)
+            {
+                TxtLadderEmpty.Text = "CPU non répertorié dans la base — classement indisponible (le score reste valable).";
+                TxtLadderEmpty.Visibility = Visibility.Visible;
+                return;
+            }
 
             var ladder = Helpers.CpuReference.GetLadder(r.NominalRefModel, around: 3);
-            if (ladder.Count == 0) { LadderTile.Visibility = Visibility.Collapsed; return; }
+            if (ladder.Count == 0)
+            {
+                TxtLadderEmpty.Visibility = Visibility.Visible;
+                return;
+            }
+            TxtLadderEmpty.Visibility = Visibility.Collapsed;
 
             // Ta mesure réelle convertie en points classement (échelle 265K = 100)
             double userPts = r.CpuMultiMops / Helpers.CpuReference.BaseMultiMpxsPublic * 100.0;
@@ -460,8 +491,8 @@ namespace Optimisation_Tool.Pages
             date.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");
             // Sous-ligne plus parlante : chiffres bruts CPU + système + réseau
             string sub = r.HasNominalRef
-                ? $"CPU {r.CpuMultiMops:F0}/{r.NominalMultiMops:F0} Mio/s  ·  Jitter {r.SysJitterMicroSec:F0} µs  ·  Ping {(r.NetPingMs < 0 ? "—" : r.NetPingMs.ToString("F0") + " ms")}"
-                : $"CPU {r.CpuMultiMops:F0} Mio/s  ·  Jitter {r.SysJitterMicroSec:F0} µs  ·  Ping {(r.NetPingMs < 0 ? "—" : r.NetPingMs.ToString("F0") + " ms")}";
+                ? $"CPU {r.CpuMultiMops:F0}/{r.NominalMultiMops:F0} Mpx/s  ·  Jitter {r.SysJitterMicroSec:F0} µs  ·  Ping {(r.NetPingMs < 0 ? "—" : r.NetPingMs.ToString("F0") + " ms")}"
+                : $"CPU {r.CpuMultiMops:F0} Mpx/s  ·  Jitter {r.SysJitterMicroSec:F0} µs  ·  Ping {(r.NetPingMs < 0 ? "—" : r.NetPingMs.ToString("F0") + " ms")}";
             var subTb = new TextBlock
             {
                 Text = sub,
@@ -644,7 +675,7 @@ namespace Optimisation_Tool.Pages
                 _selA.TotalScore.ToString(), _selB.TotalScore.ToString(), c.TotalDelta, suffix: "");
             AddDeltaRowRaw("CPU (multi)",
                 $"{_selA.CpuMultiMops:F0}", $"{_selB.CpuMultiMops:F0}",
-                Delta(_selA.CpuMultiMops, _selB.CpuMultiMops), suffix: " Mio/s");
+                Delta(_selA.CpuMultiMops, _selB.CpuMultiMops), suffix: " Mpx/s");
             AddDeltaRowRaw("Jitter système",
                 $"{_selA.SysJitterMicroSec:F0}", $"{_selB.SysJitterMicroSec:F0}",
                 -Delta(_selA.SysJitterMicroSec, _selB.SysJitterMicroSec), suffix: " µs (bas = mieux)");
@@ -725,7 +756,7 @@ namespace Optimisation_Tool.Pages
             st.Children.Add(scoreLine);
 
             // Chiffres bruts (mesuré uniquement, le nominal est ailleurs)
-            AddRawLine(st, "CPU multi",      $"{r.CpuMultiMops:F0} Mio/s");
+            AddRawLine(st, "CPU multi",      $"{r.CpuMultiMops:F0} Mpx/s");
             AddRawLine(st, "Jitter système", $"{r.SysJitterMicroSec:F0} µs");
             AddRawLine(st, "Ping",           r.NetPingMs < 0 ? "—" : $"{r.NetPingMs:F0} ms");
 
