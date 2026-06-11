@@ -65,6 +65,10 @@ namespace Optimisation_Tool.Pages
             }
         }
 
+        /// <summary>Initiale affichée dans l'avatar de la liste (refonte visuelle v1.3.4).</summary>
+        public string Initial => string.IsNullOrWhiteSpace(Name) ? "•"
+            : char.ToUpperInvariant(Name.TrimStart()[0]).ToString();
+
         public string StatusText => UpdateStatus switch
         {
             UpdateStatus.Checking        => "Vérification…",
@@ -144,7 +148,16 @@ namespace Optimisation_Tool.Pages
             var list = await Task.Run(LoadFromRegistry);
 
             foreach (var a in list.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                // Stats vivantes : chaque changement de statut re-calcule le bandeau
+                // (les items sont recréés à chaque LoadAppsAsync → pas de fuite d'abonnement).
+                a.PropertyChanged += (_, ev) =>
+                {
+                    if (ev.PropertyName == nameof(AppItem.UpdateStatus))
+                        Dispatcher.BeginInvoke(UpdateStats);
+                };
                 _apps.Add(a);
+            }
 
             UpdateCount();
             BtnRefresh.IsEnabled = true;
@@ -996,6 +1009,27 @@ namespace Optimisation_Tool.Pages
             TxtAppCount.Text = visible == total
                 ? $"{total} application{(total > 1 ? "s" : "")}"
                 : $"{visible} / {total} application{(total > 1 ? "s" : "")}";
+            UpdateStats();
+        }
+
+        /// <summary>
+        /// Bandeau de stats (refonte visuelle v1.3.4) : Total / À jour / MAJ dispo / Échecs.
+        /// Recalculé depuis _apps à chaque changement de statut (hook PropertyChanged posé
+        /// dans LoadAppsAsync) et à chaque UpdateCount. La tuile Échecs n'apparaît que s'il
+        /// y en a (pas d'alarme rouge à zéro).
+        /// </summary>
+        private void UpdateStats()
+        {
+            int total  = _apps.Count;
+            int ok     = _apps.Count(a => a.UpdateStatus is UpdateStatus.UpToDate or UpdateStatus.Updated);
+            int avail  = _apps.Count(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
+            int failed = _apps.Count(a => a.UpdateStatus == UpdateStatus.Failed);
+
+            TxtStatTotal.Text  = total.ToString();
+            TxtStatOk.Text     = ok.ToString();
+            TxtStatAvail.Text  = avail.ToString();
+            TxtStatFailed.Text = failed.ToString();
+            StatFailedCard.Visibility = failed > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 }

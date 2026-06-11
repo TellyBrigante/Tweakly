@@ -12,8 +12,15 @@ obj/
 # JetBrains Rider
 .idea/
 
-# Settings locaux (thème — propre à chaque machine)
+# Données utilisateur (runtime) — JAMAIS dans le repo ni dans le ZIP de MAJ.
+# Depuis v1.2.8 elles vivent dans config\ à côté de l'exe ; les patterns à plat
+# couvrent l'ancien layout (≤ v1.2.7) par sécurité.
+config/
 tweakly-settings.json
+tweakly-benchmarks.json
+tweakly-bench-ref.json
+tweakly-log.txt
+tweakly-log.txt.old
 
 # Script d'installeur + dossier de packaging (pas nécessaire pour build / run)
 installer/

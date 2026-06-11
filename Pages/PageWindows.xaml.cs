@@ -273,19 +273,64 @@ namespace Optimisation_Tool.Pages
             }
             else if (result.Contains("NOTINSTALLED"))
             {
-                _main.Log("Réparation ms-gamingoverlay : Xbox Game Bar absente → ouverture du Microsoft Store.");
-                Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText,
-                    "Xbox Game Bar absente — ouverture du Store pour la réinstaller.");
-                try { Process.Start(new ProcessStartInfo("ms-windows-store://search/?query=Xbox Game Bar") { UseShellExecute = true }); } catch { }
+                // Game Bar ABSENTE : le popup vient de GameDVR qui invoque ms-gamingoverlay
+                // dans le vide. Fix DOCUMENTÉ (Microsoft Q&A 3739326, le plus confirmé) :
+                // couper le DÉCLENCHEUR — les 2 mêmes clés HKCU que notre tweak « Désactiver
+                // Game Bar » (ApplyChanges plus bas). Le popup disparaît SANS réinstaller.
+                bool dvrOff = DisableGameDvrTrigger();
+                _main.Log(dvrOff
+                    ? "Réparation ms-gamingoverlay : Game Bar absente → déclencheur GameDVR coupé (AppCaptureEnabled=0 + GameDVR_Enabled=0). Le popup ne devrait plus apparaître. Pour retrouver la Game Bar : Microsoft Store."
+                    : "Réparation ms-gamingoverlay : Game Bar absente ET échec d'écriture des clés GameDVR — voir le journal technique.");
+                if (dvrOff)
+                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                        "Popup neutralisé (Game Bar absente : enregistrement GameDVR désactivé)", "");
+                else
+                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, false, "",
+                        "Réparation impossible — voir le journal d'activité.");
             }
             else
             {
-                _main.Log($"Réparation ms-gamingoverlay : échec — {result.Trim()}");
-                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, false, "",
-                    "Réparation impossible — voir le journal d'activité.");
+                // Échec du ré-enregistrement : même neutralisation du déclencheur en filet
+                // de secours (le package est peut-être irrécupérable, mais le popup, lui,
+                // peut être stoppé à coup sûr).
+                bool dvrOff = DisableGameDvrTrigger();
+                _main.Log($"Réparation ms-gamingoverlay : ré-enregistrement échoué ({result.Trim()})"
+                        + (dvrOff ? " — déclencheur GameDVR coupé en secours, le popup ne devrait plus apparaître."
+                                  : " — et échec d'écriture des clés GameDVR."));
+                if (dvrOff)
+                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                        "Réparation partielle : popup neutralisé (enregistrement GameDVR désactivé)", "");
+                else
+                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, false, "",
+                        "Réparation impossible — voir le journal d'activité.");
             }
 
             BtnFixGamingOverlay.IsEnabled = true;
+        }
+
+        /// <summary>
+        /// Coupe le déclencheur du popup ms-gamingoverlay : GameDVR n'invoque plus l'overlay.
+        /// MÊMES clés que le tweak « Désactiver Game Bar » (cohérence avec ApplyChanges) ;
+        /// HKCU reste celui de l'utilisateur réel même en admin (vérifié de longue date).
+        /// Source : learn.microsoft.com/en-us/answers/questions/3739326 (fix le plus confirmé).
+        /// </summary>
+        private static bool DisableGameDvrTrigger()
+        {
+            try
+            {
+                Registry.SetValue(
+                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
+                    "AppCaptureEnabled", 0, RegistryValueKind.DWord);
+                Registry.SetValue(
+                    @"HKEY_CURRENT_USER\System\GameConfigStore",
+                    "GameDVR_Enabled", 0, RegistryValueKind.DWord);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Helpers.AppLog.Error("ms-gamingoverlay : écriture clés GameDVR", ex);
+                return false;
+            }
         }
 
         private static void ApplyChanges(

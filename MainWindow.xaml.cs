@@ -162,6 +162,31 @@ namespace Optimisation_Tool
                     catch { }
                 }
 
+#if DEBUG
+                // APERÇU DESIGN (Debug uniquement, absent du build Release) : F12 affiche
+                // l'overlay de MAJ avec des données factices — permet d'itérer sur le visuel
+                // sans publier de release. Re-F12 / « Plus tard » pour fermer.
+                PreviewKeyDown += (_, k) =>
+                {
+                    if (k.Key != System.Windows.Input.Key.F12) return;
+                    if (UpdateOverlay.Visibility == Visibility.Visible)
+                    {
+                        UpdateOverlay.Visibility = Visibility.Collapsed;
+                        return;
+                    }
+                    TxtUpdTitle.Text    = "Une mise à jour est disponible";
+                    RunUpdFrom.Text     = $"v{Pages.PageReglages.AppVersion}";
+                    RunUpdTo.Text       = "v9.9.9";
+                    TxtUpdStatus.Text   = "Téléchargement de la mise à jour…";
+                    SetUpdateNotes("- Refonte de l'écran de mise à jour : nouveautés affichées, bouton Plus tard.\n"
+                                 + "- L'updater refuse désormais toute release sans hash d'intégrité (SHA-256).\n"
+                                 + "- Corrections diverses et améliorations de stabilité.");
+                    BtnUpdLater.Visibility   = Visibility.Visible;
+                    BtnUpdContinue.Visibility = Visibility.Visible;
+                    SetUpdateBar(67);
+                    UpdateOverlay.Visibility = Visibility.Visible;
+                };
+#endif
 #if !DEBUG
                 // MAJ : vérification au démarrage + périodique (uniquement en build distribué).
                 // En DEBUG (développement), on ne vérifie jamais : c'est nous la version de référence.
@@ -178,6 +203,12 @@ namespace Optimisation_Tool
 
         private string? _pendingBat;
         private System.Windows.Threading.DispatcherTimer? _updateWatcher;
+        // « Plus tard » (v1.3.4) : annulation du téléchargement en cours + tag décliné
+        // (le watcher 30 min ne re-propose pas la MÊME version pendant cette session ;
+        // la vérification manuelle dans Réglages la repropose toujours).
+        private System.Threading.CancellationTokenSource? _updCts;
+        private string _declinedTag = "";
+        private string _updTag      = "";
 
         private async Task CheckUpdateSilentAsync()
         {
@@ -206,36 +237,53 @@ namespace Optimisation_Tool
             if (UpdateOverlay.Visibility == Visibility.Visible) return; // déjà en cours
             try
             {
-                var (hasUpdate, tag, _, assetUrl, sha256) = await PageReglages.CheckForUpdateAsync();
+                var (hasUpdate, tag, _, assetUrl, sha256, notes) = await PageReglages.CheckForUpdateAsync();
                 if (hasUpdate && !string.IsNullOrEmpty(assetUrl))
                 {
+                    if (tag == _declinedTag) return;   // l'utilisateur a dit « plus tard » pour celle-ci
                     Log($"Mise à jour disponible : {tag}.");
-                    StartUpdate(assetUrl, tag, sha256);   // overlay + téléchargement direct
+                    StartUpdate(assetUrl, tag, sha256, notes);   // overlay + téléchargement direct
                 }
             }
             catch (Exception ex) { Log($"MAJ auto : erreur — {ex.Message}"); }
         }
 
         /// <summary>Affiche l'overlay, télécharge la MAJ avec progression, puis propose CONTINUER.
-        /// sha256 (optionnel) : hash publié dans le body de la release — vérifié après téléchargement,
-        /// mismatch = échec propre (aucun fichier remplacé). Vide = pas de vérification (compat).</summary>
-        public async void StartUpdate(string assetUrl, string tag, string sha256 = "")
+        /// sha256 : hash publié dans le body de la release — vérifié après téléchargement.
+        /// Mismatch OU hash vide = échec propre (aucun fichier remplacé) — fail-closed depuis v1.3.4.</summary>
+        public async void StartUpdate(string assetUrl, string tag, string sha256 = "", string notes = "")
         {
+            _updTag = tag;
+            _updCts?.Dispose();
+            _updCts = new System.Threading.CancellationTokenSource();
+
             UpdateOverlay.Visibility  = Visibility.Visible;
-            TxtUpdTitle.Text          = $"Mise à jour {tag}";
+            TxtUpdTitle.Text          = "Une mise à jour est disponible";
+            RunUpdFrom.Text           = $"v{PageReglages.AppVersion}";
+            RunUpdTo.Text             = $"v{tag.TrimStart('v', 'V')}";
             TxtUpdStatus.Text         = "Téléchargement de la mise à jour…";
             BtnUpdContinue.Visibility = Visibility.Collapsed;
+            BtnUpdLater.Visibility    = Visibility.Visible;
             SetUpdateBar(0);
+
+            // Patch note de la release (sans la ligne SHA256) — la carte n'apparaît que
+            // s'il y a vraiment du contenu à montrer.
+            SetUpdateNotes(notes);
 
             try
             {
                 var progress = new Progress<double>(SetUpdateBar);
-                _pendingBat = await PageReglages.PrepareUpdateAsync(assetUrl, progress, sha256);
+                _pendingBat = await PageReglages.PrepareUpdateAsync(assetUrl, progress, sha256, _updCts.Token);
 
                 SetUpdateBar(100);
-                TxtUpdStatus.Text         = "Téléchargement terminé. Clique sur CONTINUER pour redémarrer.";
+                TxtUpdStatus.Text         = "Téléchargement terminé — prête à installer.";
                 BtnUpdContinue.Visibility = Visibility.Visible;
                 Log($"Mise à jour {tag} téléchargée — en attente de redémarrage.");
+            }
+            catch (OperationCanceledException)
+            {
+                // « Plus tard » pendant le téléchargement : BtnUpdLater_Click a déjà fermé
+                // l'overlay et tracé le report. Rien d'autre à faire.
             }
             catch (Exception ex)
             {
@@ -244,12 +292,88 @@ namespace Optimisation_Tool
             }
         }
 
+        /// <summary>
+        /// « Plus tard » : annule le téléchargement en cours (ou abandonne une MAJ prête),
+        /// nettoie le dossier temporaire (rien ne reste stagé sur disque) et rend la main
+        /// sur la version actuelle. La même version ne sera pas re-proposée automatiquement
+        /// pendant cette session ; au prochain démarrage (ou via Réglages), si.
+        /// </summary>
+        private void BtnUpdLater_Click(object sender, RoutedEventArgs e)
+        {
+            try { _updCts?.Cancel(); } catch { }
+            _pendingBat  = null;
+            _declinedTag = _updTag;
+            UpdateOverlay.Visibility = Visibility.Collapsed;
+            ClearTaskbarProgress();
+            try
+            {
+                var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Tweakly_update");
+                if (System.IO.Directory.Exists(tmp)) System.IO.Directory.Delete(tmp, true);
+            }
+            catch { /* fichier encore verrouillé par le download qui s'annule → retentera au prochain Prepare */ }
+            Log($"Mise à jour {_updTag} reportée — tu restes sur la v{PageReglages.AppVersion}. " +
+                "Elle sera re-proposée au prochain démarrage (ou via Réglages > Vérifier).");
+        }
+
+        /// <summary>
+        /// Remplit la carte « Nouveautés » de l'overlay : chaque ligne du patch note qui
+        /// commence par "- " / "* " / "• " devient une puce colorée (accent bleu), le reste
+        /// est affiché tel quel. Carte masquée si le patch note est vide.
+        /// </summary>
+        private void SetUpdateNotes(string notes)
+        {
+            TxtUpdNotes.Inlines.Clear();
+            if (string.IsNullOrWhiteSpace(notes))
+            {
+                UpdNotesCard.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var accent = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+            bool first = true;
+            foreach (var raw in notes.Replace("\r\n", "\n").Split('\n'))
+            {
+                var line = raw.TrimEnd();
+                if (line.Trim().Length == 0) continue;
+                if (!first) TxtUpdNotes.Inlines.Add(new System.Windows.Documents.LineBreak());
+                first = false;
+
+                var t = line.TrimStart();
+                if (t.StartsWith("- ") || t.StartsWith("* ") || t.StartsWith("• "))
+                {
+                    TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run("•  ")
+                    { Foreground = accent, FontWeight = FontWeights.Bold });
+                    TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run(t.Substring(2).TrimStart()));
+                }
+                else
+                {
+                    TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run(line));
+                }
+            }
+            UpdNotesCard.Visibility = Visibility.Visible;
+        }
+
         private void SetUpdateBar(double pct)
         {
             pct = Math.Max(0, Math.Min(100, pct));
             UpdBar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
             UpdBar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
             TxtUpdPct.Text = $"{pct:F0} %";
+        }
+
+        /// <summary>
+        /// L'overlay de MAJ couvre TOUTE la fenêtre (barre de titre incluse) → sans ça,
+        /// impossible de déplacer la fenêtre pendant une MAJ. Si les boutons se retrouvent
+        /// hors écran (fenêtre à cheval sur un bord, écran débranché…), l'utilisateur serait
+        /// coincé. Cliquer-glisser n'importe quelle zone vide de l'overlay déplace la fenêtre
+        /// (les boutons interceptent leur clic, donc aucun conflit avec eux).
+        /// </summary>
+        private void UpdateOverlay_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed && WindowState == WindowState.Normal)
+            {
+                try { DragMove(); } catch { /* clic relâché pendant la capture : ignorer */ }
+            }
         }
 
         private void BtnUpdContinue_Click(object sender, RoutedEventArgs e)

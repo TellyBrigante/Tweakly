@@ -6,9 +6,10 @@
              Loaded="UserControl_Loaded">
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/> <!-- 0: barre d'outils -->
+            <RowDefinition Height="Auto"/> <!-- 1: bandeau de stats (refonte v1.3.4) -->
+            <RowDefinition Height="*"/>    <!-- 2: liste -->
+            <RowDefinition Height="Auto"/> <!-- 3: barre de statut -->
         </Grid.RowDefinitions>
 
         <!-- ── Barre d'outils ─────────────────────────────────────────────── -->
@@ -34,7 +35,16 @@
                     CornerRadius="7"
                     Height="34">
                 <Grid>
-                    <TextBlock x:Name="TxtSearchHint"
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE721;"
+                               FontFamily="Segoe MDL2 Assets" FontSize="13"
+                               Foreground="{DynamicResource ThTextDim}"
+                               VerticalAlignment="Center" Margin="11,0,0,0"
+                               IsHitTestVisible="False"/>
+                    <TextBlock x:Name="TxtSearchHint" Grid.Column="1"
                                Text="Rechercher une application…"
                                Foreground="{DynamicResource ThTextDim}"
                                FontFamily="{StaticResource AppFont}"
@@ -43,6 +53,7 @@
                                Margin="10,0"
                                IsHitTestVisible="False"/>
                     <TextBox x:Name="TxtSearch"
+                             Grid.Column="1"
                              Background="Transparent"
                              Foreground="{DynamicResource ThTextBody}"
                              CaretBrush="#DCE0F6"
@@ -82,6 +93,9 @@
                        Margin="12,0,0,0"/>
 
             <!-- Actualiser -->
+            <!-- ⚠️ PrimaryBtnStyle/SecondaryBtnStyle affichent Content via un TextBlock
+                 (TemplateBinding Text) → le Content DOIT rester une simple chaîne.
+                 Un StackPanel icône+texte rend un bouton VIDE (bug vécu, refonte v1.3.4). -->
             <Button x:Name="BtnRefresh"
                     Grid.Column="3"
                     Content="ACTUALISER"
@@ -162,9 +176,92 @@
             </Button>
         </Grid>
 
+        <!-- ── Bandeau de stats (refonte v1.3.4) : tuiles teintées + barre d'accent
+             verticale + icône MDL2 — même grammaire que l'overlay de MAJ validé ── -->
+        <UniformGrid Grid.Row="1" Rows="1" Margin="18,0,18,12">
+            <!-- Total -->
+            <Border CornerRadius="12" Background="#0F5BA0FF" BorderBrush="#2E5BA0FF"
+                    BorderThickness="1" Padding="0" Margin="0,0,10,0">
+                <Grid>
+                    <Border Width="3" CornerRadius="2" Background="#5BA0FF"
+                            HorizontalAlignment="Left" Margin="0,10,0,10"/>
+                    <StackPanel Orientation="Horizontal" Margin="18,11">
+                        <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                   Foreground="#5BA0FF" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtStatTotal" Text="—" FontSize="23" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}"
+                                       Foreground="{DynamicResource ThTextTitle}"/>
+                            <TextBlock Text="APPLICATIONS" FontSize="9.5" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
+                                       Foreground="{DynamicResource ThTextDim}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <!-- À jour -->
+            <Border CornerRadius="12" Background="#0F5FD98C" BorderBrush="#2E5FD98C"
+                    BorderThickness="1" Padding="0" Margin="0,0,10,0">
+                <Grid>
+                    <Border Width="3" CornerRadius="2" Background="#5FD98C"
+                            HorizontalAlignment="Left" Margin="0,10,0,10"/>
+                    <StackPanel Orientation="Horizontal" Margin="18,11">
+                        <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                   Foreground="#5FD98C" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtStatOk" Text="—" FontSize="23" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" Foreground="#5FD98C"/>
+                            <TextBlock Text="&#192; JOUR" FontSize="9.5" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
+                                       Foreground="{DynamicResource ThTextDim}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <!-- Mises à jour disponibles -->
+            <Border CornerRadius="12" Background="#0F5BA0FF" BorderBrush="#2E5BA0FF"
+                    BorderThickness="1" Padding="0" Margin="0,0,10,0">
+                <Grid>
+                    <Border Width="3" CornerRadius="2" Background="#5BA0FF"
+                            HorizontalAlignment="Left" Margin="0,10,0,10"/>
+                    <StackPanel Orientation="Horizontal" Margin="18,11">
+                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                   Foreground="#5BA0FF" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtStatAvail" Text="—" FontSize="23" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" Foreground="#5BA0FF"/>
+                            <TextBlock Text="MISES &#192; JOUR DISPONIBLES" FontSize="9.5" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
+                                       Foreground="{DynamicResource ThTextDim}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <!-- Échecs (visible seulement s'il y en a) -->
+            <Border x:Name="StatFailedCard" CornerRadius="12" Background="#14E05555"
+                    BorderBrush="#3DE05555" BorderThickness="1" Padding="0"
+                    Visibility="Collapsed">
+                <Grid>
+                    <Border Width="3" CornerRadius="2" Background="#E05555"
+                            HorizontalAlignment="Left" Margin="0,10,0,10"/>
+                    <StackPanel Orientation="Horizontal" Margin="18,11">
+                        <TextBlock Text="&#xE783;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                   Foreground="#E05555" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtStatFailed" Text="—" FontSize="23" FontWeight="Bold"
+                                       FontFamily="{StaticResource AppFont}" Foreground="#E05555"/>
+                            <TextBlock Text="&#201;CHECS" FontSize="9.5" FontWeight="SemiBold"
+                                       FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
+                                       Foreground="{DynamicResource ThTextDim}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </UniformGrid>
+
         <!-- ── DataGrid ───────────────────────────────────────────────────── -->
         <DataGrid x:Name="DgApps"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   Margin="18,0,18,0"
                   AutoGenerateColumns="False"
                   IsReadOnly="True"
@@ -175,16 +272,13 @@
                   CanUserSortColumns="True"
                   SelectionMode="Single"
                   SelectionUnit="FullRow"
-                  Background="{DynamicResource ThBg}"
-                  RowBackground="{DynamicResource ThBg}"
-                  AlternatingRowBackground="{DynamicResource ThPanel}"
-                  GridLinesVisibility="Horizontal"
-                  HorizontalGridLinesBrush="{DynamicResource ThBorder}"
-                  VerticalGridLinesBrush="Transparent"
-                  BorderBrush="{DynamicResource ThBorder}"
-                  BorderThickness="1"
+                  Background="Transparent"
+                  RowBackground="Transparent"
+                  GridLinesVisibility="None"
+                  BorderBrush="Transparent"
+                  BorderThickness="0"
                   RowHeaderWidth="0"
-                  RowHeight="32"
+                  RowHeight="46"
                   FontFamily="{StaticResource AppFont}"
                   FontSize="12"
                   Foreground="{DynamicResource ThTextBody}"
@@ -192,14 +286,16 @@
 
             <!-- Surcharge des couleurs système pour la sélection -->
             <DataGrid.Resources>
+                <!-- Sélection translucide : lisible sur les DEUX thèmes (le texte garde
+                     sa couleur de thème, plus de blanc forcé — refonte v1.3.4) -->
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"
-                                 Color="#3D4FA0"/>
+                                 Color="#1F5BA0FF"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"
-                                 Color="#E8EEFF"/>
+                                 Color="#5BA0FF"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}"
-                                 Color="#2E3870"/>
+                                 Color="#145BA0FF"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}"
-                                 Color="#B6BEE4"/>
+                                 Color="#805BA0FF"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}"
                                  Color="#262C49"/>
             </DataGrid.Resources>
@@ -207,13 +303,13 @@
             <!-- En-têtes de colonnes -->
             <DataGrid.ColumnHeaderStyle>
                 <Style TargetType="DataGridColumnHeader">
-                    <Setter Property="Background"      Value="{DynamicResource ThSidebar}"/>
-                    <Setter Property="Foreground"      Value="{DynamicResource ThTextNav}"/>
+                    <Setter Property="Background"      Value="Transparent"/>
+                    <Setter Property="Foreground"      Value="{DynamicResource ThTextDim}"/>
                     <Setter Property="FontFamily"      Value="{StaticResource AppFont}"/>
-                    <Setter Property="FontSize"        Value="11.5"/>
+                    <Setter Property="FontSize"        Value="10.5"/>
                     <Setter Property="FontWeight"      Value="SemiBold"/>
                     <Setter Property="Padding"         Value="10,0"/>
-                    <Setter Property="Height"          Value="32"/>
+                    <Setter Property="Height"          Value="30"/>
                     <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
                     <Setter Property="BorderThickness" Value="0,0,0,1"/>
                     <Setter Property="Cursor"          Value="Hand"/>
@@ -260,13 +356,19 @@
                     <Setter Property="Background"     Value="Transparent"/>
                     <Setter Property="BorderThickness" Value="0"/>
                     <Style.Triggers>
+                        <!-- Hover : voile bleu FRANC — doit se voir immédiatement
+                             (3e passe, les deux précédentes étaient trop timides) -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{DynamicResource ThHover}"/>
+                            <Setter Property="Background"      Value="#2E5BA0FF"/>
+                            <Setter Property="BorderBrush"     Value="#665BA0FF"/>
+                            <Setter Property="BorderThickness" Value="1"/>
                         </Trigger>
+                        <!-- Sélection : fond bleu marqué + CONTOUR COMPLET accent + barre
+                             gauche épaisse — la ligne sélectionnée saute aux yeux -->
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background"      Value="#3D4FA0"/>
+                            <Setter Property="Background"      Value="#505BA0FF"/>
                             <Setter Property="BorderBrush"     Value="#5BA0FF"/>
-                            <Setter Property="BorderThickness" Value="3,0,0,0"/>
+                            <Setter Property="BorderThickness" Value="5,1,1,1"/>
                         </Trigger>
                     </Style.Triggers>
                 </Style>
@@ -288,39 +390,59 @@
                             </ControlTemplate>
                         </Setter.Value>
                     </Setter>
-                    <Style.Triggers>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Foreground" Value="#E8EEFF"/>
-                        </Trigger>
-                    </Style.Triggers>
                 </Style>
             </DataGrid.CellStyle>
 
             <DataGrid.Columns>
 
-                <!-- Application -->
-                <DataGridTextColumn Header="Application"
-                                    Binding="{Binding Name}"
-                                    Width="*"
-                                    MinWidth="200"/>
-
-                <!-- Éditeur -->
-                <DataGridTextColumn Header="Éditeur"
-                                    Binding="{Binding Publisher}"
-                                    Width="180"/>
+                <!-- Application : avatar à initiale (accent bleu unique, pas d'arc-en-ciel)
+                     + nom au-dessus de l'éditeur (refonte v1.3.4) -->
+                <DataGridTemplateColumn Header="APPLICATION"
+                                        Width="*" MinWidth="220"
+                                        SortMemberPath="Name">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Width="30" Height="30" CornerRadius="8"
+                                        BorderBrush="#2E5BA0FF" BorderThickness="1"
+                                        VerticalAlignment="Center">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                            <GradientStop Color="#3D5BA0FF" Offset="0"/>
+                                            <GradientStop Color="#145BA0FF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <TextBlock Text="{Binding Initial}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="13.5" FontWeight="Bold"
+                                               Foreground="#8FC0FF"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center" Margin="11,0,0,0">
+                                    <TextBlock Text="{Binding Name}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="12.5"
+                                               Foreground="{DynamicResource ThTextBody}"
+                                               TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock Text="{Binding Publisher}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               TextTrimming="CharacterEllipsis" Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
 
                 <!-- Version installée -->
-                <DataGridTextColumn Header="Version"
+                <DataGridTextColumn Header="VERSION"
                                     Binding="{Binding Version}"
-                                    Width="100"/>
+                                    Width="110"/>
 
-                <!-- Winget ID -->
-                <DataGridTextColumn Header="Winget ID"
-                                    Binding="{Binding WingetId}"
-                                    Width="190"/>
+                <!-- (colonne Winget ID supprimée à la demande de l'utilisateur — info interne
+                     sans valeur pour lui ; l'ID reste dans le modèle pour les MAJ winget) -->
 
                 <!-- Statut de mise à jour -->
-                <DataGridTemplateColumn Header="Statut"
+                <DataGridTemplateColumn Header="STATUT"
                                         Width="210"
                                         MinWidth="160"
                                         SortMemberPath="StatusText">
@@ -438,7 +560,7 @@
         </DataGrid>
 
         <!-- ── Barre de statut ────────────────────────────────────────────── -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Background="{DynamicResource ThSidebar}"
                 BorderBrush="{DynamicResource ThBorder}"
                 BorderThickness="0,1,0,0"

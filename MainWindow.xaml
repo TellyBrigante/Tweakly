@@ -214,7 +214,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.3.3"
+                            <TextBlock x:Name="TxtVersion" Text="v1.3.4"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -456,53 +456,193 @@
             </Grid><!-- fin colonne droite -->
         </Grid><!-- fin corps (sidebar + contenu) -->
 
-        <!-- ══ OVERLAY DE MISE À JOUR (couvre toute la fenêtre) ══════════════ -->
+        <!-- ══ OVERLAY DE MISE À JOUR (couvre toute la fenêtre) ══════════════
+             Refonte v1.3.4 (3e passe, design « 2026 » type Linear/Vercel) : fond
+             propre, carte plate à liseré 1px, accent dégradé bleu→violet, barre
+             fine avec shimmer ANIMÉ, bouton texte pour « Plus tard ».
+             (2e passe halo+pilule+3D : REJETÉE par l'utilisateur, ne pas y revenir.) -->
         <Border x:Name="UpdateOverlay" Grid.Row="0" Grid.RowSpan="2"
                 Panel.ZIndex="100" Visibility="Collapsed"
-                Background="{DynamicResource ThBg}">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="460">
-                <!-- Logo -->
+                Background="{DynamicResource ThBg}"
+                MouseLeftButtonDown="UpdateOverlay_MouseDown">
+            <Border.Resources>
+                <!-- Accent de la barre : camaïeu 100 % BLEU (le violet a été rejeté par
+                     l'utilisateur — rester dans l'identité bleue de Tweakly) -->
+                <LinearGradientBrush x:Key="UpdAccent" StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#2F6FD8" Offset="0"/>
+                    <GradientStop Color="#5BA0FF" Offset="0.6"/>
+                    <GradientStop Color="#8AC0FF" Offset="1"/>
+                </LinearGradientBrush>
+                <!-- Bouton principal : bleu PLEIN et plat (cohérent avec les boutons de
+                     l'app — le dégradé bleu→violet a été REJETÉ par l'utilisateur ici,
+                     l'accent dégradé ne sert que pour la barre de progression) -->
+                <Style x:Key="UpdPrimaryBtn" TargetType="Button">
+                    <Setter Property="Foreground" Value="White"/>
+                    <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+                    <Setter Property="FontSize" Value="12.5"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                        Background="#3B82E0">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#4F94F0"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#3273C8"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+                <!-- Bouton secondaire (Plus tard) : contour 1px VISIBLE en permanence
+                     (la version « texte nu » était invisible tant qu'on ne survolait pas) -->
+                <Style x:Key="UpdTextBtn" TargetType="Button">
+                    <Setter Property="Foreground" Value="{DynamicResource ThTextNav}"/>
+                    <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+                    <Setter Property="FontSize" Value="12.5"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                        Background="#0A808080" BorderThickness="1"
+                                        BorderBrush="#4D808080">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#1A808080"/>
+                                        <Setter TargetName="Bg" Property="BorderBrush" Value="#805BA0FF"/>
+                                        <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bg" Property="Opacity" Value="0.8"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Border.Resources>
+
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="560">
+                <!-- Logo, sobre (pas de glow) -->
                 <TextBlock HorizontalAlignment="Center" FontSize="34" FontWeight="Bold"
                            FontFamily="{StaticResource AppFont}">
                     <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/>
                 </TextBlock>
-                <TextBlock x:Name="TxtUpdTitle" Text="Mise &#224; jour"
-                           HorizontalAlignment="Center" Margin="0,20,0,4"
-                           Foreground="{DynamicResource ThTextTitle}"
-                           FontFamily="{StaticResource AppFont}" FontSize="17" FontWeight="SemiBold"/>
-                <TextBlock x:Name="TxtUpdStatus" Text="T&#233;l&#233;chargement&#8230;"
-                           HorizontalAlignment="Center" Margin="0,0,0,22"
-                           Foreground="{DynamicResource ThTextDim}"
-                           FontFamily="{StaticResource AppFont}" FontSize="12.5"/>
 
-                <!-- Barre de progression -->
-                <Grid Height="10">
-                    <Border Background="{DynamicResource ThTrack}" CornerRadius="5"/>
+                <TextBlock x:Name="TxtUpdTitle" Text="Mise &#224; jour"
+                           HorizontalAlignment="Center" Margin="0,26,0,8"
+                           Foreground="{DynamicResource ThTextTitle}"
+                           FontFamily="{StaticResource AppFont}" FontSize="20" FontWeight="SemiBold"/>
+                <!-- Transition de version, texte nu : la nouvelle version porte l'accent
+                     (les Run sont remplis en code — SetUpdateVersions) -->
+                <TextBlock HorizontalAlignment="Center" Margin="0,0,0,44"
+                           FontFamily="{StaticResource AppFont}" FontSize="13">
+                    <Run x:Name="RunUpdFrom" Foreground="{DynamicResource ThTextDim}"/><Run
+                         Text="   &#x2192;   " Foreground="{DynamicResource ThTextDim}"/><Run
+                         x:Name="RunUpdTo" FontWeight="SemiBold" Foreground="#7C9EF8"/>
+                </TextBlock>
+
+                <!-- Carte « Nouveautés » plate : voile très léger + liseré 1px, sans ombre -->
+                <Border x:Name="UpdNotesCard" CornerRadius="12" Padding="22,18" Margin="0,0,0,44"
+                        Visibility="Collapsed" Background="#0AFFFFFF"
+                        BorderBrush="#1A808080" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Nouveaut&#233;s"
+                                   FontFamily="{StaticResource AppFont}" FontSize="12"
+                                   FontWeight="SemiBold" Foreground="{DynamicResource ThTextTitle}"
+                                   Margin="0,0,0,10"/>
+                        <ScrollViewer MaxHeight="170" VerticalScrollBarVisibility="Auto">
+                            <TextBlock x:Name="TxtUpdNotes" TextWrapping="Wrap"
+                                       FontFamily="{StaticResource AppFont}" FontSize="12.5"
+                                       LineHeight="21"
+                                       Foreground="{DynamicResource ThTextNav}"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- Ligne statut + pourcentage, au-dessus de la barre (façon installeur moderne) -->
+                <Grid Margin="0,0,0,8">
+                    <TextBlock x:Name="TxtUpdStatus" Text="T&#233;l&#233;chargement&#8230;"
+                               HorizontalAlignment="Left"
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}" FontSize="12"/>
+                    <TextBlock x:Name="TxtUpdPct" Text="0 %" HorizontalAlignment="Right"
+                               Foreground="{DynamicResource ThTextNav}"
+                               FontFamily="Consolas" FontSize="12"/>
+                </Grid>
+
+                <!-- Barre fine : remplissage dégradé accent + SHIMMER animé qui balaye -->
+                <Grid Height="6">
+                    <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
                     <Grid x:Name="UpdBar" ClipToBounds="True">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="0*"/>
                             <ColumnDefinition Width="100*"/>
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" CornerRadius="5">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Color="#3B82E0" Offset="0"/>
-                                    <GradientStop Color="#5BA0FF" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
+                        <Border Grid.Column="0" CornerRadius="3" Background="{StaticResource UpdAccent}"
+                                ClipToBounds="True">
+                            <!-- Bande lumineuse qui traverse le remplissage en boucle -->
+                            <Border Width="110" HorizontalAlignment="Left" CornerRadius="3">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                        <GradientStop Color="#66FFFFFF" Offset="0.5"/>
+                                        <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="UpdShimmer" X="-120"/>
+                                </Border.RenderTransform>
+                                <Border.Triggers>
+                                    <EventTrigger RoutedEvent="Border.Loaded">
+                                        <BeginStoryboard>
+                                            <Storyboard RepeatBehavior="Forever">
+                                                <DoubleAnimation Storyboard.TargetName="UpdShimmer"
+                                                                 Storyboard.TargetProperty="X"
+                                                                 From="-120" To="600" Duration="0:0:2.4"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </EventTrigger>
+                                </Border.Triggers>
+                            </Border>
                         </Border>
                     </Grid>
                 </Grid>
-                <TextBlock x:Name="TxtUpdPct" Text="0 %" HorizontalAlignment="Center"
-                           Margin="0,9,0,0" Foreground="{DynamicResource ThTextNav}"
-                           FontFamily="Consolas" FontSize="11.5"/>
 
-                <!-- Bouton Continuer (apparaît après téléchargement) -->
-                <Button x:Name="BtnUpdContinue" Content="CONTINUER"
-                        Visibility="Collapsed"
-                        Style="{StaticResource PrimaryBtnStyle}"
-                        HorizontalAlignment="Center" Margin="0,24,0,0" Padding="34,10"
-                        Click="BtnUpdContinue_Click"/>
+                <!-- Réassurances : ligne discrète, séparateurs points médians -->
+                <TextBlock HorizontalAlignment="Center" Margin="0,18,0,0"
+                           FontFamily="{StaticResource AppFont}" FontSize="11"
+                           Foreground="{DynamicResource ThTextDim}">
+                    <Run Text="&#x2713;" Foreground="#2EC46A"/><Run Text=" R&#233;glages conserv&#233;s"/>
+                    <Run Text="   &#183;   "/>
+                    <Run Text="&#x2713;" Foreground="#2EC46A"/><Run Text=" Int&#233;grit&#233; v&#233;rifi&#233;e"/>
+                    <Run Text="   &#183;   "/>
+                    <Run Text="&#x2713;" Foreground="#2EC46A"/><Run Text=" Red&#233;marrage automatique"/>
+                </TextBlock>
+
+                <!-- Boutons : Plus tard (texte) + Continuer (accent), alignés à droite de la zone -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,46,0,0">
+                    <Button x:Name="BtnUpdLater" Content="Plus tard"
+                            Style="{StaticResource UpdTextBtn}"
+                            Margin="0,0,12,0" Padding="24,11"
+                            Click="BtnUpdLater_Click"/>
+                    <Button x:Name="BtnUpdContinue" Content="Mettre &#224; jour maintenant"
+                            Visibility="Collapsed"
+                            Style="{StaticResource UpdPrimaryBtn}"
+                            Padding="28,11"
+                            Click="BtnUpdContinue_Click"/>
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid><!-- fin grille principale -->

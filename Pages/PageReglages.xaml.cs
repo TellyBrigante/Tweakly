@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.3.3";
+        public const string AppVersion = "1.3.4";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -28,7 +28,8 @@ namespace Optimisation_Tool.Pages
         private string _updateUrl = "";   // page de la release (fallback)
         private string _assetUrl  = "";   // .zip à télécharger
         private string _lastTag   = "";   // tag de la dernière MAJ détectée
-        private string _sha256    = "";   // hash SHA-256 publié dans le body (vide = pas de vérif)
+        private string _sha256    = "";   // hash SHA-256 publié dans le body (OBLIGATOIRE depuis v1.3.4)
+        private string _notes     = "";   // patch note de la release (affiché dans l'overlay)
 
         private static readonly HttpClient Http = new();
 
@@ -119,7 +120,7 @@ namespace Optimisation_Tool.Pages
 
         // ── Check de MAJ (appelé au démarrage + manuellement) ──────────────────
 
-        public static async Task<(bool hasUpdate, string tag, string url, string assetUrl, string sha256)> CheckForUpdateAsync()
+        public static async Task<(bool hasUpdate, string tag, string url, string assetUrl, string sha256, string notes)> CheckForUpdateAsync()
         {
             try
             {
@@ -129,7 +130,7 @@ namespace Optimisation_Tool.Pages
                 req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
                 using var resp = await Http.SendAsync(req);
-                if (!resp.IsSuccessStatusCode) return (false, "", "", "", "");
+                if (!resp.IsSuccessStatusCode) return (false, "", "", "", "", "");
 
                 var json = await resp.Content.ReadAsStringAsync();
                 using var doc = JsonDocument.Parse(json);
@@ -161,28 +162,50 @@ namespace Optimisation_Tool.Pages
                     }
                 }
 
-                // SÉCURITÉ (audit C-2a) : hash SHA-256 du zip publié dans le body de la
-                // release (ligne « SHA256: <64 hex> »). S'il est présent, PrepareUpdateAsync
-                // REFUSERA un zip dont le hash ne correspond pas. S'il est absent (anciennes
-                // releases), on reste compatible : pas de vérification (fail-open assumé,
-                // la vérification devient effective dès que le protocole publie le hash).
+                // SÉCURITÉ (audit C-2a, durci en v1.3.4 — audit 2026-06-11) : hash SHA-256
+                // du zip publié dans le body de la release (ligne « SHA256: <64 hex> »).
+                // Le hash est désormais OBLIGATOIRE : une release sans hash est IGNORÉE
+                // (fail-CLOSED). Avant, l'absence de hash désactivait la vérification
+                // (fail-open) → un attaquant contrôlant le compte GitHub pouvait simplement
+                // OMETTRE la ligne pour contourner toute la vérif. Pas de souci de compat :
+                // un client qui embarque ce code ne verra que des releases plus récentes que
+                // lui, et le protocole (étape 5bis) publie le hash depuis la v1.3.0.
                 var sha256 = "";
+                var notes  = "";
                 if (root.TryGetProperty("body", out var b))
                 {
                     var body = b.GetString() ?? "";
                     var m = System.Text.RegularExpressions.Regex.Match(
                         body, @"SHA256\s*[:=]\s*([0-9a-fA-F]{64})");
                     if (m.Success) sha256 = m.Groups[1].Value.ToLowerInvariant();
+
+                    // Patch note affiché dans l'overlay de MAJ (v1.3.4) : le body de la
+                    // release SANS sa ligne technique « SHA256: … » (inutile pour l'utilisateur).
+                    notes = System.Text.RegularExpressions.Regex
+                        .Replace(body, @"^\s*SHA256\s*[:=].*$", "",
+                                 System.Text.RegularExpressions.RegexOptions.Multiline)
+                        .Trim();
                 }
 
                 var remote = ParseVersion(tag);
                 var local  = ParseVersion(AppVersion);
 
                 if (remote != null && local != null && remote > local)
-                    return (true, tag, url, assetUrl, sha256);
+                {
+                    if (string.IsNullOrEmpty(sha256))
+                    {
+                        // Release plus récente MAIS sans hash d'intégrité → refusée. On trace
+                        // pour que l'oubli (ou l'attaque) soit visible dans le journal local.
+                        Helpers.AppLog.Write(
+                            $"MAJ : release {tag} détectée mais SANS ligne « SHA256: » dans son descriptif — " +
+                            "ignorée par sécurité (intégrité non vérifiable).");
+                        return (false, "", "", "", "", "");
+                    }
+                    return (true, tag, url, assetUrl, sha256, notes);
+                }
             }
             catch { }
-            return (false, "", "", "", "");
+            return (false, "", "", "", "", "");
         }
 
         // Colore le segment actif (fond accent) et grise l'inactif
@@ -217,7 +240,7 @@ namespace Optimisation_Tool.Pages
 
             try
             {
-                var (hasUpdate, tag, url, assetUrl, sha256) = await CheckForUpdateAsync();
+                var (hasUpdate, tag, url, assetUrl, sha256, notes) = await CheckForUpdateAsync();
 
                 if (hasUpdate)
                 {
@@ -225,6 +248,7 @@ namespace Optimisation_Tool.Pages
                     _assetUrl  = assetUrl;
                     _lastTag   = tag;
                     _sha256    = sha256;
+                    _notes     = notes;
                     TxtUpdateStatus.Text = $"Mise à jour disponible : {tag}  —  vous avez v{AppVersion}";
                     BtnDownloadUpdate.Visibility = Visibility.Visible;
                     _main.Log($"Réglages : mise à jour disponible — {tag}.");
@@ -252,7 +276,7 @@ namespace Optimisation_Tool.Pages
                 return;
             }
             // Délègue à l'overlay plein écran de MainWindow
-            _main.StartUpdate(_assetUrl, _lastTag, _sha256);
+            _main.StartUpdate(_assetUrl, _lastTag, _sha256, _notes);
         }
 
         /// <summary>
@@ -260,41 +284,47 @@ namespace Optimisation_Tool.Pages
         /// remplacement. Ne redémarre PAS — retourne le chemin du script à lancer.
         /// </summary>
         public static async Task<string> PrepareUpdateAsync(string assetUrl, IProgress<double> progress,
-                                                            string expectedSha256 = "")
+                                                            string expectedSha256 = "",
+                                                            System.Threading.CancellationToken ct = default)
         {
             var tmp = Path.Combine(Path.GetTempPath(), "Tweakly_update");
             if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
             Directory.CreateDirectory(tmp);
             var zipPath = Path.Combine(tmp, "update.zip");
 
-            // Téléchargement avec progression
+            // Téléchargement avec progression (annulable via ct — bouton « Plus tard »)
             using (var req = new HttpRequestMessage(HttpMethod.Get, assetUrl))
             {
                 req.Headers.UserAgent.ParseAdd("Tweakly-Updater");
-                using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+                using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
                 resp.EnsureSuccessStatusCode();
                 var total = resp.Content.Headers.ContentLength ?? -1L;
-                using var stream = await resp.Content.ReadAsStreamAsync();
+                using var stream = await resp.Content.ReadAsStreamAsync(ct);
                 using var fs = File.Create(zipPath);
                 var buffer = new byte[81920];
                 long readTotal = 0; int n;
-                while ((n = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                while ((n = await stream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
                 {
-                    await fs.WriteAsync(buffer, 0, n);
+                    await fs.WriteAsync(buffer, 0, n, ct);
                     readTotal += n;
                     if (total > 0) progress.Report((double)readTotal / total * 100.0);
                 }
                 progress.Report(100);
             }
+            ct.ThrowIfCancellationRequested();
 
-            // SÉCURITÉ (audit C-2a) : vérification d'intégrité SHA-256 du zip téléchargé.
-            // Si la release publie un hash (body « SHA256: … ») et qu'il ne correspond pas,
-            // on REFUSE d'aller plus loin : aucun batch écrit, aucun fichier remplacé.
-            // L'exception remonte à StartUpdate (catch → message d'échec, app intacte).
-            if (!string.IsNullOrEmpty(expectedSha256))
+            // SÉCURITÉ (audit C-2a, durci v1.3.4) : vérification d'intégrité SHA-256 du zip
+            // téléchargé. Le hash est OBLIGATOIRE (défense en profondeur — CheckForUpdateAsync
+            // filtre déjà les releases sans hash, mais si un autre appelant arrivait ici sans
+            // hash, on refuse aussi). Mismatch ou absence → aucun batch écrit, aucun fichier
+            // remplacé. L'exception remonte à StartUpdate (catch → message d'échec, app intacte).
+            if (string.IsNullOrEmpty(expectedSha256))
+                throw new Exception(
+                    "Cette mise à jour ne publie pas de hash d'intégrité (SHA-256). " +
+                    "Installation refusée par sécurité.");
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            using (var zfs = File.OpenRead(zipPath))
             {
-                using var sha = System.Security.Cryptography.SHA256.Create();
-                using var zfs = File.OpenRead(zipPath);
                 var actual = Convert.ToHexString(await sha.ComputeHashAsync(zfs)).ToLowerInvariant();
                 if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
                     throw new Exception(
