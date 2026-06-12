@@ -16,7 +16,7 @@ namespace Optimisation_Tool.Pages
         private bool _loaded = false;
 
         // État lu au chargement → référence pour n'appliquer que ce qui change
-        private (bool Nagle, bool NetDNS, bool AdapterPower, bool WPAD) _state;
+        private (bool Nagle, bool NetDNS, bool AdapterPower, bool WPAD, bool NetThrottle) _state;
 
         public PageReseau(MainWindow main)
         {
@@ -43,13 +43,14 @@ namespace Optimisation_Tool.Pages
             ChkNetDNS.IsChecked       = s.NetDNS;
             ChkAdapterPower.IsChecked = s.AdapterPower;
             ChkWPAD.IsChecked         = s.WPAD;
+            ChkNetThrottle.IsChecked  = s.NetThrottle;
 
             _state = s;
             BtnAppliquer.IsEnabled = true;
             _main.Log("Réseau : état chargé.");
         }
 
-        private static (bool Nagle, bool NetDNS, bool AdapterPower, bool WPAD) ReadState()
+        private static (bool Nagle, bool NetDNS, bool AdapterPower, bool WPAD, bool NetThrottle) ReadState()
         {
             // Nagle désactivé (TcpAckFrequency = 1 ET TcpNoDelay = 1)
             bool nagle = false;
@@ -110,7 +111,19 @@ namespace Optimisation_Tool.Pages
             }
             catch { }
 
-            return (nagle, netDNS, adapterPower, wpad);
+            // Bridage réseau multimédia désactivé (NetworkThrottlingIndex = 0xFFFFFFFF ;
+            // défaut Windows = 10 — vérifié en réel le 2026-06-12)
+            bool netThrottle = false;
+            try
+            {
+                var v = Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
+                    "NetworkThrottlingIndex", null);
+                netThrottle = v != null && Convert.ToInt64(v) is 0xFFFFFFFF or -1;
+            }
+            catch { }
+
+            return (nagle, netDNS, adapterPower, wpad, netThrottle);
         }
 
         // ── Appliquer ─────────────────────────────────────────────────────────
@@ -136,8 +149,9 @@ namespace Optimisation_Tool.Pages
             bool? chDNS   = Helpers.TweakFeedback.Changed(ChkNetDNS,       _state.NetDNS);
             bool? chPower = Helpers.TweakFeedback.Changed(ChkAdapterPower, _state.AdapterPower);
             bool? chWPAD  = Helpers.TweakFeedback.Changed(ChkWPAD,         _state.WPAD);
+            bool? chThr   = Helpers.TweakFeedback.Changed(ChkNetThrottle,  _state.NetThrottle);
 
-            if (!(chNagle.HasValue || chDNS.HasValue || chPower.HasValue || chWPAD.HasValue))
+            if (!(chNagle.HasValue || chDNS.HasValue || chPower.HasValue || chWPAD.HasValue || chThr.HasValue))
             {
                 Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
                 BtnAppliquer.IsEnabled = true;
@@ -147,20 +161,38 @@ namespace Optimisation_Tool.Pages
             _main.Log("Réseau : application des tweaks…");
             var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
-                ApplyChanges(chNagle, chDNS, chPower, chWPAD,
+                ApplyChanges(chNagle, chDNS, chPower, chWPAD, chThr,
                              msg => { _main.Log(msg); msgs.Add(msg); }));
 
             _state = (ChkNagle.IsChecked == true, ChkNetDNS.IsChecked == true,
-                      ChkAdapterPower.IsChecked == true, ChkWPAD.IsChecked == true);
+                      ChkAdapterPower.IsChecked == true, ChkWPAD.IsChecked == true,
+                      ChkNetThrottle.IsChecked == true);
             _main.Log("Réseau : tweaks appliqués.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Tweaks réseau appliqués");
             BtnAppliquer.IsEnabled = true;
         }
 
         private static void ApplyChanges(
-            bool? doNagle, bool? doDNS, bool? doPower, bool? doWPAD,
+            bool? doNagle, bool? doDNS, bool? doPower, bool? doWPAD, bool? doThrottle,
             Action<string> log)
         {
+            // Bridage réseau multimédia (NetworkThrottlingIndex — même clé SystemProfile
+            // que SystemResponsiveness du tab CPU ; off = 0xFFFFFFFF, défaut Windows = 10)
+            if (doThrottle.HasValue)
+            {
+                try
+                {
+                    const string mmPath =
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile";
+                    if (doThrottle == true)
+                        Registry.SetValue(mmPath, "NetworkThrottlingIndex", unchecked((int)0xFFFFFFFF), RegistryValueKind.DWord);
+                    else
+                        Registry.SetValue(mmPath, "NetworkThrottlingIndex", 10, RegistryValueKind.DWord);
+                    log($"Bridage réseau multimédia : {(doThrottle == true ? "DÉSACTIVÉ" : "restauré (défaut Windows)")} — redémarrage conseillé.");
+                }
+                catch (Exception ex) { log($"Bridage réseau : erreur — {ex.Message}"); }
+            }
+
             // Nagle
             if (doNagle == true)
             {

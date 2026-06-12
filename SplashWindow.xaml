@@ -5,8 +5,10 @@
         Width="420" Height="240"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
-        ShowInTaskbar="True"
-        Loaded="Window_Loaded">
+        ShowInTaskbar="True" Topmost="True"
+        Loaded="Window_Loaded"><!-- Topmost : après l'élévation UAC, Windows rend le
+        foreground à explorer — le splash doit gagner SANS l'artillerie AttachThreadInput
+        (qui vit dans MainWindow). Il est éphémère (~1,5-3,5 s), c'est le standard splash. -->
 
     <!-- ÉCRAN DE DÉMARRAGE (v1.3.5) : logo + étapes de chargement + barre shimmer
          (DA validée). TOUJOURS sombre : le thème de l'utilisateur n'est pas encore

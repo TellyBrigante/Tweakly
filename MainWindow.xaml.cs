@@ -749,6 +749,32 @@ namespace Optimisation_Tool
         }
 
         /// <summary>
+        /// Passation depuis le SPLASH (v1.3.5) : quand le splash se ferme, Windows peut
+        /// rendre le foreground à explorer au lieu de MainWindow → l'app « restait dans la
+        /// barre des tâches » (régression vécue). Le splash appelle ceci après sa fermeture :
+        /// tentative AttachThreadInput, puis filet minimize/restore si Windows refuse encore.
+        /// </summary>
+        public void EnsureForeground()
+        {
+            try
+            {
+                if (Settings.StartMinimized) return;
+                ForceForeground();
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero && GetForegroundWindow() != hwnd)
+                {
+                    // Filet 100 % fiable : une fenêtre qui se restaure depuis l'état
+                    // minimisé reçoit TOUJOURS le foreground.
+                    ShowWindow(hwnd, SW_MINIMIZE);
+                    ShowWindow(hwnd, SW_RESTORE);
+                    SetForegroundWindow(hwnd);
+                    Activate();
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// Force MainWindow au PREMIER PLAN (pas seulement Topmost flicker). Bypass de
         /// la protection foreground-lock de Windows 10/11 via AttachThreadInput.
         /// Inoffensif si la fenêtre est déjà au premier plan (early return).

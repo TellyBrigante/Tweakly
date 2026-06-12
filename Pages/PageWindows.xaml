@@ -148,6 +148,65 @@
                         </Grid>
                     </Border>
 
+                    <!-- ── Nouveaux tweaks v1.3.6 (clés validées en réel le 2026-06-12) ── -->
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkGameMode}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkGameMode" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE734;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Activer le Mode Jeu Windows" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Priorise le jeu au premier plan et bloque Windows Update en pleine partie."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkWindowedOpt}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkWindowedOpt" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE8A7;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Optimisations pour les jeux fen&#234;tr&#233;s" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Pr&#233;sentation moderne (flip) en fen&#234;tr&#233;/borderless — latence r&#233;duite (Windows 11)."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkNoAccessPopups}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkNoAccessPopups" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE765;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Couper les popups d'accessibilit&#233; en jeu" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Plus de fen&#234;tre « Touches r&#233;manentes » quand tu spammes Shift en pleine partie."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                 </StackPanel>
             </Border>
 
@@ -158,19 +217,39 @@
                         Click="BtnAppliquer_Click"/>
             </StackPanel>
 
-            <!-- ── Réparations ── -->
+            <!-- ── Réparations (pipeline de tests visibles, v1.3.6) ── -->
             <Border Height="1" Background="{DynamicResource ThBorder}" Margin="0,22,0,14"/>
             <TextBlock Text="R&#201;PARATIONS"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,8"/>
-            <TextBlock Text="Corrige le popup &#171; ms-gamingoverlay &#187; (celui qui s'ouvre avec Win+G ou en jeu quand la Xbox Game Bar est cass&#233;e). R&#233;-enregistre la Game Bar si elle est pr&#233;sente ; sinon, coupe le d&#233;clencheur du popup (enregistrement GameDVR)."
-                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
-                       FontSize="11.5" TextWrapping="Wrap" MaxWidth="540" HorizontalAlignment="Left" Margin="2,0,0,8"/>
-            <Button x:Name="BtnFixGamingOverlay"
-                    Content="R&#201;PARER L'ERREUR &#171; MS-GAMINGOVERLAY &#187;"
-                    Style="{StaticResource SecondaryBtnStyle}"
-                    HorizontalAlignment="Left"
-                    Click="BtnFixGamingOverlay_Click"/>
+            <!-- Tuile pleine largeur : texte à gauche, bouton à droite (le texte ne fait
+                 plus 3 lignes et les étapes du diag restent haut sur la page) -->
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+                    BorderThickness="1" CornerRadius="12" Padding="16,13">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Popup &#171; ms-gamingoverlay &#187;"
+                                       Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
+                                       FontSize="12.5" FontWeight="SemiBold"/>
+                            <TextBlock Text="La fen&#234;tre &#171; Vous aurez besoin d'une nouvelle application&#8230; &#187; (Win+G ou en pleine partie, Game Bar cass&#233;e). Le diagnostic teste chaque cause &#233;tape par &#233;tape et corrige selon ce qu'il trouve."
+                                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                                       FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button x:Name="BtnFixGamingOverlay" Grid.Column="1"
+                                Content="LANCER LE DIAGNOSTIC ET R&#201;PARER"
+                                Style="{StaticResource CleanRunBtn}" Padding="20,10"
+                                VerticalAlignment="Center"
+                                Click="BtnFixGamingOverlay_Click"/>
+                    </Grid>
+                    <!-- Étapes du diagnostic (remplies en direct pendant l'exécution) -->
+                    <StackPanel x:Name="GoStepsPanel" Visibility="Collapsed" Margin="0,12,0,0"/>
+                </StackPanel>
+            </Border>
 
             <Border x:Name="StatusBanner" Visibility="Collapsed"
                     Margin="0,16,0,0" Padding="14,10" CornerRadius="8"

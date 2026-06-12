@@ -19,6 +19,9 @@ namespace Optimisation_Tool.Pages
         private (bool HAGS, bool DisableGameBar, bool DisableDVR, bool GPUPriority,
                  bool MSIMode, bool DiscordHWAccel, bool SteamOverlay) _state;
 
+        // Bloc d'état n°2 (tweaks v1.3.6 — bloc séparé pour ne pas gonfler le tuple historique)
+        private (bool GameMode, bool WindowedOpt, bool NoAccessPopups) _state2;
+
         public PageWindows(MainWindow main)
         {
             _main = main;
@@ -50,8 +53,66 @@ namespace Optimisation_Tool.Pages
             ChkSteamOverlay.IsChecked   = s.SteamOverlay;
 
             _state = s;
+
+            var s2 = await Task.Run(ReadState2);
+            ChkGameMode.IsChecked       = s2.GameMode;
+            ChkWindowedOpt.IsChecked    = s2.WindowedOpt;
+            ChkNoAccessPopups.IsChecked = s2.NoAccessPopups;
+            _state2 = s2;
+
             BtnAppliquer.IsEnabled = true;
             _main.Log("Windows : état chargé.");
+        }
+
+        // ── Lecture état — bloc n°2 (v1.3.6, formats validés en réel le 2026-06-12) ──
+        private static (bool GameMode, bool WindowedOpt, bool NoAccessPopups) ReadState2()
+        {
+            // Mode Jeu : AutoGameModeEnabled — ABSENT = activé par défaut, 0 = désactivé
+            bool gameMode = true;
+            try
+            {
+                var v = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\GameBar",
+                                          "AutoGameModeEnabled", null);
+                gameMode = v == null || Convert.ToInt32(v) == 1;
+            }
+            catch { }
+
+            // Optimisations jeux fenêtrés (Win11) : chaîne à paires « k=v; » — on cherche
+            // SwapEffectUpgradeEnable=1 (vérifié en réel : « SwapEffectUpgradeEnable=1;VRROptimizeEnable=1; »)
+            bool windowedOpt = false;
+            try
+            {
+                var v = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences",
+                                          "DirectXUserGlobalSettings", null) as string;
+                windowedOpt = v != null && v.Contains("SwapEffectUpgradeEnable=1");
+            }
+            catch { }
+
+            // Popups d'accessibilité coupés : bit 0x4 (HOTKEYACTIVE) ABSENT des Flags
+            // des 3 mécanismes (valeurs par défaut vérifiées : 510 / 62 / 126 = bit posé)
+            bool noPopups = false;
+            try
+            {
+                noPopups = !AccessHotkeyActive("StickyKeys") &&
+                           !AccessHotkeyActive("ToggleKeys") &&
+                           !AccessHotkeyActive("Keyboard Response");
+            }
+            catch { }
+
+            return (gameMode, windowedOpt, noPopups);
+        }
+
+        private static bool AccessHotkeyActive(string subKey)
+        {
+            try
+            {
+                var v = Registry.GetValue($@"HKEY_CURRENT_USER\Control Panel\Accessibility\{subKey}",
+                                          "Flags", null);
+                // Flags est une CHAÎNE (REG_SZ) contenant un entier — vérifié en réel
+                if (v is string s && int.TryParse(s, out var f)) return (f & 0x4) != 0;
+            }
+            catch { }
+            return true;   // doute → considéré actif (le switch s'affiche décoché, honnête)
         }
 
         private static (bool HAGS, bool DisableGameBar, bool DisableDVR,
@@ -174,9 +235,13 @@ namespace Optimisation_Tool.Pages
             bool? chMSI     = Helpers.TweakFeedback.Changed(ChkMSIMode,        _state.MSIMode);
             bool? chDiscord = Helpers.TweakFeedback.Changed(ChkDiscordHWAccel, _state.DiscordHWAccel);
             bool? chSteam   = Helpers.TweakFeedback.Changed(ChkSteamOverlay,   _state.SteamOverlay);
+            bool? chGMode   = Helpers.TweakFeedback.Changed(ChkGameMode,       _state2.GameMode);
+            bool? chWinOpt  = Helpers.TweakFeedback.Changed(ChkWindowedOpt,    _state2.WindowedOpt);
+            bool? chNoPop   = Helpers.TweakFeedback.Changed(ChkNoAccessPopups, _state2.NoAccessPopups);
 
             if (!(chHAGS.HasValue || chGameBar.HasValue || chDVR.HasValue || chGPU.HasValue
-                  || chMSI.HasValue || chDiscord.HasValue || chSteam.HasValue))
+                  || chMSI.HasValue || chDiscord.HasValue || chSteam.HasValue
+                  || chGMode.HasValue || chWinOpt.HasValue || chNoPop.HasValue))
             {
                 Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
                 BtnAppliquer.IsEnabled = true;
@@ -186,138 +251,269 @@ namespace Optimisation_Tool.Pages
             _main.Log("Windows : application des optimisations…");
             var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
+            {
                 ApplyChanges(chHAGS, chGameBar, chDVR, chGPU, chMSI, chDiscord, chSteam,
-                             msg => { _main.Log(msg); msgs.Add(msg); }));
+                             msg => { _main.Log(msg); msgs.Add(msg); });
+                ApplyChanges2(chGMode, chWinOpt, chNoPop,
+                             msg => { _main.Log(msg); msgs.Add(msg); });
+            });
 
             _state = (ChkHAGS.IsChecked == true, ChkDisableGameBar.IsChecked == true,
                       ChkDisableDVR.IsChecked == true, ChkGPUPriority.IsChecked == true,
                       ChkMSIMode.IsChecked == true, ChkDiscordHWAccel.IsChecked == true,
                       ChkSteamOverlay.IsChecked == true);
+            _state2 = (ChkGameMode.IsChecked == true, ChkWindowedOpt.IsChecked == true,
+                       ChkNoAccessPopups.IsChecked == true);
             _main.Log("Windows : optimisations appliquées.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Optimisations Windows appliquées");
             BtnAppliquer.IsEnabled = true;
         }
 
-        // ── Réparation du popup « ms-gamingoverlay » ───────────────────────────
-        // Ré-enregistre la Xbox Game Bar (restaure le gestionnaire du protocole ms-gamingoverlay).
+        // ── Appliquer — bloc n°2 (tweaks v1.3.6) ────────────────────────────────
+        private static void ApplyChanges2(bool? doGameMode, bool? doWindowedOpt,
+                                          bool? doNoPopups, Action<string> log)
+        {
+            // Mode Jeu Windows (officiel Microsoft : priorité au jeu + pas d'Update en partie)
+            if (doGameMode.HasValue)
+            {
+                try
+                {
+                    Registry.SetValue(@"HKEY_CURRENT_USER\Software\Microsoft\GameBar",
+                                      "AutoGameModeEnabled", doGameMode == true ? 1 : 0,
+                                      RegistryValueKind.DWord);
+                    log($"Mode Jeu Windows : {(doGameMode == true ? "ACTIVÉ" : "désactivé")}.");
+                }
+                catch (Exception ex) { log($"Mode Jeu : erreur — {ex.Message}"); }
+            }
+
+            // Optimisations jeux fenêtrés (Win11) : chaîne à paires « k=v; » — on remplace
+            // UNIQUEMENT la paire SwapEffectUpgradeEnable en PRÉSERVANT les autres
+            // (ex. VRROptimizeEnable=1, vérifié en réel sur la machine de référence).
+            if (doWindowedOpt.HasValue)
+            {
+                try
+                {
+                    const string dxPath = @"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences";
+                    var cur = (Registry.GetValue(dxPath, "DirectXUserGlobalSettings", null) as string) ?? "";
+                    var pairs = new System.Collections.Generic.List<string>();
+                    foreach (var p in cur.Split(';'))
+                        if (p.Trim().Length > 0 && !p.TrimStart().StartsWith("SwapEffectUpgradeEnable=", StringComparison.OrdinalIgnoreCase))
+                            pairs.Add(p.Trim());
+                    pairs.Add("SwapEffectUpgradeEnable=" + (doWindowedOpt == true ? "1" : "0"));
+                    Registry.SetValue(dxPath, "DirectXUserGlobalSettings",
+                                      string.Join(";", pairs) + ";", RegistryValueKind.String);
+                    log($"Optimisations jeux fenêtrés : {(doWindowedOpt == true ? "ACTIVÉES" : "désactivées")} (effet au prochain lancement des jeux).");
+                }
+                catch (Exception ex) { log($"Jeux fenêtrés : erreur — {ex.Message}"); }
+            }
+
+            // Popups d'accessibilité : on manipule UNIQUEMENT le bit 0x4 (HOTKEYACTIVE)
+            // des Flags (REG_SZ contenant un entier — formats 510/62/126 vérifiés en réel),
+            // en PRÉSERVANT les autres bits (réglages personnels d'accessibilité intacts).
+            if (doNoPopups.HasValue)
+            {
+                try
+                {
+                    foreach (var sub in new[] { "StickyKeys", "ToggleKeys", "Keyboard Response" })
+                    {
+                        var path = $@"HKEY_CURRENT_USER\Control Panel\Accessibility\{sub}";
+                        var v = Registry.GetValue(path, "Flags", null);
+                        if (v is not string s || !int.TryParse(s, out var f)) continue;
+                        f = doNoPopups == true ? (f & ~0x4) : (f | 0x4);
+                        Registry.SetValue(path, "Flags", f.ToString(), RegistryValueKind.String);
+                    }
+                    log($"Popups d'accessibilité en jeu : {(doNoPopups == true ? "COUPÉS" : "restaurés")} (effet à la prochaine session).");
+                }
+                catch (Exception ex) { log($"Popups accessibilité : erreur — {ex.Message}"); }
+            }
+        }
+
+        // ── Réparation du popup « ms-gamingoverlay » — PIPELINE DE TESTS (v1.3.6) ──
+        // Chaque étape s'affiche en direct (PASS/FAIL + détail) sous le bouton, et la
+        // correction s'adapte à l'étape qui échoue. Honnêteté assumée : la voie
+        // reset+register n'a JAMAIS été validée sur machine réellement cassée — le
+        // pipeline rend enfin visible CE QUI se passe quand un utilisateur l'exécute.
+        // ⚠️ Les opérations AppX DOIVENT tourner DÉ-ÉLEVÉES (contexte utilisateur,
+        // leçon v1.3.3) — résultat via fichier temp.
         private async void BtnFixGamingOverlay_Click(object sender, RoutedEventArgs e)
         {
             BtnFixGamingOverlay.IsEnabled = false;
-            _main.Log("Réparation ms-gamingoverlay : ré-enregistrement de la Xbox Game Bar…");
+            GoStepsPanel.Children.Clear();
+            GoStepsPanel.Visibility = Visibility.Visible;
+            _main.Log("Réparation ms-gamingoverlay : diagnostic étape par étape…");
 
-            // ⚠️ FIX v1.3.3 — POURQUOI ça ne marchait pas avant : Tweakly tourne en ADMIN
-            // (requireAdministrator), or les opérations AppX (Reset/Add-AppxPackage -Register)
-            // s'appliquent au PROFIL DE L'UTILISATEUR COURANT. Exécutées depuis le contexte
-            // élevé, elles « réussissaient » sans réparer le profil utilisateur réel.
-            // → On exécute désormais le PowerShell DÉ-ÉLEVÉ (token d'explorer.exe, via
-            //   Helpers/DeElevatedLauncher), dans le vrai contexte utilisateur.
-            // Comme on ne peut pas capturer la sortie d'un process à token différent,
-            // le script écrit son verdict dans un fichier temporaire qu'on relit.
-            var outFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tweakly_gamingoverlay.txt");
-            try { System.IO.File.Delete(outFile); } catch { }
+            // ── Étape 1 : la Game Bar est-elle présente, et dans quel état ? ──
+            var st1 = AddGoStep("Présence de la Xbox Game Bar");
+            string probe = await Task.Run(() => RunGoPs(
+                "$n='Microsoft.XboxGamingOverlay';$p=Get-AppxPackage -Name $n;" +
+                "if(-not $p){'NOTINSTALLED'}else{'PRESENT:'+($p|Select-Object -First 1).Status}"));
 
-            string ps =
-                "$ErrorActionPreference='SilentlyContinue';" +
-                $"$out='{outFile.Replace("\\", "\\\\")}';" +
-                "$n='Microsoft.XboxGamingOverlay';" +
-                "$p=Get-AppxPackage -Name $n;" +
-                "if(-not $p){Set-Content -Path $out -Value 'NOTINSTALLED'}else{" +
+            if (probe.StartsWith("ERR:"))
+            {
+                SetGoStep(st1, GoState.Fail, "sonde impossible — " + probe.Substring(4));
+                FinishGoWithTriggerCut("le diagnostic n'a pas pu s'exécuter");
+                return;
+            }
+
+            if (probe.Contains("NOTINSTALLED"))
+            {
+                SetGoStep(st1, GoState.Fail, "absente du système");
+                // Pas de package → rien à ré-enregistrer : on coupe le déclencheur direct.
+                var st2 = AddGoStep("Neutralisation du déclencheur (GameDVR)");
+                bool ok = DisableGameDvrTrigger();
+                SetGoStep(st2, ok ? GoState.Pass : GoState.Fail,
+                    ok ? "AppCaptureEnabled=0 + GameDVR_Enabled=0 — le popup n'a plus de cause"
+                       : "écriture registre refusée");
+                _main.Log(ok
+                    ? "ms-gamingoverlay : Game Bar absente → déclencheur GameDVR coupé. Réinstallation possible via le Microsoft Store."
+                    : "ms-gamingoverlay : Game Bar absente ET échec d'écriture GameDVR.");
+                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, ok,
+                    "Popup neutralisé (Game Bar absente — Store pour la réinstaller)",
+                    "Réparation impossible — voir le journal d'activité.");
+                BtnFixGamingOverlay.IsEnabled = true;
+                return;
+            }
+
+            var pkgStatus = probe.Substring(probe.IndexOf("PRESENT:", StringComparison.Ordinal) + 8).Trim();
+            SetGoStep(st1, pkgStatus.StartsWith("Ok") ? GoState.Pass : GoState.Warn,
+                      $"installée — statut « {pkgStatus} »");
+
+            // ── Étape 2 : le protocole ms-gamingoverlay est-il associé ? (informatif) ──
+            var st2b = AddGoStep("Association du protocole ms-gamingoverlay");
+            bool protoOk = false;
+            try { using var k = Registry.ClassesRoot.OpenSubKey("ms-gamingoverlay"); protoOk = k != null; }
+            catch { }
+            SetGoStep(st2b, protoOk ? GoState.Pass : GoState.Warn,
+                      protoOk ? "enregistré dans le système" : "introuvable — le ré-enregistrement doit le restaurer");
+
+            // ── Étape 3 : réinitialisation + ré-enregistrement (contexte utilisateur) ──
+            var st3 = AddGoStep("Réinitialisation + ré-enregistrement (contexte utilisateur)");
+            string rep = await Task.Run(() => RunGoPs(
+                "$n='Microsoft.XboxGamingOverlay';$p=Get-AppxPackage -Name $n;" +
+                "if(-not $p){'FAILED'}else{" +
                 "try{Reset-AppxPackage -Package $p[0].PackageFullName}catch{};" +
                 "foreach($pk in $p){$m=Join-Path $pk.InstallLocation 'AppXManifest.xml';" +
                 "if(Test-Path $m){Add-AppxPackage -DisableDevelopmentMode -Register $m}};" +
                 "$a=Get-AppxPackage -Name $n;" +
-                "if($a){Set-Content -Path $out -Value ('VERIFIED:'+($a|Select-Object -First 1).Status)}" +
-                "else{Set-Content -Path $out -Value 'FAILED'}}";
+                "if($a){'VERIFIED:'+($a|Select-Object -First 1).Status}else{'FAILED'}}"));
 
-            string result = await Task.Run(() =>
+            // ── Étape 4 : vérification finale ──
+            var st4 = AddGoStep("Vérification finale du package");
+
+            if (rep.Contains("VERIFIED:Ok"))
+            {
+                SetGoStep(st3, GoState.Pass, "reset + register exécutés");
+                SetGoStep(st4, GoState.Pass, "package SAIN — le popup ne devrait plus apparaître");
+                _main.Log("ms-gamingoverlay : réparé et vérifié (package sain).");
+                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                    "Réparé et vérifié — Game Bar ré-enregistrée (package sain)", "");
+                BtnFixGamingOverlay.IsEnabled = true;
+                return;
+            }
+            if (rep.Contains("VERIFIED:"))
+            {
+                var st = rep.Substring(rep.IndexOf("VERIFIED:", StringComparison.Ordinal) + 9).Trim();
+                SetGoStep(st3, GoState.Pass, "reset + register exécutés");
+                SetGoStep(st4, GoState.Warn, $"statut encore « {st} » — redémarre, puis relance ce diagnostic");
+                _main.Log($"ms-gamingoverlay : réparation appliquée, statut « {st} » — redémarrage conseillé.");
+                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                    $"Réparation appliquée (statut : {st}) — redémarre si ça persiste", "");
+                BtnFixGamingOverlay.IsEnabled = true;
+                return;
+            }
+
+            // Échec du ré-enregistrement → filet déclencheur
+            SetGoStep(st3, GoState.Fail, rep.StartsWith("ERR:") ? rep.Substring(4) : "le système a refusé l'opération");
+            SetGoStep(st4, GoState.Fail, "package non réparable en l'état");
+            FinishGoWithTriggerCut("ré-enregistrement échoué");
+        }
+
+        /// <summary>Étape filet : coupe le déclencheur GameDVR + verdict global.</summary>
+        private void FinishGoWithTriggerCut(string reason)
+        {
+            var st = AddGoStep("Filet : neutralisation du déclencheur (GameDVR)");
+            bool ok = DisableGameDvrTrigger();
+            SetGoStep(st, ok ? GoState.Pass : GoState.Fail,
+                ok ? "le popup n'a plus de cause, même sans réparation du package"
+                   : "écriture registre refusée");
+            _main.Log($"ms-gamingoverlay : {reason} — filet GameDVR {(ok ? "appliqué" : "ÉCHOUÉ")}.");
+            Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, ok,
+                "Réparation partielle : popup neutralisé (déclencheur GameDVR coupé)",
+                "Réparation impossible — voir le journal d'activité.");
+            BtnFixGamingOverlay.IsEnabled = true;
+        }
+
+        // ── Exécution PowerShell dé-élevée avec résultat fichier (fallback élevé) ──
+        private static string RunGoPs(string body)
+        {
+            var outFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tweakly_gamingoverlay.txt");
+            try { System.IO.File.Delete(outFile); } catch { }
+            var ps = "$ErrorActionPreference='SilentlyContinue';" +
+                     $"$r=&{{{body}}};Set-Content -Path '{outFile.Replace("\\", "\\\\")}' -Value $r";
+            try
+            {
+                int code = Helpers.DeElevatedLauncher.StartAndWait(
+                    "powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"",
+                    timeoutMs: 90_000);
+                if (System.IO.File.Exists(outFile))
+                    return System.IO.File.ReadAllText(outFile).Trim();
+                return $"ERR:pas de résultat (exit {code})";
+            }
+            catch
             {
                 try
                 {
-                    // Voie principale : DÉ-ÉLEVÉ (contexte utilisateur — la bonne façon pour AppX)
-                    int code = Helpers.DeElevatedLauncher.StartAndWait(
-                        "powershell.exe",
-                        $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"",
-                        timeoutMs: 90_000);
+                    var psi = new ProcessStartInfo("powershell",
+                        $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"")
+                    { UseShellExecute = false, CreateNoWindow = true,
+                      RedirectStandardOutput = true, RedirectStandardError = true };
+                    using var p = Process.Start(psi);
+                    p?.WaitForExit(60_000);
                     if (System.IO.File.Exists(outFile))
                         return System.IO.File.ReadAllText(outFile).Trim();
-                    return $"ERR:pas de résultat (exit {code})";
+                    return "ERR:exécution impossible";
                 }
-                catch (Exception exDe)
-                {
-                    // Fallback : voie élevée historique (moins fiable pour AppX, mais mieux que rien
-                    // si le lancement dé-élevé échoue — ex. session sans explorer).
-                    try
-                    {
-                        var psi = new ProcessStartInfo("powershell",
-                            $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"")
-                        {
-                            UseShellExecute        = false,
-                            CreateNoWindow         = true,
-                            RedirectStandardOutput = true,
-                            RedirectStandardError  = true,
-                        };
-                        using var p = Process.Start(psi);
-                        p?.WaitForExit(60_000);
-                        if (System.IO.File.Exists(outFile))
-                            return System.IO.File.ReadAllText(outFile).Trim() + " (mode élevé — fallback)";
-                        return "ERR:" + exDe.Message;
-                    }
-                    catch (Exception ex) { return "ERR:" + ex.Message; }
-                }
-                finally
-                {
-                    try { System.IO.File.Delete(outFile); } catch { }
-                }
-            });
+                catch (Exception ex) { return "ERR:" + ex.Message; }
+            }
+            finally { try { System.IO.File.Delete(outFile); } catch { } }
+        }
 
-            if (result.Contains("VERIFIED:Ok"))
-            {
-                _main.Log("Réparation ms-gamingoverlay : reset + ré-enregistrement OK, package vérifié SAIN. Le popup ne devrait plus apparaître.");
-                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
-                    "Réparé et vérifié — Game Bar réinitialisée + ré-enregistrée (package sain)", "");
-            }
-            else if (result.Contains("VERIFIED:"))
-            {
-                var st = result.Substring(result.IndexOf("VERIFIED:", StringComparison.Ordinal) + 9).Trim();
-                _main.Log($"Réparation ms-gamingoverlay : appliquée, statut du package = « {st} ». Redémarre si le popup persiste.");
-                Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
-                    $"Réparation appliquée (statut : {st}) — redémarre si ça persiste", "");
-            }
-            else if (result.Contains("NOTINSTALLED"))
-            {
-                // Game Bar ABSENTE : le popup vient de GameDVR qui invoque ms-gamingoverlay
-                // dans le vide. Fix DOCUMENTÉ (Microsoft Q&A 3739326, le plus confirmé) :
-                // couper le DÉCLENCHEUR — les 2 mêmes clés HKCU que notre tweak « Désactiver
-                // Game Bar » (ApplyChanges plus bas). Le popup disparaît SANS réinstaller.
-                bool dvrOff = DisableGameDvrTrigger();
-                _main.Log(dvrOff
-                    ? "Réparation ms-gamingoverlay : Game Bar absente → déclencheur GameDVR coupé (AppCaptureEnabled=0 + GameDVR_Enabled=0). Le popup ne devrait plus apparaître. Pour retrouver la Game Bar : Microsoft Store."
-                    : "Réparation ms-gamingoverlay : Game Bar absente ET échec d'écriture des clés GameDVR — voir le journal technique.");
-                if (dvrOff)
-                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
-                        "Popup neutralisé (Game Bar absente : enregistrement GameDVR désactivé)", "");
-                else
-                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, false, "",
-                        "Réparation impossible — voir le journal d'activité.");
-            }
-            else
-            {
-                // Échec du ré-enregistrement : même neutralisation du déclencheur en filet
-                // de secours (le package est peut-être irrécupérable, mais le popup, lui,
-                // peut être stoppé à coup sûr).
-                bool dvrOff = DisableGameDvrTrigger();
-                _main.Log($"Réparation ms-gamingoverlay : ré-enregistrement échoué ({result.Trim()})"
-                        + (dvrOff ? " — déclencheur GameDVR coupé en secours, le popup ne devrait plus apparaître."
-                                  : " — et échec d'écriture des clés GameDVR."));
-                if (dvrOff)
-                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
-                        "Réparation partielle : popup neutralisé (enregistrement GameDVR désactivé)", "");
-                else
-                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, false, "",
-                        "Réparation impossible — voir le journal d'activité.");
-            }
+        // ── Rangées d'étapes du diagnostic (icône d'état + libellé + détail) ──
+        private enum GoState { Running, Pass, Warn, Fail }
 
-            BtnFixGamingOverlay.IsEnabled = true;
+        private (System.Windows.Controls.TextBlock icon, System.Windows.Controls.TextBlock txt) AddGoStep(string label)
+        {
+            var row = new System.Windows.Controls.StackPanel
+            { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 0, 0, 5) };
+            var icon = new System.Windows.Controls.TextBlock
+            { Text = "…", Width = 20, FontSize = 12, FontWeight = FontWeights.Bold,
+              VerticalAlignment = VerticalAlignment.Center };
+            icon.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "ThTextDim");
+            var txt = new System.Windows.Controls.TextBlock
+            { Text = label + "…", FontSize = 11.5, TextWrapping = TextWrapping.Wrap,
+              VerticalAlignment = VerticalAlignment.Center };
+            txt.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "ThTextBody");
+            txt.Tag = label;   // libellé d'origine, réutilisé par SetGoStep
+            row.Children.Add(icon); row.Children.Add(txt);
+            GoStepsPanel.Children.Add(row);
+            return (icon, txt);
+        }
+
+        private void SetGoStep((System.Windows.Controls.TextBlock icon, System.Windows.Controls.TextBlock txt) step,
+                               GoState state, string detail)
+        {
+            var (icon, txt) = step;
+            icon.Text = state switch
+            { GoState.Pass => "✓", GoState.Warn => "⚠", GoState.Fail => "✗", _ => "…" };
+            icon.Foreground = state switch
+            {
+                GoState.Pass => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2E, 0xC4, 0x6A)),
+                GoState.Warn => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE8, 0xA0, 0x2E)),
+                GoState.Fail => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE0, 0x55, 0x55)),
+                _ => icon.Foreground,
+            };
+            txt.Text = $"{txt.Tag} — {detail}";
+            _main.Log($"  [{icon.Text}] {txt.Tag} : {detail}");
         }
 
         /// <summary>

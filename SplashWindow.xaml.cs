@@ -70,6 +70,17 @@ namespace Optimisation_Tool
                 var main = new MainWindow();
                 Application.Current.MainWindow = main;   // AVANT Close() : l'app ne doit pas s'éteindre
                 main.Show();
+
+                // PASSATION DU PREMIER PLAN (régression vécue : à la fermeture du splash,
+                // Windows rendait le foreground à explorer → app coincée dans la barre des
+                // tâches). Deux rappels différés : juste après la fermeture du splash, puis
+                // un filet à 600 ms si une autre app a repris le focus entre-temps.
+                main.Dispatcher.BeginInvoke(new Action(main.EnsureForeground),
+                    System.Windows.Threading.DispatcherPriority.ContextIdle);
+                var t = new System.Windows.Threading.DispatcherTimer
+                { Interval = TimeSpan.FromMilliseconds(600) };
+                t.Tick += (_, _) => { t.Stop(); main.EnsureForeground(); };
+                t.Start();
             }
             catch (Exception ex)
             {

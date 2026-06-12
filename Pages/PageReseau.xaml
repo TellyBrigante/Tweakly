@@ -91,6 +91,25 @@
                         </Grid>
                     </Border>
 
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkNetThrottle}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkNetThrottle" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver le bridage r&#233;seau multim&#233;dia" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="NetworkThrottlingIndex — Windows limite le d&#233;bit quand du son/vid&#233;o tourne ; inutile en jeu."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                 </StackPanel>
             </Border>
 
