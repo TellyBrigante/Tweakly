@@ -7,26 +7,116 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <CheckBox x:Name="ChkUltimatePower"
-                      Content="Activer le Mode Performances Ultimes (Power Plan)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkDisableThrottling"
-                      Content="D&#233;sactiver le Power Throttling (&#233;vite le bridage CPU en arri&#232;re-plan)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkSysResponsiveness"
-                      Content="Prioriser le CPU pour les applications au premier plan (SystemResponsiveness)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkTimerResolution"
-                      Content="GlobalTimerResolution &#8212; R&#233;solution timer haute pr&#233;cision (Windows 11)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkHVCI"
-                      Content="D&#233;sactiver Memory Integrity / HVCI (gros gain perf &#8212; r&#233;duit la s&#233;curit&#233;)"
-                      Style="{StaticResource TweakChkStyle}"/>
+            <!-- DA optim v1.3.5 (validée sur Nettoyage) : rangées switch/icône/texte -->
+            <TextBlock Text="TWEAKS CPU"
+                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                       FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+                    BorderThickness="1" CornerRadius="12" Padding="8,7">
+                <StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkUltimatePower}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkUltimatePower" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Mode Performances Ultimes" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Active le plan d'alimentation Windows le plus agressif (Power Plan)."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkDisableThrottling}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkDisableThrottling" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver le Power Throttling" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="&#201;vite le bridage du CPU pour les applications en arri&#232;re-plan."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkSysResponsiveness}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkSysResponsiveness" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE71D;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Prioriser les applications au premier plan" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="SystemResponsiveness — le CPU sert d'abord l'application active."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTimerResolution}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkTimerResolution" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE713;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="R&#233;solution timer haute pr&#233;cision" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="GlobalTimerResolution (Windows 11)."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkHVCI}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHVCI" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE72E;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver Memory Integrity (HVCI)" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Gros gain de performances — r&#233;duit la s&#233;curit&#233; du syst&#232;me."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                 <Button x:Name="BtnAppliquer"
                         Content="APPLIQUER LES TWEAKS CPU"
-                        Style="{StaticResource PrimaryBtnStyle}"
+                        Style="{StaticResource CleanRunBtn}"
                         Click="BtnAppliquer_Click"/>
             </StackPanel>
 

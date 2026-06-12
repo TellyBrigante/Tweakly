@@ -182,9 +182,9 @@ namespace Optimisation_Tool.Pages
             Push(_cpuHist, s.CpuUsage);
             Push(_gpuHist, s.GpuOk ? s.GpuUsage : 0);
             Push(_ramHist, s.RamPct);
-            DrawLine(CpuLine, _cpuHist);
-            DrawLine(GpuLine, _gpuHist);
-            DrawLine(RamLine, _ramHist);
+            DrawLine(CpuLine, null, _cpuHist);
+            DrawLine(GpuLine, null, _gpuHist);
+            DrawLine(RamLine, null, _ramHist);
         }
 
         // ── Tuiles NVMe ─────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ namespace Optimisation_Tool.Pages
                 var sigCol = LegibleText(v.Color);   // signature, assombrie en mode clair (cohérent partout)
                 v.UsageBig.Foreground = sigCol;
                 v.PctLabel.Foreground = sigCol;
-                v.BarFill.Background  = sigCol;
+                v.BarFill.Background  = BarGradient(sigCol);   // dégradé style barre de MAJ (v1.3.5)
                 v.Line.Stroke         = sigCol;
                 v.Dot.Fill            = sigCol;
                 SetBar(v.UsageBar, n.UsagePct);
@@ -225,7 +225,7 @@ namespace Optimisation_Tool.Pages
                 v.TempVal.Foreground = TempColor(n.TempC);
 
                 Push(v.Hist, n.UsagePct);
-                DrawLine(v.Line, v.Hist);
+                DrawLine(v.Line, null, v.Hist);
             }
         }
 
@@ -248,7 +248,11 @@ namespace Optimisation_Tool.Pages
                 var v = new NvmeVisual { Color = color };
 
                 // Courbe d'utilisation dans le graphe (couleur signature)
-                v.Line = new Polyline { Stroke = color, StrokeThickness = 1.8, StrokeLineJoin = PenLineJoin.Round };
+                v.Line = new Polyline
+                {
+                    Stroke = color, StrokeThickness = 2.2, StrokeLineJoin = PenLineJoin.Round,
+                    StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                };
                 GraphArea.Children.Add(v.Line);
 
                 var card = BuildNvmeTile(n, v);
@@ -353,6 +357,29 @@ namespace Optimisation_Tool.Pages
             return new SolidColorBrush(Color.FromRgb((byte)(c.R * f), (byte)(c.G * f), (byte)(c.B * f)));
         }
 
+        /// <summary>Dégradé horizontal sombre→couleur→clair à partir d'une couleur signature
+        /// (la recette de la barre de MAJ, déclinée par tuile — v1.3.5).</summary>
+        private static LinearGradientBrush BarGradient(Brush sig)
+        {
+            var c = (sig as SolidColorBrush)?.Color ?? Colors.Gray;
+            Color Shade(double f) => Color.FromRgb(
+                (byte)Math.Min(255, c.R * f), (byte)Math.Min(255, c.G * f), (byte)Math.Min(255, c.B * f));
+            Color Tint(double f) => Color.FromRgb(
+                (byte)(c.R + (255 - c.R) * f), (byte)(c.G + (255 - c.G) * f), (byte)(c.B + (255 - c.B) * f));
+            var b = new LinearGradientBrush
+            {
+                StartPoint = new Point(0, 0), EndPoint = new Point(1, 0),
+                GradientStops =
+                {
+                    new GradientStop(Shade(0.78), 0),
+                    new GradientStop(c,           0.6),
+                    new GradientStop(Tint(0.35),  1),
+                },
+            };
+            b.Freeze();
+            return b;
+        }
+
         private static void Push(List<double> list, double v)
         {
             list.Add(v);
@@ -375,10 +402,10 @@ namespace Optimisation_Tool.Pages
         private void GraphArea_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             DrawGrid();
-            DrawLine(CpuLine, _cpuHist);
-            DrawLine(GpuLine, _gpuHist);
-            DrawLine(RamLine, _ramHist);
-            foreach (var v in _nvme.Values) DrawLine(v.Line, v.Hist);
+            DrawLine(CpuLine, null, _cpuHist);
+            DrawLine(GpuLine, null, _gpuHist);
+            DrawLine(RamLine, null, _ramHist);
+            foreach (var v in _nvme.Values) DrawLine(v.Line, null, v.Hist);
         }
 
         private void DrawGrid()
@@ -387,31 +414,86 @@ namespace Optimisation_Tool.Pages
             double w = GraphArea.ActualWidth, h = GraphArea.ActualHeight;
             if (w <= 0 || h <= 0) return;
 
+            // v1.3.5 : grille en POINTILLÉS discrets (la grille pleine faisait
+            // « Gestionnaire des tâches »)
             foreach (var p in new[] { 25, 50, 75 })
             {
                 double y = h - (p / 100.0) * h;
-                var line = new Line { X1 = 0, X2 = w, Y1 = y, Y2 = y, StrokeThickness = 1, Opacity = 0.5 };
+                var line = new Line
+                {
+                    X1 = 0, X2 = w, Y1 = y, Y2 = y,
+                    StrokeThickness = 1, Opacity = 0.35,
+                    StrokeDashArray = new DoubleCollection { 3, 5 },
+                };
                 line.SetResourceReference(Shape.StrokeProperty, "ThBorder");   // suit le thème
                 GridCanvas.Children.Add(line);
             }
         }
 
-        private void DrawLine(Polyline line, List<double> data)
+        /// <summary>
+        /// v1.3.5 : courbe LISSÉE (interpolation Catmull-Rom, 6 sous-points par segment —
+        /// fini les angles « Gestionnaire des tâches ») + AIRE optionnelle sous la courbe
+        /// (Polygon fermé jusqu'au bas du graphe, rempli d'un dégradé couleur→transparent).
+        /// </summary>
+        private void DrawLine(Polyline line, Polygon? fill, List<double> data)
         {
             double w = GraphArea.ActualWidth, h = GraphArea.ActualHeight;
-            if (w <= 0 || h <= 0 || data.Count < 2) { line.Points = new PointCollection(); return; }
+            if (w <= 0 || h <= 0 || data.Count < 2)
+            {
+                line.Points = new PointCollection();
+                if (fill != null) fill.Points = new PointCollection();
+                return;
+            }
 
             double step = w / (MaxPoints - 1);
             int count = data.Count;
-            var pts = new PointCollection(count);
+            var raw = new Point[count];
             for (int i = 0; i < count; i++)
             {
                 // newest ancré à droite, défile vers la gauche
                 double x = w - (count - 1 - i) * step;
                 double y = h - (Math.Max(0, Math.Min(100, data[i])) / 100.0) * h;
-                pts.Add(new Point(x, y));
+                raw[i] = new Point(x, y);
             }
-            line.Points = pts;
+
+            var smooth = CatmullRom(raw, 6, h);
+            line.Points = smooth;
+
+            if (fill != null)
+            {
+                var area = new PointCollection(smooth.Count + 2);
+                foreach (var pt in smooth) area.Add(pt);
+                area.Add(new Point(smooth[smooth.Count - 1].X, h));   // descend au sol à droite
+                area.Add(new Point(smooth[0].X, h));                   // referme au sol à gauche
+                fill.Points = area;
+            }
+        }
+
+        // Interpolation Catmull-Rom : passe par TOUS les points mesurés (aucune triche
+        // sur les données), n'arrondit que le trajet entre eux. Y borné au graphe.
+        private static PointCollection CatmullRom(Point[] p, int subdiv, double maxY)
+        {
+            var outPts = new PointCollection((p.Length - 1) * subdiv + 1);
+            for (int i = 0; i < p.Length - 1; i++)
+            {
+                var p0 = p[Math.Max(0, i - 1)];
+                var p1 = p[i];
+                var p2 = p[i + 1];
+                var p3 = p[Math.Min(p.Length - 1, i + 2)];
+                for (int s = 0; s < subdiv; s++)
+                {
+                    double t = s / (double)subdiv, t2 = t * t, t3 = t2 * t;
+                    double x = 0.5 * ((2 * p1.X) + (-p0.X + p2.X) * t
+                             + (2 * p0.X - 5 * p1.X + 4 * p2.X - p3.X) * t2
+                             + (-p0.X + 3 * p1.X - 3 * p2.X + p3.X) * t3);
+                    double y = 0.5 * ((2 * p1.Y) + (-p0.Y + p2.Y) * t
+                             + (2 * p0.Y - 5 * p1.Y + 4 * p2.Y - p3.Y) * t2
+                             + (-p0.Y + 3 * p1.Y - 3 * p2.Y + p3.Y) * t3);
+                    outPts.Add(new Point(x, Math.Max(0, Math.Min(maxY, y))));
+                }
+            }
+            outPts.Add(p[p.Length - 1]);
+            return outPts;
         }
     }
 }

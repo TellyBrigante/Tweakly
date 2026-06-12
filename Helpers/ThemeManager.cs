@@ -29,30 +29,37 @@ namespace Optimisation_Tool.Helpers
         //      fines, pas par des gris concurrents ;
         //   3. texte ARDOISE (#27314A) — JAMAIS de noir pur : contraste ~12:1 au lieu
         //      de 18:1, largement lisible mais sans éblouir.
-        // v1.3.3-bis : le light « bleu pâle » restait trop lumineux pour l'utilisateur →
-        // passage en MODE PAPIER (sépia doux, type liseuse/mode lecture) : à luminance
-        // égale, un fond CHAUD est perçu bien plus doux qu'un fond froid. Luminance
-        // abaissée (~89 %), encre chaude, hiérarchie conservée (cartes > fond + bordures).
+        // HISTORIQUE DES TENTATIVES LIGHT (utilisateur TRÈS photosensible) :
+        //   v1 bleu pâle clair   → trop lumineux ;
+        //   v2 papier sépia      → « jaunit bêtement », les teintes chaudes fatiguent AUSSI ;
+        //   v3 gris neutre ~82 % → encore trop de lumière émise.
+        // v4 (v1.3.5) : changement de PHILOSOPHIE — ce n'est plus un « light mode »,
+        // c'est un MODE GRIS ÉTEINT (type « Dim » de Twitter/Discord) : luminance ~75 %
+        // (papier à l'ombre), teinte STRICTEMENT neutre avec micro-biais FROID (aucune
+        // dérive jaune possible). Leçon anti-« gris boueux » toujours appliquée :
+        // hiérarchie par la lumière (cartes > fond), bordures nettes, encre ardoise.
+        // ⚠️ Si v4 échoue : descendre encore (~68 %), JAMAIS éclaircir ni réchauffer.
         private static readonly Dictionary<string, (string dark, string light)> Roles = new()
         {
-            ["ThBg"]        = ("#2B3252", "#E9E5DB"),   // fond page — crème-gris chaud (papier)
-            ["ThPanel"]     = ("#313858", "#F2EFE7"),   // cartes — plus claires que le fond (hiérarchie)
-            ["ThSidebar"]   = ("#262C49", "#DFDACE"),
-            ["ThSecBtn"]    = ("#2E3559", "#E6E1D6"),
-            ["ThPill"]      = ("#2B3358", "#ECE8DE"),
-            ["ThTrack"]     = ("#2A3358", "#D8D3C5"),
-            ["ThLogBg"]     = ("#242A45", "#EFECE3"),
-            ["ThLogHdr"]    = ("#20253E", "#E2DDD1"),
-            ["ThHover"]     = ("#2E3658", "#E2DDD2"),
-            ["ThSelection"] = ("#34408A", "#C8D6EC"),   // sélection bleu doux (accent froid sur papier chaud)
-            ["ThBorder"]    = ("#3D456E", "#CFC9BA"),
-            ["ThTextTitle"] = ("#E2E6FF", "#33312A"),   // encre chaude, PAS noir
-            ["ThTextBody"]  = ("#DCE0F6", "#45433A"),
-            ["ThTextLabel"] = ("#C6CDEC", "#57544A"),
-            ["ThTextSub"]   = ("#B4BBE0", "#67645A"),
-            ["ThTextNav"]   = ("#B6BEE4", "#54526A"),
-            ["ThTextDim"]   = ("#9CA3CC", "#847F72"),
-            ["ThLogText"]   = ("#5FD98C", "#1E7A3C"),  // vert journal : clair sur sombre, foncé sur clair
+            ["ThBg"]        = ("#2B3252", "#C2C4C9"),   // fond page — gris éteint, micro-biais froid
+            ["ThPanel"]     = ("#313858", "#CFD1D6"),   // cartes — plus claires que le fond (hiérarchie)
+            ["ThSidebar"]   = ("#262C49", "#B3B5BB"),
+            ["ThSecBtn"]    = ("#2E3559", "#C7C9CE"),
+            ["ThPill"]      = ("#2B3358", "#CACCD1"),
+            ["ThTrack"]     = ("#252C4A", "#ADAFB5"),   // creux des barres (dosage validé en sombre v1.3.5)
+            ["ThLogBg"]     = ("#242A45", "#CBCDD2"),
+            ["ThLogHdr"]    = ("#20253E", "#BABCC2"),
+            ["ThHover"]     = ("#2E3658", "#AFBCD2"),   // hover bleuté = se voit
+            ["ThSelection"] = ("#34408A", "#9FB5D8"),   // sélection bleu doux
+            ["ThBorder"]    = ("#3D456E", "#999BA2"),
+            ["ThTextTitle"] = ("#E2E6FF", "#26282E"),   // encre ardoise, PAS noir
+            ["ThTextBody"]  = ("#DCE0F6", "#34373F"),
+            ["ThTextLabel"] = ("#C6CDEC", "#464952"),
+            ["ThTextSub"]   = ("#B4BBE0", "#54575F"),
+            ["ThTextNav"]   = ("#B6BEE4", "#3F424D"),
+            ["ThTextDim"]   = ("#9CA3CC", "#6B6E77"),
+            ["ThLogText"]   = ("#5FD98C", "#1E6E38"),  // vert journal : clair sur sombre, foncé sur clair
+            ["ThAccentIcon"]= ("#8FC0FF", "#2A62C4"),  // glyphes/initiales sur fond bleu alpha : clairs en sombre, PROFONDS en clair (sinon illisibles — retour utilisateur v1.3.5)
             // Couleurs de statut — vives en sombre, ASSOMBRIES en clair pour rester lisibles
             ["ThOk"]        = ("#2EC46A", "#1E9E55"),
             ["ThWarn"]      = ("#F5C24A", "#A87900"),   // amber foncé en clair (le jaune vif était illisible)
@@ -62,12 +69,12 @@ namespace Optimisation_Tool.Helpers
         // Couleurs (pour les dégradés : carte de score, pilule des switches)
         private static readonly Dictionary<string, (string dark, string light)> ColorRoles = new()
         {
-            ["ThCardA"]    = ("#353D66", "#EFEBE1"),   // carte score — haut (papier v1.3.3-bis)
-            ["ThCardB"]    = ("#272D4C", "#E3DED2"),   // carte score — bas
-            ["ThSwOffA"]   = ("#10132C", "#EAE6DB"),   // switch OFF fond haut
-            ["ThSwOffB"]   = ("#080A1E", "#DDD8CB"),   // switch OFF fond bas
-            ["ThSwOffBdA"] = ("#2C3462", "#C5BFAF"),   // switch OFF bordure haut
-            ["ThSwOffBdB"] = ("#07091B", "#A9A294"),   // switch OFF bordure bas
+            ["ThCardA"]    = ("#353D66", "#CDCFD4"),   // carte score — haut (gris éteint v4)
+            ["ThCardB"]    = ("#272D4C", "#BDBFC5"),   // carte score — bas
+            ["ThSwOffA"]   = ("#10132C", "#C5C7CC"),   // switch OFF fond haut
+            ["ThSwOffB"]   = ("#080A1E", "#B7B9BF"),   // switch OFF fond bas
+            ["ThSwOffBdA"] = ("#2C3462", "#9C9EA5"),   // switch OFF bordure haut
+            ["ThSwOffBdB"] = ("#07091B", "#82848B"),   // switch OFF bordure bas
         };
 
         /// <summary>Couleur courante d'un rôle (pour le code-behind).</summary>

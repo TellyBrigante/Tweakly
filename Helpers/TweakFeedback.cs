@@ -21,6 +21,13 @@ namespace Optimisation_Tool.Helpers
 
         private static int _seq;   // jeton anti-collision entre deux toasts rapprochés
 
+        /// <summary>
+        /// Boucle « mesurer → corriger → prouver » (v1.3.5) : passe à true dès qu'un
+        /// « Appliquer » d'une page d'optim réussit → la page Tweakly Score propose de
+        /// relancer le bench pour CHIFFRER le gain. Remis à false après un bench complet.
+        /// </summary>
+        public static bool TweaksAppliedSinceBench { get; set; }
+
         public static void Show(Border banner, Ellipse dot, TextBlock text,
                                 IReadOnlyList<string> messages, string okText)
         {
@@ -33,6 +40,7 @@ namespace Optimisation_Tool.Helpers
                 if (s.Contains("fermez")   || s.Contains("introuvable")) action  = true;
             }
 
+            TweaksAppliedSinceBench = true;   // des réglages ont changé → proposer un re-bench
             if (error)        Run(banner, dot, text, Level.Err,  "Appliqué, mais des erreurs sont survenues — voir le journal d'activité.", emphasize: true,  autoHide: false);
             else if (action)  Run(banner, dot, text, Level.Warn, okText + " — une action est requise, voir le journal d'activité.",        emphasize: true,  autoHide: false);
             else if (restart) Run(banner, dot, text, Level.Warn, okText + " — redémarre le PC pour activer certains réglages.",            emphasize: true,  autoHide: false);

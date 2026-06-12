@@ -104,28 +104,13 @@
                     Click="BtnRefresh_Click"/>
 
             <!-- Tout mettre à jour -->
+            <!-- Bouton bleu de base → style brillant CleanRunBtn (v1.3.5, uniformisation) -->
             <Button x:Name="BtnUpdateAll"
                     Grid.Column="5"
                     Content="TOUT METTRE À JOUR"
                     IsEnabled="False"
-                    Click="BtnUpdateAll_Click">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
-                        <Setter Property="Background" Value="#1A5C9E"/>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#2070BE"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#124478"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
+                    Style="{StaticResource CleanRunBtn}" Padding="20,10"
+                    Click="BtnUpdateAll_Click"/>
 
             <!-- Désinstaller -->
             <Button x:Name="BtnDesinstaller"
@@ -415,7 +400,7 @@
                                     <TextBlock Text="{Binding Initial}"
                                                FontFamily="{StaticResource AppFont}"
                                                FontSize="13.5" FontWeight="Bold"
-                                               Foreground="#8FC0FF"
+                                               Foreground="{DynamicResource ThAccentIcon}"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center" Margin="11,0,0,0">

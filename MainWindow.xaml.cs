@@ -128,6 +128,12 @@ namespace Optimisation_Tool
                 // Démarrage : page d'accueil = Tweakly Score (Benchmark)
                 NavigateTo(BtnNavBenchmark);
 
+                // PRÉCHAUFFAGE du monitoring (v1.3.5) : un Collect() en arrière-plan paie
+                // les démarrages à froid (WMI, LibreHardwareMonitor, nvidia-smi, stockage)
+                // pendant que l'utilisateur est sur la page d'accueil → quand il ouvre
+                // Monitoring Système / le mode mini, les valeurs tombent dès le 1er tick.
+                _ = Task.Run(() => { try { Helpers.SystemMonitor.Collect(); } catch { } });
+
                 // Forcer la fenêtre au PREMIER PLAN (pas seulement Topmost flicker, qui ne
                 // suffit pas si une autre app détient le foreground). On utilise
                 // AttachThreadInput pour bypass la protection Win10/11. Voir ForceForeground.

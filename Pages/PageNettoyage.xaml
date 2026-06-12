@@ -3,47 +3,190 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="Transparent"
              Loaded="UserControl_Loaded">
+    <!-- Styles de la DA optim (CleanRow*/CleanSwitch/CleanRunBtn) : déplacés dans App.xaml (v1.3.5, partagés par les 5 pages d'optimisation) -->
+
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <CheckBox x:Name="ChkTemp"
-                      Content="Dossier %temp% (Cache utilisateur)"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkSystemTemp"
-                      Content="Dossier Windows Temp (Cache syst&#232;me)"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkPrefetch"
-                      Content="Dossier Windows Prefetch"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkDXCache"
-                      Content="Cache de Shaders DirectX (Windows)"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkNvCache"
-                      Content="Cache GL &amp; Shaders NVIDIA"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkTrimSSD"
-                      Content="Trim SSD (lib&#232;re les blocs inutilis&#233;s sur tous les SSD)"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkEventLogs"
-                      Content="Journaux d'&#233;v&#233;nements Windows (peuvent atteindre plusieurs Go)"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkResidues"
-                      Content="R&#233;sidus de logiciels d&#233;sinstall&#233;s (raccourcis cass&#233;s + entr&#233;es registre orphelines)"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
+            <!-- Carte « cibles » : rangées riches (icône dégradé + titre + description)
+                 avec les switchs ON/OFF D'ORIGINE à droite (l'utilisateur y tient).
+                 Cliquer n'importe où sur la rangée actionne le switch (Row_Click). -->
+            <TextBlock Text="CIBLES DU NETTOYAGE"
+                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                       FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+                    BorderThickness="1" CornerRadius="12" Padding="8,7">
+                <StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTemp}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE8B7;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Dossier %temp%" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Fichiers temporaires de ta session utilisateur."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkTemp" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkSystemTemp}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE770;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Dossier Windows Temp" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Fichiers temporaires du syst&#232;me."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkSystemTemp" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkPrefetch}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Dossier Windows Prefetch" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Donn&#233;es de pr&#233;chargement accumul&#233;es par Windows."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkPrefetch" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkDXCache}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE714;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Cache de shaders DirectX" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Shaders compil&#233;s — r&#233;g&#233;n&#233;r&#233;s automatiquement au besoin."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkDXCache" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkNvCache}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE790;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Cache GL &amp; shaders NVIDIA" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Caches OpenGL et shaders du pilote NVIDIA."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkNvCache" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTrimSSD}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Trim SSD" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Signale aux SSD les blocs inutilis&#233;s &#224; recycler."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkTrimSSD" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkEventLogs}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE7C3;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Journaux d'&#233;v&#233;nements Windows" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Peuvent atteindre plusieurs Go avec le temps."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkEventLogs" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkResidues}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE74D;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="R&#233;sidus de logiciels d&#233;sinstall&#233;s" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Raccourcis cass&#233;s et entr&#233;es de registre orphelines."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkResidues" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                 <Button x:Name="BtnLancer"
                         Content="EX&#201;CUTER LE NETTOYAGE"
-                        Style="{StaticResource PrimaryBtnStyle}"
+                        Style="{StaticResource CleanRunBtn}"
+                        Padding="30,12"
                         Click="BtnLancer_Click"/>
             </StackPanel>
 

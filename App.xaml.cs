@@ -39,6 +39,27 @@ namespace Optimisation_Tool
             };
 
             Helpers.AppLog.Write($"— Démarrage Tweakly v{Pages.PageReglages.AppVersion} —");
+
+            // ── Écran de démarrage (v1.3.5) ─────────────────────────────────────
+            // StartupUri a été retiré : on choisit ici. Splash brandé qui précharge
+            // l'essentiel, SAUF si « démarrer minimisé » (pas de flash d'écran au
+            // boot de Windows — l'utilisateur a demandé la discrétion).
+            // ⚠️ ANTI-CASSE MAJ : si le splash échoue à se construire, on retombe
+            // DIRECTEMENT sur MainWindow — le démarrage ne dépend jamais du splash.
+            try
+            {
+                var settings = Helpers.AppSettings.Load();   // lecture best-effort (défauts si absent)
+                if (!settings.StartMinimized)
+                {
+                    new SplashWindow().Show();
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Helpers.AppLog.Error("Démarrage : splash indisponible — ouverture directe", ex);
+            }
+            new MainWindow().Show();
         }
     }
 }

@@ -41,7 +41,7 @@
                                        Foreground="{DynamicResource ThTextBody}"
                                        FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
                             <TextBlock x:Name="TxtUpdateStatus"
-                                       Text="Cliquez pour v&#233;rifier les mises &#224; jour."
+                                       Text="Clique sur &#171; V&#233;rifier &#187; pour chercher une mise &#224; jour."
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" FontSize="11.5"
                                        Margin="0,3,0,0" TextWrapping="Wrap"/>
@@ -50,7 +50,7 @@
                                     VerticalAlignment="Center" Margin="20,0,0,0">
                             <Button x:Name="BtnDownloadUpdate"
                                     Content="T&#201;L&#201;CHARGER"
-                                    Style="{StaticResource PrimaryBtnStyle}"
+                                    Style="{StaticResource CleanRunBtn}" Padding="20,10"
                                     Visibility="Collapsed"
                                     Margin="0,0,8,0"
                                     Click="BtnDownloadUpdate_Click"/>
@@ -75,7 +75,7 @@
                                        Foreground="{DynamicResource ThTextBody}"
                                        FontFamily="{StaticResource AppFont}"
                                        FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock Text="Propose d'installer la MAJ au d&#233;marrage."
+                            <TextBlock Text="V&#233;rifie au d&#233;marrage et propose les nouvelles versions."
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}"
                                        FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
@@ -182,7 +182,7 @@
                             <TextBlock Text="D&#233;marrer minimis&#233;"
                                        Foreground="{DynamicResource ThTextBody}"
                                        FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock Text="Tweakly se lance dans la barre des t&#226;ches."
+                            <TextBlock Text="Au lancement, Tweakly reste r&#233;duit dans la zone de notification."
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -246,7 +246,7 @@
                             <TextBlock Text="Temp&#233;rature du CPU"
                                        Foreground="{DynamicResource ThTextBody}"
                                        FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock Text="Affiche la temp&#233;rature du processeur dans le Monitoring. N&#233;cessite un petit pilote sign&#233; (PawnIO), install&#233; &#224; l'activation et d&#233;sinstallable &#224; tout moment."
+                            <TextBlock Text="Affiche la temp&#233;rature du processeur dans le Monitoring. N&#233;cessite un petit pilote sign&#233; (PawnIO), install&#233; &#224; l'activation. D&#233;cocher l'option arr&#234;te la lecture (le pilote reste en place)."
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" FontSize="11.5" Margin="0,3,0,0" TextWrapping="Wrap"/>
                             <TextBlock x:Name="TxtCpuTempStatus" Text=""

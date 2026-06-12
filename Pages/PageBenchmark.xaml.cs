@@ -34,6 +34,20 @@ namespace Optimisation_Tool.Pages
             RefreshHistory();
             RefreshSparkline();
             RenderCompare();
+            RefreshRebenchHint();
+        }
+
+        /// <summary>Boucle « mesurer → corriger → prouver » : propose un re-bench si des
+        /// tweaks ont été appliqués depuis la dernière mesure (flag posé par TweakFeedback).</summary>
+        private void RefreshRebenchHint()
+        {
+            try
+            {
+                TxtRebenchHint.Visibility =
+                    Helpers.TweakFeedback.TweaksAppliedSinceBench && _history.Count > 0
+                        ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch { }
         }
 
         // ── Lancement : confirmation, puis bench ─────────────────────────────
@@ -58,6 +72,16 @@ namespace Optimisation_Tool.Pages
         private void BtnCancelConfirm_Click(object sender, RoutedEventArgs e)
             => ConfirmOverlay.Visibility = Visibility.Collapsed;
 
+        /// <summary>Annule le bench en cours (les sondes observent le token et s'arrêtent
+        /// en quelques secondes max — le temps de finir l'itération en cours).</summary>
+        private void BtnCancelBench_Click(object sender, RoutedEventArgs e)
+        {
+            try { _cts?.Cancel(); } catch { }
+            BtnCancelBench.IsEnabled = false;
+            BtnCancelBench.Content   = "Annulation…";
+            TxtOverlayPhase.Text     = "Annulation en cours…";
+        }
+
         private async void BtnGoConfirm_Click(object sender, RoutedEventArgs e)
         {
             ConfirmOverlay.Visibility = Visibility.Collapsed;
@@ -68,7 +92,8 @@ namespace Optimisation_Tool.Pages
         {
             BtnRun.IsEnabled = false;
             BenchOverlay.Visibility = Visibility.Visible;
-            SetProgress(0); TxtOverlayPhase.Text = "Préparation…";
+            SetProgress(0); SetTotalRaw(0); TxtOverlayPhase.Text = "Préparation…";
+            BtnCancelBench.IsEnabled = true; BtnCancelBench.Content = "ANNULER LE BENCHMARK";
             _main.Log("Benchmark : démarrage…");
             _cts = new CancellationTokenSource();
 
@@ -89,6 +114,7 @@ namespace Optimisation_Tool.Pages
                     _ => "…"
                 };
                 SetProgress(p.pct);
+                SetTotalProgress(p.phase, p.pct);
             });
 
             BenchmarkResult? r = null;
@@ -99,6 +125,14 @@ namespace Optimisation_Tool.Pages
             BtnRun.IsEnabled = true;
             if (r == null) return;
 
+            // Annulé en cours de route : les sondes ont cassé leurs boucles → les mesures
+            // sont PARTIELLES et le score n'a aucun sens. On jette, l'historique reste sain.
+            if (_cts?.IsCancellationRequested == true)
+            {
+                _main.Log("Benchmark : annulé par l'utilisateur — résultat partiel ignoré.");
+                return;
+            }
+
             BenchmarkStore.Append(r);
             _history = BenchmarkStore.Load().OrderByDescending(x => x.Timestamp).ToList();
             if (_history.Count >= 2) { _selA = _history[1]; _selB = _history[0]; }
@@ -107,6 +141,8 @@ namespace Optimisation_Tool.Pages
             RefreshHistory();
             RefreshSparkline();
             RenderCompare();
+            Helpers.TweakFeedback.TweaksAppliedSinceBench = false;   // mesure faite → boucle bouclée
+            RefreshRebenchHint();
             _main.Log($"Benchmark : terminé — score {r.TotalScore} (CPU {r.CpuScore}, Sys {r.SysScore}, Net {r.NetScore}).");
         }
 
@@ -139,6 +175,37 @@ namespace Optimisation_Tool.Pages
             ProgressBar.ColumnDefinitions[0].Width = new GridLength(pct, GridUnitType.Star);
             ProgressBar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
             TxtOverlayPct.Text = $"{pct:F0} %";
+        }
+
+        // ── Barre TOTALE (v1.3.5) : 8 sondes pondérées également — un cran franchi
+        //    par étape + la progression interne de l'étape en cours ─────────────
+        private static int PhaseIndex(Benchmark.Phase ph) => ph switch
+        {
+            Benchmark.Phase.CpuSingle => 0,
+            Benchmark.Phase.CpuMulti  => 1,
+            Benchmark.Phase.CpuMem    => 2,
+            Benchmark.Phase.SysFrame  => 3,
+            Benchmark.Phase.SysInput  => 4,
+            Benchmark.Phase.RamBand   => 5,
+            Benchmark.Phase.RamLat    => 6,
+            Benchmark.Phase.Network   => 7,
+            _                         => 8,   // Done
+        };
+
+        private void SetTotalProgress(Benchmark.Phase phase, double phasePct)
+        {
+            double total = phase == Benchmark.Phase.Done
+                ? 100
+                : (PhaseIndex(phase) * 100.0 + Math.Max(0, Math.Min(100, phasePct))) / 8.0;
+            SetTotalRaw(total);
+        }
+
+        private void SetTotalRaw(double pct)
+        {
+            pct = Math.Max(0, Math.Min(100, pct));
+            TotalBar.ColumnDefinitions[0].Width = new GridLength(pct, GridUnitType.Star);
+            TotalBar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
+            TxtOverlayTotalPct.Text = $"{pct:F0} %";
         }
 
         // ── BLOC 1 : hero compact (grand chiffre + verdict). Refonte v1.3.2 :
@@ -187,20 +254,124 @@ namespace Optimisation_Tool.Pages
         /// Verdict en français clair pour une carte de sous-score (CPU, Système, RAM).
         /// Multi-ligne : ligne 1 = état général, ligne 2 = piste d'action.
         /// </summary>
+        // v1.3.5 : verdicts réécrits en français HUMAIN (retour utilisateur : « réduis
+        // l'autostart, ça veut dire quoi ? ») — on dit ce que le score MESURE, ce que ça
+        // CHANGE concrètement, et pour le Système les causes réelles sont CONSTATÉES sur
+        // la machine juste en dessous (BenchAdvisor) avec un bouton par correction.
         private static string Verdict(int score, string axis) => (score, axis) switch
         {
             ( >= 105, _      ) => "Au-dessus du nominal.\nTu tires le meilleur de ton matériel.",
             ( >=  90, _      ) => "Dans la norme.\nRien à signaler, ton matériel rend ce qu'il doit.",
-            ( >=  75, "CPU"      ) => "Légèrement en dessous.\nThrottling thermique ou plan d'alim non Performances ?",
-            ( >=  75, "Système"  ) => "Légèrement en dessous.\nQuelques saccades possibles — réduis l'autostart.",
-            ( >=  75, _          ) => "Légèrement en dessous.\nVoir l'historique pour comparer.",
-            ( >=  60, "CPU"      ) => "Faible.\nVérifie températures CPU, plan d'alim, throttling thermique.",
-            ( >=  60, "Système"  ) => "Faible.\nDésactive HVCI / Power Throttling / autostart lourd.",
-            ( >=  60, _          ) => "Faible.\nQuelque chose t'empêche de rendre ta performance attendue.",
-            (    _,    "CPU"     ) => "Très faible.\nUn truc te ralentit fortement — vérifie chauffe, OC instable, ou bench bruité.",
-            (    _,    "Système" ) => "Très faible.\nSystème en souffrance — services Windows lourds, autostart, pilotes.",
-            (    _,    _         ) => "Très faible.\nRésultat anormal — relance le bench, peut-être bruité."
+            ( >=  75, "CPU"      ) => "Légèrement en dessous de ce que ce processeur sait faire.\nCause la plus fréquente : il chauffe trop et se bride, ou le plan d'alimentation le freine.",
+            ( >=  75, "Système"  ) => "Windows répond avec un léger retard.\nConcrètement : en jeu, ça peut se sentir comme des micro-saccades. Les causes trouvées sur TA machine sont listées ci-dessous.",
+            ( >=  75, _          ) => "Légèrement en dessous.\nCompare avec ton historique pour voir si c'est nouveau.",
+            ( >=  60, "CPU"      ) => "Nettement en dessous de sa performance attendue.\nRegarde sa température dans Monitoring : au-delà de ~90 °C il se bride tout seul.",
+            ( >=  60, "Système"  ) => "Windows met trop de temps à réagir.\nConcrètement : saccades probables en jeu et lenteurs à l'usage. Corrige les causes listées ci-dessous, puis relance le bench.",
+            ( >=  60, _          ) => "Nettement en dessous.\nQuelque chose t'empêche de rendre la performance attendue.",
+            (    _,    "CPU"     ) => "Très en dessous — anormal.\nSoit le CPU surchauffe fortement, soit un programme tournait pendant la mesure : relance le bench, seul.",
+            (    _,    "Système" ) => "Windows est en souffrance.\nLe système est tellement irrégulier que tout doit sembler lent. Corrige les causes ci-dessous puis relance le bench.",
+            (    _,    _         ) => "Très en dessous — résultat anormal.\nRelance le bench sans rien d'autre d'ouvert."
         };
+
+        // ── Conseiller Système (v1.3.5) : causes CONSTATÉES + bouton par action ──
+        // Score Système < 90 → BenchAdvisor vérifie les causes connues de micro-saccades
+        // sur LA machine (plan d'alim, HVCI, Power Throttling, SystemResponsiveness,
+        // Game DVR, programmes au démarrage NOMMÉS) et on affiche chaque constat avec
+        // un bouton qui mène directement au réglage qui corrige.
+        private async void RefreshSysAdvice(int sysScore)
+        {
+            try
+            {
+                SysAdvicePanel.Children.Clear();
+                if (sysScore >= 90) return;
+
+                var finds = await System.Threading.Tasks.Task.Run(Helpers.BenchAdvisor.Analyze);
+
+                if (finds.Count == 0)
+                {
+                    var none = new TextBlock
+                    {
+                        Text = "Aucune cause logicielle évidente trouvée sur ta machine — un programme "
+                             + "tournait peut-être pendant la mesure. Relance le bench sans rien d'autre d'ouvert.",
+                        TextWrapping = TextWrapping.Wrap, FontSize = 11.5,
+                    };
+                    none.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+                    SysAdvicePanel.Children.Add(none);
+                    return;
+                }
+
+                foreach (var f in finds)
+                {
+                    var row = new Border
+                    {
+                        CornerRadius = new CornerRadius(8),
+                        Background   = new SolidColorBrush(Color.FromArgb(0x0A, 0x80, 0x80, 0x80)),
+                        BorderBrush  = new SolidColorBrush(Color.FromArgb(0x1A, 0x80, 0x80, 0x80)),
+                        BorderThickness = new Thickness(1),
+                        Padding = new Thickness(12, 9, 12, 9),
+                        Margin  = new Thickness(0, 0, 0, 6),
+                    };
+                    var g = new Grid();
+                    g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                    var txt = new TextBlock
+                    {
+                        Text = f.Text, TextWrapping = TextWrapping.Wrap,
+                        FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(0, 0, 12, 0),
+                    };
+                    txt.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");
+                    g.Children.Add(txt);
+
+                    var btn = new Button
+                    {
+                        Content = f.ActionLabel, Tag = f,
+                        Style = (Style)FindResource("SecondaryBtnStyle"),
+                        Padding = new Thickness(10, 6, 10, 6), FontSize = 10.5,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    };
+                    Grid.SetColumn(btn, 1);
+                    btn.Click += AdviceAction_Click;
+                    g.Children.Add(btn);
+
+                    row.Child = g;
+                    SysAdvicePanel.Children.Add(row);
+                }
+            }
+            catch { /* le conseiller ne doit jamais casser l'affichage du bench */ }
+        }
+
+        private void AdviceAction_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Button)?.Tag is not Helpers.BenchAdvisor.Finding f) return;
+            try
+            {
+                if (f.Uri.Length > 0)
+                {
+                    System.Diagnostics.Process.Start(
+                        new System.Diagnostics.ProcessStartInfo(f.Uri) { UseShellExecute = true });
+                    return;
+                }
+                // Navigation interne : bouton de nav cherché par Tag (même mécanisme que PageEventLog)
+                var btn = FindNavButton(_main, f.NavTag);
+                if (btn != null) _main.NavigateTo(btn);
+            }
+            catch { }
+        }
+
+        private static Button? FindNavButton(DependencyObject root, string tag)
+        {
+            int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is Button b && b.Tag is string s && s == tag) return b;
+                var found = FindNavButton(child, tag);
+                if (found != null) return found;
+            }
+            return null;
+        }
 
         /// <summary>Verdict court pour la RAM (affiché compact à côté du CPU).</summary>
         private static string ShortRam(int score) => score switch
@@ -249,6 +420,7 @@ namespace Optimisation_Tool.Pages
             SysCol.Width     = new GridLength(sysT,         GridUnitType.Star);
             SysColRest.Width = new GridLength(100.0 - sysT, GridUnitType.Star);
             TxtSysMeasured.Text = Verdict(r.SysScore, "Système");
+            RefreshSysAdvice(r.SysScore);
 
             // ── RAM (échelle 0-100) ────────────────────────────────────────
             TxtRamScore.Text = r.RamScore.ToString();
@@ -356,71 +528,76 @@ namespace Optimisation_Tool.Pages
             rows.Add(("► TON PC (mesuré)", userPts, 2));
             rows = rows.OrderByDescending(x => x.pts).ToList();
 
-            foreach (var (label, pts, kind) in rows)
+            // ── Rendu FAÇON CINEBENCH (v1.3.5, demande utilisateur sur capture) ──
+            // Chaque ligne EST la barre : rang + nom À L'INTÉRIEUR, score au bout droit
+            // de la ligne, longueur proportionnelle au score. Classé décroissant.
+            for (int i = 0; i < rows.Count; i++)
             {
-                var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(46) });
+                var (label, pts, kind) = rows[i];
 
-                // Nom du CPU (ou "TON PC")
-                var name = new TextBlock
-                {
-                    Text         = label,
-                    FontFamily   = (FontFamily)FindResource("AppFont"),
-                    FontSize     = 11.5,
-                    FontWeight   = kind != 0 ? FontWeights.Bold : FontWeights.Normal,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis,
-                    Margin       = new Thickness(0, 0, 10, 0),
-                };
-                if (kind == 2)      name.Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
-                else if (kind == 1) name.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
-                else                name.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
-                Grid.SetColumn(name, 0); row.Children.Add(name);
+                var row = new Grid { Height = 24, Margin = new Thickness(0, 0, 0, 5) };
 
-                // Barre proportionnelle
-                var barHost = new Grid { Height = 14, VerticalAlignment = VerticalAlignment.Center };
+                // 1) La barre proportionnelle (toute la hauteur de la ligne)
+                var barHost = new Grid();
                 barHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.5, pts), GridUnitType.Star) });
                 barHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(0.5, maxPts - pts), GridUnitType.Star) });
-                var bar = new Border { CornerRadius = new CornerRadius(3) };
+                // Palette façon Cinebench (demande utilisateur) : TA mesure = ORANGE,
+                // ton CPU (nominal attendu) = bleu Tweakly, les voisins = bleu acier.
+                var bar = new Border { CornerRadius = new CornerRadius(4) };
                 if (kind == 2)
+                {
+                    bar.Background = new LinearGradientBrush(
+                        Color.FromRgb(0xD9, 0x6E, 0x28), Color.FromRgb(0xF5, 0xA6, 0x23), 0);
+                }
+                else if (kind == 1)
                 {
                     bar.Background = new LinearGradientBrush(
                         Color.FromRgb(0x3B, 0x82, 0xE0), Color.FromRgb(0x5B, 0xA0, 0xFF), 0);
                 }
-                else if (kind == 1)
-                {
-                    bar.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0xC4, 0x6A)) { Opacity = 0.55 };
-                }
                 else
                 {
-                    bar.SetResourceReference(Border.BackgroundProperty, "ThTrack");
+                    bar.Background = new SolidColorBrush(Color.FromArgb(0x96, 0x4F, 0x6E, 0xA8));
                 }
                 Grid.SetColumn(bar, 0); barHost.Children.Add(bar);
-                Grid.SetColumn(barHost, 1); row.Children.Add(barHost);
+                row.Children.Add(barHost);
 
-                // Valeur (points, échelle 265K = 100)
+                // 2) Texte PAR-DESSUS : « N. Modèle » à gauche, score à droite.
+                //    ThTextTitle (thémé) reste lisible sur la barre ET sur le fond,
+                //    barres en alpha modéré pour les deux thèmes.
+                var name = new TextBlock
+                {
+                    Text       = $"{i + 1}.  {label}",
+                    FontFamily = (FontFamily)FindResource("AppFont"),
+                    FontSize   = 11.5,
+                    FontWeight = kind != 0 ? FontWeights.Bold : FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Margin = new Thickness(9, 0, 70, 0),
+                };
+                name.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
+                row.Children.Add(name);
+
                 var val = new TextBlock
                 {
                     Text       = pts.ToString("F0"),
                     FontFamily = (FontFamily)FindResource("AppFont"),
                     FontSize   = 11.5,
-                    FontWeight = kind != 0 ? FontWeights.Bold : FontWeights.Normal,
+                    FontWeight = FontWeights.Bold,
                     HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment   = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
                 };
-                if (kind == 2) val.Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
-                else           val.SetResourceReference(TextBlock.ForegroundProperty, kind == 1 ? "ThTextTitle" : "ThTextDim");
-                Grid.SetColumn(val, 2); row.Children.Add(val);
+                if (kind == 2) val.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xA6, 0x23));
+                else           val.SetResourceReference(TextBlock.ForegroundProperty, kind == 1 ? "ThTextTitle" : "ThTextNav");
+                row.Children.Add(val);
 
                 LadderPanel.Children.Add(row);
             }
 
-            // Légende discrète
+            // Légende discrète (façon Cinebench)
             var legend = new TextBlock
             {
-                Text = "Barres grises = score multi attendu des CPUs voisins (moyennes publiques)  ·  vert = ton CPU (nominal)  ·  bleu = ta mesure réelle",
+                Text = "■ orange = ta mesure réelle   ·   ■ bleu = ton CPU (score attendu)   ·   ■ bleu acier = CPUs voisins (moyennes publiques)   —   échelle : 265K = 100",
                 FontFamily   = (FontFamily)FindResource("AppFont"),
                 FontSize     = 10.5,
                 TextWrapping = TextWrapping.Wrap,

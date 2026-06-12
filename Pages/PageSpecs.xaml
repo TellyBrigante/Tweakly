@@ -671,7 +671,7 @@
 
                 <!-- Hint + zone de détail (clic sur un composant / une zone de la carte) -->
                 <TextBlock x:Name="TxtSchemaHint"
-                           Text="Clique un composant — ou directement une zone de la carte — pour afficher son détail."
+                           Text="Clique sur un composant — ou directement sur une zone de la carte — pour afficher son détail."
                            Foreground="{DynamicResource ThTextDim}"
                            FontFamily="{StaticResource AppFont}" FontSize="11"
                            HorizontalAlignment="Center" Margin="0,8,0,0"/>

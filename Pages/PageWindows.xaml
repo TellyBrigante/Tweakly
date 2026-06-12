@@ -7,34 +7,154 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <CheckBox x:Name="ChkHAGS"
-                      Content="Activer la Planification GPU mat&#233;rielle (HAGS)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkDisableGameBar"
-                      Content="D&#233;sactiver la barre de jeu Xbox (gain de performances)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkDisableDVR"
-                      Content="D&#233;sactiver l'enregistrement DVR en arri&#232;re-plan"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkGPUPriority"
-                      Content="Priorit&#233; GPU &#233;lev&#233;e pour les jeux (SystemProfile)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkMSIMode"
-                      Content="Mode MSI GPU &#8212; Interruptions bas&#233;es message (r&#233;duction latence)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkDiscordHWAccel"
-                      Content="D&#233;sactiver l'acc&#233;l&#233;ration mat&#233;rielle Discord"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
-            <CheckBox x:Name="ChkSteamOverlay"
-                      Content="D&#233;sactiver l'overlay Steam"
-                      Style="{StaticResource TweakChkStyle}"
-                      IsChecked="False"/>
+            <!-- DA optim v1.3.5 : rangées switch/icône/texte (styles dans App.xaml) -->
+            <TextBlock Text="OPTIMISATIONS WINDOWS"
+                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                       FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+                    BorderThickness="1" CornerRadius="12" Padding="8,7">
+                <StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkHAGS}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkHAGS" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE714;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Planification GPU mat&#233;rielle (HAGS)" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Le GPU g&#232;re lui-m&#234;me sa file de travail — moins de latence."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkDisableGameBar}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkDisableGameBar" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE7FC;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver la barre de jeu Xbox" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Gain de performances — coupe l'overlay Win+G."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkDisableDVR}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkDisableDVR" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE722;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver l'enregistrement DVR" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Stoppe la capture vid&#233;o permanente en arri&#232;re-plan."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkGPUPriority}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkGPUPriority" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Priorit&#233; GPU &#233;lev&#233;e pour les jeux" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="SystemProfile — les jeux passent devant le reste."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkMSIMode}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkMSIMode" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE713;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Mode MSI pour le GPU" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Interruptions par messages — r&#233;duit la latence."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkDiscordHWAccel}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkDiscordHWAccel" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE8BD;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver l'acc&#233;l&#233;ration mat&#233;rielle Discord" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Lib&#232;re le GPU pour le jeu pendant que Discord tourne."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkSteamOverlay}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkSteamOverlay" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE768;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver l'overlay Steam" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Supprime l'incrustation Steam en jeu (Shift+Tab)."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                 <Button x:Name="BtnAppliquer"
                         Content="APPLIQUER LES OPTIMISATIONS WINDOWS"
-                        Style="{StaticResource PrimaryBtnStyle}"
+                        Style="{StaticResource CleanRunBtn}"
                         Click="BtnAppliquer_Click"/>
             </StackPanel>
 
@@ -43,7 +163,7 @@
             <TextBlock Text="R&#201;PARATIONS"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,8"/>
-            <TextBlock Text="Corrige le popup &#171; ms-gamingoverlay &#187; (celui qui s'ouvre en appuyant sur Win+G ou en jeu quand la Xbox Game Bar est cass&#233;e). R&#233;-enregistre l'app pour faire dispara&#238;tre l'erreur."
+            <TextBlock Text="Corrige le popup &#171; ms-gamingoverlay &#187; (celui qui s'ouvre avec Win+G ou en jeu quand la Xbox Game Bar est cass&#233;e). R&#233;-enregistre la Game Bar si elle est pr&#233;sente ; sinon, coupe le d&#233;clencheur du popup (enregistrement GameDVR)."
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="11.5" TextWrapping="Wrap" MaxWidth="540" HorizontalAlignment="Left" Margin="2,0,0,8"/>
             <Button x:Name="BtnFixGamingOverlay"

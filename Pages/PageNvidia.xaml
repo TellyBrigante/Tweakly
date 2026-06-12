@@ -185,7 +185,7 @@
 
             <!-- ══ PARAMÈTRES PAR APPLICATION (.nip) ══ -->
             <StackPanel x:Name="AppPanel" Visibility="Collapsed">
-            <TextBlock Text="S&#233;lectionnez un profil NVIDIA Inspector (.nip) :"
+            <TextBlock Text="S&#233;lectionne un profil NVIDIA Inspector (.nip) :"
                        Foreground="{DynamicResource ThTextNav}" FontFamily="{StaticResource AppFont}" FontSize="11.5"
                        Margin="0,0,0,8"/>
 

@@ -1127,6 +1127,31 @@ namespace Optimisation_Tool.Pages
         // SÉLECTION
         // ═════════════════════════════════════════════════════════════════════
 
+        /// <summary>
+        /// Cliquer N'IMPORTE OÙ sur une ligne coche/décoche sa case (demande utilisateur :
+        /// forcer le clic dans la petite case n'était pas naturel). Garde anti-double-toggle :
+        /// si le clic vient de la CheckBox elle-même, elle gère déjà son état → on ne fait rien.
+        /// Branché en PreviewMouseLeftButtonUp sur DgSaveApps ET DgRestApps.
+        /// </summary>
+        private void Dg_RowClickToggle(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            var src = e.OriginalSource as DependencyObject;
+            // Un clic sur du texte peut remonter un ContentElement (Run) : non-visuel →
+            // VisualTreeHelper lèverait. On rejoint d'abord l'arbre visuel par le parent logique.
+            while (src is System.Windows.ContentElement ce)
+                src = System.Windows.LogicalTreeHelper.GetParent(ce);
+            for (var d = src; d != null; d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+            {
+                if (d is CheckBox) return;                                        // la case gère déjà son clic
+                if (d is System.Windows.Controls.Primitives.DataGridColumnHeader) return; // tri en-tête : ne pas cocher
+                if (d is DataGridRow row && row.Item is FreshAppItem item)
+                {
+                    item.IsSelected = !item.IsSelected;
+                    return;
+                }
+            }
+        }
+
         private void BtnSaveSelectAll_Click(object s, RoutedEventArgs e)
         { foreach (var i in _saveItems)    i.IsSelected = true; }
 
@@ -1147,14 +1172,14 @@ namespace Optimisation_Tool.Pages
         {
             var n = _saveItems.Count(i => i.IsSelected);
             BtnDownload.IsEnabled = n > 0;
-            BtnDownload.Content   = $"TÉLÉCHARGER ET ZIPPER ({n} app(s))";
+            BtnDownload.Content   = $"TÉLÉCHARGER ET ZIPPER ({n})";
         }
 
         private void UpdateInstallButton()
         {
             var n = _restoreItems.Count(i => i.IsSelected);
             BtnInstall.IsEnabled = n > 0;
-            BtnInstall.Content   = $"INSTALLER ({n} sélectionnée(s))";
+            BtnInstall.Content   = $"INSTALLER ({n})";
         }
 
         private void SetBar(Grid bar, int done, int total)

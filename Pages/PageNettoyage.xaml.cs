@@ -24,6 +24,30 @@ namespace Optimisation_Tool.Pages
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e) { }
 
+        /// <summary>
+        /// Cliquer n'importe où sur une rangée d'option actionne son switch (le Tag de la
+        /// rangée référence sa CheckBox via x:Reference). Garde : si le clic vient du
+        /// switch lui-même, il gère déjà son état.
+        /// </summary>
+        private void Row_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            for (var d = e.OriginalSource as DependencyObject; d != null;
+                 d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+                if (d is CheckBox) return;
+            if (sender is Border row && row.Tag is CheckBox chk)
+                chk.IsChecked = chk.IsChecked != true;
+        }
+
+        /// <summary>Compteur vivant sur le bouton : « EXÉCUTER LE NETTOYAGE (n) » (refonte v1.3.5).</summary>
+        private void Chk_Changed(object sender, RoutedEventArgs e)
+        {
+            if (BtnLancer == null) return;   // appelé pendant InitializeComponent
+            int n = new[] { ChkTemp, ChkSystemTemp, ChkPrefetch, ChkDXCache,
+                            ChkNvCache, ChkTrimSSD, ChkEventLogs, ChkResidues }
+                    .Count(c => c?.IsChecked == true);
+            BtnLancer.Content = n > 0 ? $"EXÉCUTER LE NETTOYAGE ({n})" : "EXÉCUTER LE NETTOYAGE";
+        }
+
         // ── Nettoyage ─────────────────────────────────────────────────────────
 
         private async void BtnLancer_Click(object sender, RoutedEventArgs e)

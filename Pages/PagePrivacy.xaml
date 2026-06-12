@@ -7,38 +7,192 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <CheckBox x:Name="ChkTelemetrie"
-                      Content="T&#233;l&#233;m&#233;trie Windows (AllowTelemetry + services DiagTrack)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkAdID"
-                      Content="Identifiant publicitaire Windows (AdvertisingInfo)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkActivityHistory"
-                      Content="Historique d'activit&#233; / Timeline (Activity Feed)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkBingSearch"
-                      Content="D&#233;sactiver l'envoi des recherches locales &#224; Bing (menu D&#233;marrer)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkInputPersonal"
-                      Content="Personnalisation de la saisie (Ink &amp; Text collection)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkLocation"
-                      Content="Service de localisation Windows (DisableLocation)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkWER"
-                      Content="Rapport d'erreurs Windows (WerSvc + WER Disabled)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkTailoredExp"
-                      Content="Personnalisation Windows bas&#233;e sur les donn&#233;es de diagnostic (Tailored Experiences)"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkCompatTel"
-                      Content="T&#233;l&#233;m&#233;trie applications Windows (CompatTelRunner / AppCompat Inventory)"
-                      Style="{StaticResource TweakChkStyle}"/>
+            <!-- DA optim v1.3.5 : rangées switch/icône/texte (styles dans App.xaml) -->
+            <TextBlock Text="DONN&#201;ES &#201;CHANG&#201;ES AVEC MICROSOFT"
+                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                       FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+                    BorderThickness="1" CornerRadius="12" Padding="8,7">
+                <StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTelemetrie}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkTelemetrie" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE774;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="T&#233;l&#233;m&#233;trie Windows" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="AllowTelemetry + services DiagTrack."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkCompatTel}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkCompatTel" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE71D;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="T&#233;l&#233;m&#233;trie des applications" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="CompatTelRunner / inventaire AppCompat."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkAdID}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkAdID" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE77B;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Identifiant publicitaire" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="AdvertisingInfo — le profil pub unique de ta machine."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkActivityHistory}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkActivityHistory" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Historique d'activit&#233; (Timeline)" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Activity Feed — journal de tes actions partag&#233; entre appareils."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkBingSearch}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkBingSearch" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE721;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Recherches du menu D&#233;marrer vers Bing" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Coupe l'envoi de tes recherches locales en ligne."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkInputPersonal}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkInputPersonal" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE70F;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Personnalisation de la saisie" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Collecte Ink &amp; Text (frappe et &#233;criture manuscrite)."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkLocation}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkLocation" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE707;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Service de localisation" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="DisableLocation — position g&#233;ographique de la machine."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkWER}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkWER" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE783;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Rapport d'erreurs Windows" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="WerSvc — l'envoi des rapports de plantage &#224; Microsoft."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTailoredExp}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkTailoredExp" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE734;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Exp&#233;riences personnalis&#233;es" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Tailored Experiences — suggestions bas&#233;es sur tes donn&#233;es de diagnostic."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
                 <Button x:Name="BtnAppliquer"
-                        Content="APPLIQUER LES PARAM&#200;TRES CONFIDENTIALIT&#201;"
-                        Style="{StaticResource PrimaryBtnStyle}"
+                        Content="APPLIQUER LES PARAM&#200;TRES DE CONFIDENTIALIT&#201;"
+                        Style="{StaticResource CleanRunBtn}"
                         Click="BtnAppliquer_Click"/>
             </StackPanel>
 

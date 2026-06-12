@@ -206,7 +206,8 @@
                         ClipToBounds="True">
                     <Grid x:Name="GraphArea" SizeChanged="GraphArea_SizeChanged">
                         <Canvas x:Name="GridCanvas" IsHitTestVisible="False"/>
-                        <Polyline x:Name="PingLine" Stroke="#3B82E0" StrokeThickness="1.8" StrokeLineJoin="Round"/>
+                        <Polyline x:Name="PingLine" Stroke="#3B82E0" StrokeThickness="2.2"
+                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <Canvas x:Name="LossCanvas" IsHitTestVisible="False"/>
                     </Grid>
                 </Border>

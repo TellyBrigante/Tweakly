@@ -79,12 +79,20 @@ namespace Optimisation_Tool.Helpers
         // ── Collecte complète (à appeler sur un thread de fond) ──────────────
         public static MonSnapshot Collect()
         {
+            // v1.3.5 (retour utilisateur : « les valeurs mettent longtemps à arriver ») :
+            // les 5 sections tournent en PARALLÈLE. Au premier appel, chacune paie son
+            // démarrage à froid (WMI perf CPU, init LibreHardwareMonitor 1-3 s, spawn
+            // nvidia-smi, namespace WMI stockage) — en série ça s'additionnait en
+            // plusieurs secondes, en parallèle on ne paie que la plus lente.
+            // Sans risque : chaque section écrit des champs DISTINCTS du snapshot et
+            // ne touche qu'à SES caches statiques.
             var s = new MonSnapshot();
-            CollectCpu(s);
-            CollectProcesses(s);
-            CollectRam(s);
-            CollectGpu(s);
-            CollectNvme(s);
+            System.Threading.Tasks.Task.WaitAll(
+                System.Threading.Tasks.Task.Run(() => CollectCpu(s)),
+                System.Threading.Tasks.Task.Run(() => CollectProcesses(s)),
+                System.Threading.Tasks.Task.Run(() => CollectRam(s)),
+                System.Threading.Tasks.Task.Run(() => CollectGpu(s)),
+                System.Threading.Tasks.Task.Run(() => CollectNvme(s)));
             return s;
         }
 

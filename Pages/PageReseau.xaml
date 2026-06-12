@@ -7,27 +7,102 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <CheckBox x:Name="ChkNagle"
-                      Content="D&#233;sactiver l'algorithme de Nagle (TcpAckFrequency) &#8212; r&#233;duction latence"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkNetDNS"
-                      Content="DNS Cloudflare 1.1.1.1 / 8.8.8.8 &#8212; r&#233;solution de noms plus rapide"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkAdapterPower"
-                      Content="D&#233;sactiver la mise en veille de l'adaptateur r&#233;seau"
-                      Style="{StaticResource TweakChkStyle}"/>
-            <CheckBox x:Name="ChkWPAD"
-                      Content="D&#233;sactiver la d&#233;tection automatique de proxy (WPAD)"
-                      Style="{StaticResource TweakChkStyle}"/>
+            <!-- DA optim v1.3.5 : rangées switch/icône/texte (styles dans App.xaml) -->
+            <TextBlock Text="TWEAKS R&#201;SEAU"
+                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
+                       FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+                    BorderThickness="1" CornerRadius="12" Padding="8,7">
+                <StackPanel>
 
-            <StackPanel Orientation="Horizontal" Margin="0,20,0,0" >
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkNagle}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkNagle" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE71B;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver l'algorithme de Nagle" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="TcpAckFrequency — r&#233;duit la latence en jeu."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkNetDNS}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkNetDNS" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE774;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="DNS rapides" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="1.1.1.1 (Cloudflare), avec 8.8.8.8 (Google) en secours."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkAdapterPower}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkAdapterPower" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE708;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="Emp&#234;cher la mise en veille de l'adaptateur" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="La carte r&#233;seau reste active — pas de micro-coupures au r&#233;veil."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkWPAD}"
+                            MouseLeftButtonUp="Row_Click">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkWPAD" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE727;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                                <TextBlock Text="D&#233;sactiver la d&#233;tection de proxy (WPAD)" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Supprime une recherche r&#233;seau inutile au d&#233;marrage des connexions."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Margin="0,18,0,0" >
                 <Button x:Name="BtnAppliquer"
                         Content="APPLIQUER LES TWEAKS R&#201;SEAU"
-                        Style="{StaticResource PrimaryBtnStyle}"
+                        Style="{StaticResource CleanRunBtn}"
                         Click="BtnAppliquer_Click"/>
                 <Button x:Name="BtnFlushDNS"
                         Content="VIDER LE CACHE DNS"
                         Style="{StaticResource SecondaryBtnStyle}"
+                        VerticalAlignment="Center"
                         Margin="12,0,0,0"
                         Click="BtnFlushDNS_Click"/>
             </StackPanel>

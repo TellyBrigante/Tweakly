@@ -70,7 +70,7 @@
 
                 <Button x:Name="BtnScan" Grid.Column="1"
                         Content="RELANCER LE DIAGNOSTIC"
-                        Style="{StaticResource PrimaryBtnStyle}"
+                        Style="{StaticResource CleanRunBtn}" Padding="20,10"
                         VerticalAlignment="Center"
                         Click="BtnScan_Click"/>
             </Grid>

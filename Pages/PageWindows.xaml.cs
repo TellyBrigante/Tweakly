@@ -150,6 +150,18 @@ namespace Optimisation_Tool.Pages
 
         // ── Appliquer ─────────────────────────────────────────────────────────
 
+        /// <summary>
+        /// DA optim v1.3.5 : cliquer n'importe ou sur une rangee actionne son switch
+        /// (Tag de la rangee = sa CheckBox via x:Reference). Garde anti-double-toggle.
+        /// </summary>
+        private void Row_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            for (var d = e.OriginalSource as DependencyObject; d != null;
+                 d = System.Windows.Media.VisualTreeHelper.GetParent(d))
+                if (d is CheckBox) return;
+            if (sender is System.Windows.Controls.Border row && row.Tag is CheckBox chk)
+                chk.IsChecked = chk.IsChecked != true;
+        }
         private async void BtnAppliquer_Click(object sender, RoutedEventArgs e)
         {
             BtnAppliquer.IsEnabled = false;

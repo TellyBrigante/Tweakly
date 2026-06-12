@@ -5,7 +5,14 @@
 
     <UserControl.Resources>
 
-        <!-- Checkbox sombre (sélection dans les listes) -->
+        <!-- Accent de barre de progression : camaïeu bleu (validé sur l'écran de MAJ) -->
+        <LinearGradientBrush x:Key="FreshAccent" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#2F6FD8" Offset="0"/>
+            <GradientStop Color="#5BA0FF" Offset="0.6"/>
+            <GradientStop Color="#8AC0FF" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Checkbox (accent bleu Tweakly, refonte v1.3.5) -->
         <Style x:Key="DarkChkStyle" TargetType="CheckBox">
             <Setter Property="Cursor"              Value="Hand"/>
             <Setter Property="VerticalAlignment"   Value="Center"/>
@@ -13,22 +20,22 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
-                        <Border x:Name="Bd" Width="15" Height="15"
-                                Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
-                                BorderThickness="1.5" CornerRadius="3">
+                        <Border x:Name="Bd" Width="19" Height="19"
+                                Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThTextDim}"
+                                BorderThickness="2" CornerRadius="5">
                             <TextBlock x:Name="Tick" Text="&#10003;"
-                                       Foreground="#4090E0" FontSize="11" FontWeight="Bold"
+                                       Foreground="#5BA0FF" FontSize="12.5" FontWeight="Bold"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                        Visibility="Collapsed"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd"   Property="Background"  Value="{DynamicResource ThSelection}"/>
-                                <Setter TargetName="Bd"   Property="BorderBrush" Value="#1870CC"/>
+                                <Setter TargetName="Bd"   Property="Background"  Value="#2E5BA0FF"/>
+                                <Setter TargetName="Bd"   Property="BorderBrush" Value="#5BA0FF"/>
                                 <Setter TargetName="Tick" Property="Visibility"  Value="Visible"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#4A80CC"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5BA0FF"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -36,16 +43,17 @@
             </Setter>
         </Style>
 
-        <!-- En-tête de colonne DataGrid -->
+        <!-- En-tête de colonne DataGrid : transparent + petites majuscules grises
+             (même langage que l'onglet Applications) -->
         <Style x:Key="DgHdrStyle" TargetType="DataGridColumnHeader">
-            <Setter Property="Background"      Value="{DynamicResource ThBg}"/>
-            <Setter Property="Foreground"      Value="{DynamicResource ThTextSub}"/>
+            <Setter Property="Background"      Value="Transparent"/>
+            <Setter Property="Foreground"      Value="{DynamicResource ThTextDim}"/>
             <Setter Property="FontFamily"      Value="{StaticResource AppFont}"/>
             <Setter Property="FontSize"        Value="10.5"/>
             <Setter Property="FontWeight"      Value="SemiBold"/>
             <Setter Property="Padding"         Value="12,8"/>
             <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
-            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="DataGridColumnHeader">
@@ -58,6 +66,19 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Ligne de DataGrid : hover bleu FRANC + contour fin (validé sur Applications) -->
+        <Style x:Key="FreshRowStyle" TargetType="DataGridRow">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background"      Value="#2E5BA0FF"/>
+                    <Setter Property="BorderBrush"     Value="#665BA0FF"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
     </UserControl.Resources>
@@ -76,7 +97,7 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal">
 
             <Button x:Name="BtnModeSave"
-                    Content="SAVE"
+                    Content="SAUVEGARDE"
                     Width="110" Padding="0,10"
                     Click="BtnModeSave_Click">
                 <Button.Style>
@@ -87,8 +108,8 @@
             </Button>
 
             <Button x:Name="BtnModeRestore"
-                    Content="RESTORE"
-                    Width="110" Padding="0,10"
+                    Content="RESTAURATION"
+                    Width="124" Padding="0,10"
                     Margin="10,0,0,0"
                     Click="BtnModeRestore_Click">
                 <Button.Style>
@@ -257,40 +278,29 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
                     <DataGrid x:Name="DgSaveApps"
+                              PreviewMouseLeftButtonUp="Dg_RowClickToggle"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               CanUserSortColumns="True" IsReadOnly="False"
                               SelectionMode="Single"
                               HeadersVisibility="Column"
-                              GridLinesVisibility="Horizontal"
-                              HorizontalGridLinesBrush="{DynamicResource ThBorder}"
-                              RowHeight="28"
-                              AlternatingRowBackground="{DynamicResource ThBg}"
+                              GridLinesVisibility="None"
+                              RowHeight="38"
                               Background="{DynamicResource ThPanel}"
                               BorderThickness="0"
                               ColumnHeaderStyle="{StaticResource DgHdrStyle}"
-                              Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                              RowStyle="{StaticResource FreshRowStyle}"
+                              Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}" FontSize="12"
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#34408A"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="#E2E6FF"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#2E3658"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#DCE0F6"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#1F5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="#5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#145BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#805BA0FF"/>
                         </DataGrid.Resources>
-                        <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow">
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="BorderThickness" Value="0"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource ThHover}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
                         <DataGrid.CellStyle>
                             <Style TargetType="DataGridCell">
                                 <Setter Property="BorderThickness"  Value="0"/>
@@ -320,17 +330,8 @@
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
-                            <DataGridTextColumn Header="WINGET ID" Binding="{Binding WingetId}" Width="200" IsReadOnly="True">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground"        Value="{DynamicResource ThTextSub}"/>
-                                        <Setter Property="FontFamily"        Value="Consolas"/>
-                                        <Setter Property="FontSize"          Value="11.5"/>
-                                        <Setter Property="Padding"           Value="12,0"/>
-                                        <Setter Property="VerticalAlignment" Value="Center"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
+                            <!-- (colonne Winget ID supprimée — même décision que l'onglet
+                                 Applications : info interne, l'ID reste dans le modèle) -->
                             <DataGridTextColumn Header="VERSION" Binding="{Binding Version}" Width="100" IsReadOnly="True">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
@@ -363,7 +364,7 @@
                             Click="BtnSaveDeselectAll_Click"/>
                     <Button x:Name="BtnDownload" Grid.Column="4"
                             Content="T&#201;L&#201;CHARGER ET ZIPPER (0)"
-                            Style="{StaticResource PrimaryBtnStyle}"
+                            Style="{StaticResource CleanRunBtn}" Padding="20,10"
                             IsEnabled="False"
                             Click="BtnDownload_Click"/>
                 </Grid>
@@ -374,25 +375,50 @@
             <!-- ──────────────────────────────────────────────────── -->
             <Border x:Name="PanelS2" Visibility="Collapsed"
                     Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
-                    BorderThickness="1" CornerRadius="8" Padding="24,20">
+                    BorderThickness="1" CornerRadius="12" Padding="24,20">
                 <StackPanel VerticalAlignment="Top">
                     <TextBlock x:Name="TxtDlTitle"
-                               Text="T&#233;l&#233;chargement en cours..."
+                               Text="T&#233;l&#233;chargement en cours&#8230;"
                                Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
                                FontSize="15" FontWeight="Bold" Margin="0,0,0,14"/>
                     <TextBlock x:Name="TxtDlApp"
                                Text=""
                                Foreground="{DynamicResource ThTextNav}" FontFamily="{StaticResource AppFont}"
                                FontSize="11.5" Margin="0,0,0,12"/>
-                    <!-- Barre de progression -->
-                    <Grid Height="8" Margin="0,0,0,8">
-                        <Border Background="{DynamicResource ThTrack}" CornerRadius="4"/>
-                        <Grid x:Name="BarDl">
+                    <!-- Barre de progression : dégradé bleu + shimmer (style validé v1.3.4) -->
+                    <Grid Height="6" Margin="0,0,0,8">
+                        <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
+                        <Grid x:Name="BarDl" ClipToBounds="True">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0*"/>
                                 <ColumnDefinition Width="100*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Background="#00DCFF" CornerRadius="4"/>
+                            <Border Grid.Column="0" Background="{StaticResource FreshAccent}" CornerRadius="3"
+                                    ClipToBounds="True">
+                                <Border Width="110" HorizontalAlignment="Left" CornerRadius="3">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#66FFFFFF" Offset="0.5"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="DlShimmer" X="-120"/>
+                                    </Border.RenderTransform>
+                                    <Border.Triggers>
+                                        <EventTrigger RoutedEvent="Border.Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimation Storyboard.TargetName="DlShimmer"
+                                                                     Storyboard.TargetProperty="X"
+                                                                     From="-120" To="900" Duration="0:0:2.4"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Border.Triggers>
+                                </Border>
+                            </Border>
                         </Grid>
                     </Grid>
                     <TextBlock x:Name="TxtDlStatus"
@@ -406,7 +432,7 @@
             <!-- ──────────────────────────────────────────────────── -->
             <Border x:Name="PanelS3" Visibility="Collapsed"
                     Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
-                    BorderThickness="1" CornerRadius="8" Padding="24,20">
+                    BorderThickness="1" CornerRadius="12" Padding="24,20">
                 <StackPanel VerticalAlignment="Top">
                     <TextBlock x:Name="TxtZipTitle"
                                Text="&#10003;  ZIP pr&#234;t !"
@@ -438,7 +464,7 @@
             <!-- ──────────────────────────────────────────────────── -->
             <Border x:Name="PanelR1" Visibility="Collapsed"
                     Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
-                    BorderThickness="1" CornerRadius="8" Padding="24,20">
+                    BorderThickness="1" CornerRadius="12" Padding="24,20">
                 <StackPanel VerticalAlignment="Top">
                     <Button x:Name="BtnPickZip"
                             Content="&#9654;  CHOISIR LE FICHIER ZIP"
@@ -464,7 +490,7 @@
                                TextWrapping="Wrap"/>
                     <Button x:Name="BtnNextR1"
                             Content="SUIVANT &#x2192;"
-                            Style="{StaticResource PrimaryBtnStyle}"
+                            Style="{StaticResource CleanRunBtn}" Padding="20,10"
                             HorizontalAlignment="Left"
                             IsEnabled="False"
                             Click="BtnNextR1_Click"/>
@@ -476,8 +502,8 @@
             <!-- ──────────────────────────────────────────────────── -->
             <Border x:Name="PanelR2" Visibility="Collapsed"
                     Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
-                    BorderThickness="1" CornerRadius="8" Padding="24,20">
-                <TextBlock Text="Lecture du ZIP en cours..."
+                    BorderThickness="1" CornerRadius="12" Padding="24,20">
+                <TextBlock Text="Lecture du ZIP en cours&#8230;"
                            Foreground="{DynamicResource ThTextNav}" FontFamily="{StaticResource AppFont}" FontSize="13"
                            VerticalAlignment="Center"/>
             </Border>
@@ -493,40 +519,29 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
                     <DataGrid x:Name="DgRestApps"
+                              PreviewMouseLeftButtonUp="Dg_RowClickToggle"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False"
                               CanUserSortColumns="True" IsReadOnly="False"
                               SelectionMode="Single"
                               HeadersVisibility="Column"
-                              GridLinesVisibility="Horizontal"
-                              HorizontalGridLinesBrush="{DynamicResource ThBorder}"
-                              RowHeight="28"
-                              AlternatingRowBackground="{DynamicResource ThBg}"
+                              GridLinesVisibility="None"
+                              RowHeight="38"
                               Background="{DynamicResource ThPanel}"
                               BorderThickness="0"
                               ColumnHeaderStyle="{StaticResource DgHdrStyle}"
-                              Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                              RowStyle="{StaticResource FreshRowStyle}"
+                              Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}" FontSize="12"
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#34408A"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="#E2E6FF"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#2E3658"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#DCE0F6"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#1F5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="#5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#145BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#805BA0FF"/>
                         </DataGrid.Resources>
-                        <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow">
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="BorderThickness" Value="0"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource ThHover}"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
                         <DataGrid.CellStyle>
                             <Style TargetType="DataGridCell">
                                 <Setter Property="BorderThickness"  Value="0"/>
@@ -597,8 +612,8 @@
                             Padding="14,8" FontSize="11.5" IsEnabled="False"
                             Click="BtnRestDeselectAll_Click"/>
                     <Button x:Name="BtnInstall" Grid.Column="4"
-                            Content="INSTALLER (0 s&#233;lectionn&#233;e(s))"
-                            Style="{StaticResource PrimaryBtnStyle}"
+                            Content="INSTALLER (0)"
+                            Style="{StaticResource CleanRunBtn}" Padding="20,10"
                             IsEnabled="False"
                             Click="BtnInstall_Click"/>
                 </Grid>
@@ -609,11 +624,11 @@
             <!-- ──────────────────────────────────────────────────── -->
             <Border x:Name="PanelR4" Visibility="Collapsed"
                     Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
-                    BorderThickness="1" CornerRadius="8" Padding="24,20">
+                    BorderThickness="1" CornerRadius="12" Padding="24,20">
                 <StackPanel VerticalAlignment="Top">
                     <Grid Margin="0,0,0,14">
                         <TextBlock x:Name="TxtInstTitle"
-                                   Text="Installation en cours..."
+                                   Text="Installation en cours&#8230;"
                                    Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
                                    FontSize="15" FontWeight="Bold"
                                    HorizontalAlignment="Left" VerticalAlignment="Center"/>
@@ -628,14 +643,40 @@
                                Text=""
                                Foreground="{DynamicResource ThTextNav}" FontFamily="{StaticResource AppFont}"
                                FontSize="11.5" Margin="0,0,0,12"/>
-                    <Grid Height="8" Margin="0,0,0,8">
-                        <Border Background="{DynamicResource ThTrack}" CornerRadius="4"/>
-                        <Grid x:Name="BarInst">
+                    <!-- Barre d'installation : même style dégradé + shimmer -->
+                    <Grid Height="6" Margin="0,0,0,8">
+                        <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
+                        <Grid x:Name="BarInst" ClipToBounds="True">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0*"/>
                                 <ColumnDefinition Width="100*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Background="#1870CC" CornerRadius="4"/>
+                            <Border Grid.Column="0" Background="{StaticResource FreshAccent}" CornerRadius="3"
+                                    ClipToBounds="True">
+                                <Border Width="110" HorizontalAlignment="Left" CornerRadius="3">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                            <GradientStop Color="#00FFFFFF" Offset="0"/>
+                                            <GradientStop Color="#66FFFFFF" Offset="0.5"/>
+                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="InstShimmer" X="-120"/>
+                                    </Border.RenderTransform>
+                                    <Border.Triggers>
+                                        <EventTrigger RoutedEvent="Border.Loaded">
+                                            <BeginStoryboard>
+                                                <Storyboard RepeatBehavior="Forever">
+                                                    <DoubleAnimation Storyboard.TargetName="InstShimmer"
+                                                                     Storyboard.TargetProperty="X"
+                                                                     From="-120" To="900" Duration="0:0:2.4"/>
+                                                </Storyboard>
+                                            </BeginStoryboard>
+                                        </EventTrigger>
+                                    </Border.Triggers>
+                                </Border>
+                            </Border>
                         </Grid>
                     </Grid>
                     <TextBlock x:Name="TxtInstStatus"

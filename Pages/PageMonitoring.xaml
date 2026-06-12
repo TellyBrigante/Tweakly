@@ -110,7 +110,16 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Background="#3B82E0" CornerRadius="3"/>
+                            <!-- Remplissage dégradé (style barre de MAJ, couleur de la tuile) -->
+                            <Border Grid.Column="0" CornerRadius="3">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#2F6FD8" Offset="0"/>
+                                        <GradientStop Color="#5BA0FF" Offset="0.6"/>
+                                        <GradientStop Color="#8AC0FF" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
                         </Grid>
                     </Grid>
                     <Grid Margin="0,0,0,3">
@@ -126,7 +135,7 @@
                         <TextBlock x:Name="TxtCpuProc" Text="&#8212;" Style="{StaticResource MRowVal}"/>
                     </Grid>
                     <Grid>
-                        <TextBlock Text="Top process" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock Text="Plus gourmand" Style="{StaticResource MRowLbl}"/>
                         <TextBlock x:Name="TxtCpuTop" Text="&#8212;" Style="{StaticResource MRowVal}"/>
                     </Grid>
                 </StackPanel>
@@ -149,7 +158,15 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Background="#2EC46A" CornerRadius="3"/>
+                            <Border Grid.Column="0" CornerRadius="3">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#1F9650" Offset="0"/>
+                                        <GradientStop Color="#2EC46A" Offset="0.6"/>
+                                        <GradientStop Color="#6FE3A0" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
                         </Grid>
                     </Grid>
                     <Grid Margin="0,0,0,3">
@@ -197,7 +214,15 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Background="#C08CF0" CornerRadius="3"/>
+                            <Border Grid.Column="0" CornerRadius="3">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                        <GradientStop Color="#9A63D8" Offset="0"/>
+                                        <GradientStop Color="#C08CF0" Offset="0.6"/>
+                                        <GradientStop Color="#DCC0F8" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                            </Border>
                         </Grid>
                     </Grid>
                     <Grid Margin="0,0,0,3">
@@ -213,7 +238,7 @@
                         <TextBlock x:Name="TxtRamSticks" Text="&#8212;" Style="{StaticResource MRowVal}"/>
                     </Grid>
                     <Grid>
-                        <TextBlock Text="Top process" Style="{StaticResource MRowLbl}"/>
+                        <TextBlock Text="Plus gourmand" Style="{StaticResource MRowLbl}"/>
                         <TextBlock x:Name="TxtRamTop" Text="&#8212;" Style="{StaticResource MRowVal}"/>
                     </Grid>
                 </StackPanel>
@@ -268,12 +293,15 @@
                     <Grid x:Name="GraphArea" SizeChanged="GraphArea_SizeChanged">
                         <!-- Lignes de grille horizontales (25/50/75 %) -->
                         <Canvas x:Name="GridCanvas" IsHitTestVisible="False"/>
-                        <Polyline x:Name="RamLine" Stroke="#C08CF0" StrokeThickness="1.8"
-                                  StrokeLineJoin="Round"/>
-                        <Polyline x:Name="GpuLine" Stroke="#2EC46A" StrokeThickness="1.8"
-                                  StrokeLineJoin="Round"/>
-                        <Polyline x:Name="CpuLine" Stroke="#3B82E0" StrokeThickness="1.8"
-                                  StrokeLineJoin="Round"/>
+                        <!-- (v1.3.5 : aires dégradées sous les courbes ESSAYÉES puis RETIRÉES
+                             à la demande de l'utilisateur — garder uniquement courbes lissées
+                             + grille pointillée. Ne pas re-proposer.) -->
+                        <Polyline x:Name="RamLine" Stroke="#C08CF0" StrokeThickness="2.2"
+                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        <Polyline x:Name="GpuLine" Stroke="#2EC46A" StrokeThickness="2.2"
+                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        <Polyline x:Name="CpuLine" Stroke="#3B82E0" StrokeThickness="2.2"
+                                  StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                     </Grid>
                 </Border>
             </Grid>
