@@ -60,7 +60,10 @@ namespace Optimisation_Tool.Helpers
         public DateTime Time;
         public string   Provider = "";
         public int      Id;
-        public string   Raw = "";
+        public string   Raw = "";       // 1re ligne du message (affichage compact)
+        public string   RawFull = "";   // message COMPLET (analyse : chemin du fautif, etc.)
+                                        // ⚠️ piège vécu : n'analyser QUE Raw = rater tout ce qui
+                                        // est après la 1re ligne (le chemin de l'exe est ligne ~7)
     }
 
     /// <summary>Un incident = plusieurs événements survenus ensemble, avec cause racine + conseil.</summary>
@@ -106,11 +109,15 @@ namespace Optimisation_Tool.Helpers
                     {
                         using (rec)
                         {
-                            string raw = "";
+                            string raw = "", rawFull = "";
                             try
                             {
                                 var full = rec.FormatDescription();
-                                if (!string.IsNullOrWhiteSpace(full)) raw = full.Split('\n')[0].Trim();
+                                if (!string.IsNullOrWhiteSpace(full))
+                                {
+                                    rawFull = full.Trim();
+                                    raw     = rawFull.Split('\n')[0].Trim();
+                                }
                             }
                             catch { }
                             list.Add(new RawEvent
@@ -119,6 +126,7 @@ namespace Optimisation_Tool.Helpers
                                 Provider = rec.ProviderName ?? "?",
                                 Id = rec.Id,
                                 Raw = raw,
+                                RawFull = rawFull,
                             });
                         }
                     }
@@ -203,6 +211,16 @@ namespace Optimisation_Tool.Helpers
             int span = (int)Math.Round((decoded.Max(d => d.Time) - decoded.Min(d => d.Time)).TotalSeconds);
             string app = decoded.Select(d => Extract(d.Raw, @"(?:application défaillante|application name)\s*:?\s*([^\s,]+)"))
                                  .FirstOrDefault(s => s.Length > 0) ?? "";
+            // v1.3.7 : CHEMIN COMPLET de l'exe fautif (présent dans l'événement 1000 —
+            // « Chemin d'accès de l'application défaillante » / "Faulting application path").
+            // C'est lui qui rend le conseil ACTIONNABLE : on sait OÙ est le programme et
+            // donc À QUI il appartient (retour utilisateur : « je le trouve pas »).
+            // ⚠️ Libellé FR VARIABLE selon les versions de Windows : « Chemin de l'application
+            // défaillante » (vérifié en réel sur build 26200) OU « Chemin d'accès de
+            // l'application défaillante » (anciennes versions) — les deux sont couverts.
+            string appPath = cluster.Select(ev => Extract(ev.RawFull,
+                                 @"(?:Chemin (?:d['’]acc[eè]s )?de l['’]application défaillante|Faulting application path)\s*:?\s*([^\r\n]+?\.exe)"))
+                                 .FirstOrDefault(s => s.Length > 0) ?? "";
 
             // Enchaînement (par type, dans l'ordre d'apparition)
             var chainParts = decoded
@@ -222,7 +240,7 @@ namespace Optimisation_Tool.Helpers
             };
             int recDays  = recurrenceDays != null && recurrenceDays.TryGetValue(root.Kind, out var rd) ? rd : 1;
             double daysAgo = Math.Max(0, (DateTime.Now - inc.End).TotalDays);
-            Recommend(root.Kind, root.Info, rootCount, span, app, decoded.Count, inc, recDays, daysAgo);
+            Recommend(root.Kind, root.Info, rootCount, span, app, decoded.Count, inc, recDays, daysAgo, appPath);
             return inc;
         }
 
@@ -256,7 +274,7 @@ namespace Optimisation_Tool.Helpers
         // pour un hoquet ponctuel.
         private static void Recommend(
             Kind k, LogEntry root, int rootCount, int span, string app, int total, Incident inc,
-            int recDays = 1, double daysAgo = 0)
+            int recDays = 1, double daysAgo = 0, string appPath = "")
         {
             string rafale = rootCount >= 3 ? $" {rootCount}× en {Math.Max(span,1)} s — ce n'est pas un hoquet isolé, ça a vraiment lâché"
                                            : (rootCount > 1 ? $" {rootCount}×" : "");
@@ -405,29 +423,69 @@ namespace Optimisation_Tool.Helpers
                 case Kind.AppCrash:
                 {
                     string who = app.Length > 0 ? $" « {app} »" : "";
+
+                    // ── v1.3.7 : IDENTITÉ et LOCALISATION du fautif (retour utilisateur :
+                    // « tu me dis de le désinstaller mais je le trouve pas »). Le chemin vient
+                    // de l'événement ; le propriétaire est lu DANS le fichier (FileVersionInfo).
+                    string owner = "", locLine = "";
+                    bool fileExists = false;
+                    // v1.3.7-bis : si l'exe fautif est un SERVICE Windows, Tweakly (élevé) peut
+                    // l'arrêter/le désactiver LUI-MÊME — fini le « ouvre services.msc » (retour
+                    // utilisateur : « t'as géré le souci pour moi seul, l'app doit le faire »).
+                    var (svcName, svcDisplay) = ("", "");
+                    if (appPath.Length > 0)
+                    {
+                        try
+                        {
+                            fileExists = System.IO.File.Exists(appPath);
+                            if (fileExists)
+                            {
+                                var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(appPath);
+                                var prod = (fvi.ProductName  ?? "").Trim();
+                                var comp = (fvi.CompanyName  ?? "").Trim();
+                                if (prod.Length > 0 || comp.Length > 0)
+                                    owner = prod.Length > 0 && comp.Length > 0 ? $"{prod} ({comp})"
+                                          : prod.Length > 0 ? prod : comp;
+                            }
+                        }
+                        catch { }
+                        (svcName, svcDisplay) = FindServiceByExe(appPath);
+                        locLine = fileExists
+                            ? $" Le fichier est ici : {appPath}" + (owner.Length > 0 ? $" — il appartient à « {owner} »." : ".")
+                            : $" Le fichier n'existe plus sur le disque ({appPath}) : le programme a probablement été désinstallé, mais un RÉSIDU essaie encore de le lancer (démarrage automatique ou tâche planifiée).";
+                        if (svcName.Length > 0)
+                            locLine += $" C'est un SERVICE Windows (« {svcDisplay} ») : Windows le relancera en boucle tant qu'il n'est pas désactivé.";
+                    }
+
                     if (rootCount >= 3)
                     {
                         inc.Title  = $"Application en crash-boucle{(app.Length > 0 ? " — " + app : "")}";
                         inc.Icon   = "";
-                        inc.Advice = $"L'application{who} a planté {rootCount}× d'affilée (elle crashe, redémarre, recrashe).";
-                        inc.Steps  = new List<string>
+                        inc.Advice = $"L'application{who} a planté {rootCount}× d'affilée (elle crashe, redémarre, recrashe).{locLine}";
+                        inc.Steps  = new List<string>();
+                        if (fileExists)
                         {
-                            app.Length > 0
-                                ? $"Tweakly > Boîte à outils > Applications : chercher « {app } » et la mettre à jour."
-                                : "Tweakly > Boîte à outils > Applications : mettre à jour l'appli concernée.",
-                            "Si toujours, désinstaller et réinstaller depuis le site officiel.",
-                            app.Length > 0
-                                ? $"Si « {app} » n'est pas essentielle et plante en boucle, la désinstaller (Win+R > appwiz.cpl)."
-                                : "Si non essentielle et récurrente, la désinstaller (Win+R > appwiz.cpl).",
-                            "Si module fautif système (ntdll, kernelbase…) : tester la RAM (MemTest86) et lancer Windows Update.",
-                        };
+                            inc.Steps.Add(owner.Length > 0
+                                ? $"Le coupable appartient à « {owner} » : mets ce logiciel à jour, ou désinstalle-le s'il ne te sert pas (cherche « {owner} » dans Programmes et fonctionnalités)."
+                                : "Clique « Ouvrir l'emplacement » : le nom du dossier t'indique à quel logiciel il appartient — mets-le à jour ou désinstalle-le.");
+                            inc.Steps.Add("Si tu le gardes : désinstalle puis réinstalle depuis le site officiel (réparation propre).");
+                        }
+                        else if (appPath.Length > 0)
+                        {
+                            inc.Steps.Add("Le fichier a déjà disparu : c'est un résidu qui le relance. Tweakly > Optimisations > Nettoyage > « Résidus de logiciels désinstallés », puis vérifie les programmes au démarrage.");
+                        }
+                        else
+                        {
+                            inc.Steps.Add("Tweakly > Boîte à outils > Applications : chercher l'appli concernée et la mettre à jour.");
+                        }
+                        inc.Steps.Add("Si le module fautif est système (ntdll, kernelbase…) : tester la RAM (MemTest86) et lancer Windows Update.");
                     }
                     else if (recDays <= 1)
                     {
                         // Crash unique, pas reproduit → ne pas en faire un drame.
                         inc.Title  = $"Plantage ponctuel{(app.Length > 0 ? " — " + app : "")}";
                         inc.Icon   = "";
-                        inc.Advice = $"Une application{who} a planté — un seul jour concerné sur la période. "
+                        inc.Advice = $"Une application{who} a planté — un seul jour concerné sur la période.{locLine} "
                                    + "Les applications plantent parfois, ce n'est pas un signal en soi : aucune action nécessaire si ça ne se répète pas.";
                         inc.Steps  = new List<string>
                         {
@@ -439,20 +497,50 @@ namespace Optimisation_Tool.Helpers
                     {
                         inc.Title  = $"Plantage d'application{(app.Length > 0 ? " — " + app : "")}";
                         inc.Icon   = "";
-                        inc.Advice = recDays >= 3
+                        inc.Advice = (recDays >= 3
                             ? $"Une application{who} a planté — et des crashs d'applis reviennent sur {recDays} jours différents de la période. À traiter."
-                            : $"Une application{who} a planté.";
+                            : $"Une application{who} a planté.") + locLine;
                         inc.Steps  = new List<string>
                         {
-                            "Tweakly > Boîte à outils > Applications : mettre à jour l'appli concernée.",
-                            "Surveiller : si ça se répète souvent, désinstaller si non essentielle.",
+                            owner.Length > 0
+                                ? $"Le programme appartient à « {owner} » : mets-le à jour (ou désinstalle-le s'il ne sert pas)."
+                                : "Tweakly > Boîte à outils > Applications : mettre à jour l'appli concernée.",
+                            !fileExists && appPath.Length > 0
+                                ? "Fichier déjà disparu = résidu : Nettoyage > « Résidus de logiciels désinstallés » + vérifier le démarrage automatique."
+                                : "Surveiller : si ça se répète souvent, désinstaller si non essentielle.",
                         };
                     }
+
                     inc.Actions = new List<LogAction>
                     {
                         new LogAction { Label = "Voir Applications",            Tooltip = "Liste des applis dans Tweakly.",                       Kind = LogActionKind.Navigate, Target = "Apps" },
                         new LogAction { Label = "Programmes et fonctionnalités", Tooltip = "Ouvre appwiz.cpl pour désinstaller des programmes.", Kind = LogActionKind.Diag,    Target = "appwiz.cpl" },
                     };
+                    if (fileExists)
+                        inc.Actions.Insert(0, new LogAction
+                        {
+                            Label = "Ouvrir l'emplacement", Tooltip = appPath,
+                            // ⚠️ Kind=Command (file + args splittés), PAS Diag : Diag passe la
+                            // chaîne ENTIÈRE comme nom de fichier → échec silencieux (vécu).
+                            Kind = LogActionKind.Command, Target = $"explorer /select,\"{appPath}\"",
+                        });
+                    else if (appPath.Length > 0)
+                        inc.Actions.Add(new LogAction
+                        {
+                            Label = "Nettoyer les résidus", Tooltip = "Tweakly > Nettoyage (résidus de logiciels désinstallés).",
+                            Kind = LogActionKind.Navigate, Target = "Nettoyage",
+                        });
+                    // Service fautif → action DIRECTE (Tweakly est élevé, sc fonctionne) :
+                    // arrêt + désactivation, fenêtre cmd visible pour montrer le résultat,
+                    // confirmation demandée avant. Le dossier devient supprimable derrière.
+                    if (svcName.Length > 0)
+                        inc.Actions.Insert(0, new LogAction
+                        {
+                            Label   = "Arrêter et désactiver le service",
+                            Tooltip = $"sc stop + sc config start=disabled sur « {svcDisplay} » ({svcName}). Réversible : services.msc.",
+                            Kind    = LogActionKind.Command, Confirm = true,
+                            Target  = $"cmd /k sc stop \"{svcName}\" & sc config \"{svcName}\" start= disabled",
+                        });
                     return;
                 }
 
@@ -1043,6 +1131,25 @@ namespace Optimisation_Tool.Helpers
             e.Cause = "Source non répertoriée par Tweakly — voir le détail brut.";
             e.Fix   = "Rechercher « " + prov + " " + id + " » sur le web.";
             return e;
+        }
+
+        /// <summary>Retrouve le service Windows dont le binaire est <paramref name="exePath"/>
+        /// (Win32_Service.PathName). Renvoie ("","") si l'exe n'est pas un service.</summary>
+        private static (string name, string display) FindServiceByExe(string exePath)
+        {
+            try
+            {
+                using var q = new System.Management.ManagementObjectSearcher(
+                    "SELECT Name, DisplayName, PathName FROM Win32_Service");
+                foreach (System.Management.ManagementObject o in q.Get())
+                {
+                    var pn = o["PathName"]?.ToString() ?? "";
+                    if (pn.IndexOf(exePath, StringComparison.OrdinalIgnoreCase) >= 0)
+                        return (o["Name"]?.ToString() ?? "", o["DisplayName"]?.ToString() ?? "");
+                }
+            }
+            catch { }
+            return ("", "");
         }
 
         // ── Contexte machine : version du driver NVIDIA installée (v1.3.3) ──────

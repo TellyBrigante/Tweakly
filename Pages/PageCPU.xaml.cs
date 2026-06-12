@@ -15,7 +15,7 @@ namespace Optimisation_Tool.Pages
 
         // État lu au chargement → référence pour n'appliquer que ce qui change
         private (bool UltimatePower, bool DisableThrottling, bool SysResponsiveness,
-                 bool TimerResolution, bool DisableHVCI) _state;
+                 bool DisableHVCI) _state;
 
         public PageCPU(MainWindow main)
         {
@@ -41,7 +41,6 @@ namespace Optimisation_Tool.Pages
             ChkUltimatePower.IsChecked     = state.UltimatePower;
             ChkDisableThrottling.IsChecked = state.DisableThrottling;
             ChkSysResponsiveness.IsChecked = state.SysResponsiveness;
-            ChkTimerResolution.IsChecked   = state.TimerResolution;
             ChkHVCI.IsChecked              = state.DisableHVCI;
 
             _state = state;
@@ -50,7 +49,7 @@ namespace Optimisation_Tool.Pages
         }
 
         private static (bool UltimatePower, bool DisableThrottling,
-                        bool SysResponsiveness, bool TimerResolution,
+                        bool SysResponsiveness,
                         bool DisableHVCI) ReadState()
         {
             bool ultimatePower = false;
@@ -94,15 +93,8 @@ namespace Optimisation_Tool.Pages
             }
             catch { }
 
-            bool timerResolution = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
-                    "GlobalTimerResolutionRequests", null);
-                timerResolution = v != null && Convert.ToInt32(v) == 1;
-            }
-            catch { }
+            // (GlobalTimerResolution RETIRÉ le 2026-06-12 — effet catastrophique mesuré au
+            // bench sur build 26200, dépendant du build Windows. Voir commentaire XAML.)
 
             // HVCI / Memory Integrity désactivé (Enabled=0 ou absent)
             bool disableHVCI = false;
@@ -115,7 +107,7 @@ namespace Optimisation_Tool.Pages
             }
             catch { disableHVCI = true; }
 
-            return (ultimatePower, disableThrottling, sysResponsiveness, timerResolution, disableHVCI);
+            return (ultimatePower, disableThrottling, sysResponsiveness, disableHVCI);
         }
 
         // ── Appliquer ─────────────────────────────────────────────────────────
@@ -140,7 +132,6 @@ namespace Optimisation_Tool.Pages
             bool? chUlt   = Helpers.TweakFeedback.Changed(ChkUltimatePower,     _state.UltimatePower);
             bool? chThr   = Helpers.TweakFeedback.Changed(ChkDisableThrottling, _state.DisableThrottling);
             bool? chSys   = Helpers.TweakFeedback.Changed(ChkSysResponsiveness, _state.SysResponsiveness);
-            bool? chTimer = Helpers.TweakFeedback.Changed(ChkTimerResolution,   _state.TimerResolution);
             bool? chHVCI  = Helpers.TweakFeedback.Changed(ChkHVCI,              _state.DisableHVCI);
 
             // Avertissement sécurité avant de désactiver Memory Integrity (uniquement si on vient de cocher)
@@ -159,7 +150,7 @@ namespace Optimisation_Tool.Pages
                 }
             }
 
-            if (!(chUlt.HasValue || chThr.HasValue || chSys.HasValue || chTimer.HasValue || chHVCI.HasValue))
+            if (!(chUlt.HasValue || chThr.HasValue || chSys.HasValue || chHVCI.HasValue))
             {
                 Helpers.TweakFeedback.ShowInfo(StatusBanner, StatusDot, StatusText, "Aucune modification à appliquer.");
                 BtnAppliquer.IsEnabled = true;
@@ -169,11 +160,11 @@ namespace Optimisation_Tool.Pages
             _main.Log("CPU : application des tweaks…");
             var msgs = new System.Collections.Generic.List<string>();
             await Task.Run(() =>
-                ApplyChanges(chUlt, chThr, chSys, chTimer, chHVCI,
+                ApplyChanges(chUlt, chThr, chSys, chHVCI,
                              msg => { _main.Log(msg); msgs.Add(msg); }));
 
             _state = (ChkUltimatePower.IsChecked == true, ChkDisableThrottling.IsChecked == true,
-                      ChkSysResponsiveness.IsChecked == true, ChkTimerResolution.IsChecked == true,
+                      ChkSysResponsiveness.IsChecked == true,
                       ChkHVCI.IsChecked == true);
             _main.Log("CPU : tweaks appliqués.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Tweaks CPU appliqués");
@@ -181,7 +172,7 @@ namespace Optimisation_Tool.Pages
         }
 
         private static void ApplyChanges(
-            bool? doUltimate, bool? doThrottling, bool? doSysResp, bool? doTimerRes,
+            bool? doUltimate, bool? doThrottling, bool? doSysResp,
             bool? doHVCI, Action<string> log)
         {
             const string UltimateGUID = "e9a42b02-d5df-448d-aa00-03f14749eb61";
@@ -242,16 +233,10 @@ namespace Optimisation_Tool.Pages
             }
             catch (Exception ex) { log($"SystemResponsiveness : erreur — {ex.Message}"); }
 
-            // GlobalTimerResolution
-            if (doTimerRes.HasValue)
-            try
-            {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
-                    "GlobalTimerResolutionRequests", doTimerRes.Value ? 1 : 0, RegistryValueKind.DWord);
-                log($"GlobalTimerResolution : {(doTimerRes.Value ? "ACTIVÉ" : "DÉSACTIVÉ")}.");
-            }
-            catch (Exception ex) { log($"GlobalTimerResolution : erreur — {ex.Message}"); }
+            // (GlobalTimerResolution : tweak RETIRÉ le 2026-06-12 — effet catastrophique
+            // mesuré au bench sur build 26200. Les users qui l'avaient activé gardent leur
+            // valeur registre ; remise à zéro manuelle : Session Manager\kernel
+            // \GlobalTimerResolutionRequests = 0 + reboot.)
 
             // HVCI / Memory Integrity
             if (doHVCI.HasValue)

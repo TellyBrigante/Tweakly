@@ -358,17 +358,72 @@ namespace Optimisation_Tool.Pages
             if (probe.Contains("NOTINSTALLED"))
             {
                 SetGoStep(st1, GoState.Fail, "absente du système");
-                // Pas de package → rien à ré-enregistrer : on coupe le déclencheur direct.
-                var st2 = AddGoStep("Neutralisation du déclencheur (GameDVR)");
+
+                // ── VRAIE réparation d'abord (retour utilisateur : couper le déclencheur
+                //    sans réinstaller = « mettre le problème sous le tapis ») ──
+
+                // Tentative A : le package est souvent encore STAGED dans WindowsApps
+                // (visible -AllUsers) → ré-enregistrement pour l'utilisateur, zéro téléchargement.
+                var stA = AddGoStep("Réinstallation depuis les fichiers Windows (staged)");
+                string rega = await Task.Run(() => RunGoPs(
+                    "$n='Microsoft.XboxGamingOverlay';" +
+                    "$st=Get-AppxPackage -AllUsers -Name $n | Select-Object -First 1;" +
+                    "if(-not $st){'NOSOURCE'}else{" +
+                    "$m=Join-Path $st.InstallLocation 'AppxManifest.xml';" +
+                    "if(Test-Path $m){Add-AppxPackage -DisableDevelopmentMode -Register $m};" +
+                    "$a=Get-AppxPackage -Name $n;" +
+                    "if($a){'REINSTALLED:'+($a|Select-Object -First 1).Status}else{'FAILED'}}"));
+
+                if (rega.Contains("REINSTALLED:"))
+                {
+                    var stt = rega.Substring(rega.IndexOf("REINSTALLED:", StringComparison.Ordinal) + 12).Trim();
+                    SetGoStep(stA, GoState.Pass, $"ré-enregistrée depuis WindowsApps — statut « {stt} »");
+                    _main.Log($"ms-gamingoverlay : Game Bar RÉINSTALLÉE depuis les fichiers système (statut {stt}).");
+                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                        "Game Bar RÉINSTALLÉE (fichiers système) — relance le diagnostic pour confirmer", "");
+                    BtnFixGamingOverlay.IsEnabled = true;
+                    return;
+                }
+                SetGoStep(stA, GoState.Fail,
+                    rega.Contains("NOSOURCE") ? "aucun fichier source sur le disque"
+                                              : "ré-enregistrement refusé");
+
+                // Tentative B : réinstallation EN LIGNE via le Store (winget, ID officiel
+                // 9NZKPSTSNW4P), dé-élevée comme tous nos appels winget. Peut prendre ~1 min.
+                var stB = AddGoStep("Réinstallation via le Microsoft Store (winget)");
+                string regb = await Task.Run(() => RunGoPs(
+                    "winget install --id 9NZKPSTSNW4P --source msstore " +
+                    "--accept-package-agreements --accept-source-agreements --silent | Out-Null;" +
+                    "$a=Get-AppxPackage -Name 'Microsoft.XboxGamingOverlay';" +
+                    "if($a){'REINSTALLED:'+($a|Select-Object -First 1).Status}else{'FAILED'}",
+                    timeoutMs: 240_000));
+
+                if (regb.Contains("REINSTALLED:"))
+                {
+                    var stt = regb.Substring(regb.IndexOf("REINSTALLED:", StringComparison.Ordinal) + 12).Trim();
+                    SetGoStep(stB, GoState.Pass, $"téléchargée et installée — statut « {stt} »");
+                    _main.Log($"ms-gamingoverlay : Game Bar RÉINSTALLÉE via le Store (statut {stt}).");
+                    Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, true,
+                        "Game Bar RÉINSTALLÉE (Store) — relance le diagnostic pour confirmer", "");
+                    BtnFixGamingOverlay.IsEnabled = true;
+                    return;
+                }
+                SetGoStep(stB, GoState.Fail,
+                    regb.StartsWith("ERR:") ? regb.Substring(4) : "installation Store impossible (hors-ligne / Store indisponible ?)");
+
+                // Dernier recours, ASSUMÉ comme contournement : couper le déclencheur pour
+                // que le popup cesse, + bouton Store manuel via le verdict.
+                var stC = AddGoStep("Contournement : neutralisation du déclencheur (GameDVR)");
                 bool ok = DisableGameDvrTrigger();
-                SetGoStep(st2, ok ? GoState.Pass : GoState.Fail,
-                    ok ? "AppCaptureEnabled=0 + GameDVR_Enabled=0 — le popup n'a plus de cause"
+                SetGoStep(stC, ok ? GoState.Warn : GoState.Fail,
+                    ok ? "popup stoppé, mais la Game Bar reste absente — réinstalle-la via le Microsoft Store"
                        : "écriture registre refusée");
                 _main.Log(ok
-                    ? "ms-gamingoverlay : Game Bar absente → déclencheur GameDVR coupé. Réinstallation possible via le Microsoft Store."
-                    : "ms-gamingoverlay : Game Bar absente ET échec d'écriture GameDVR.");
+                    ? "ms-gamingoverlay : réinstallation impossible → contournement GameDVR appliqué. La Game Bar reste à réinstaller via le Store."
+                    : "ms-gamingoverlay : réinstallation impossible ET échec d'écriture GameDVR.");
+                try { Process.Start(new ProcessStartInfo("ms-windows-store://pdp/?ProductId=9NZKPSTSNW4P") { UseShellExecute = true }); } catch { }
                 Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, ok,
-                    "Popup neutralisé (Game Bar absente — Store pour la réinstaller)",
+                    "Popup stoppé (contournement) — le Store s'ouvre pour réinstaller la Game Bar",
                     "Réparation impossible — voir le journal d'activité.");
                 BtnFixGamingOverlay.IsEnabled = true;
                 return;
@@ -444,7 +499,7 @@ namespace Optimisation_Tool.Pages
         }
 
         // ── Exécution PowerShell dé-élevée avec résultat fichier (fallback élevé) ──
-        private static string RunGoPs(string body)
+        private static string RunGoPs(string body, int timeoutMs = 90_000)
         {
             var outFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "tweakly_gamingoverlay.txt");
             try { System.IO.File.Delete(outFile); } catch { }
@@ -454,7 +509,7 @@ namespace Optimisation_Tool.Pages
             {
                 int code = Helpers.DeElevatedLauncher.StartAndWait(
                     "powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -Command \"{ps}\"",
-                    timeoutMs: 90_000);
+                    timeoutMs: timeoutMs);
                 if (System.IO.File.Exists(outFile))
                     return System.IO.File.ReadAllText(outFile).Trim();
                 return $"ERR:pas de résultat (exit {code})";
@@ -468,7 +523,7 @@ namespace Optimisation_Tool.Pages
                     { UseShellExecute = false, CreateNoWindow = true,
                       RedirectStandardOutput = true, RedirectStandardError = true };
                     using var p = Process.Start(psi);
-                    p?.WaitForExit(60_000);
+                    p?.WaitForExit(timeoutMs);
                     if (System.IO.File.Exists(outFile))
                         return System.IO.File.ReadAllText(outFile).Trim();
                     return "ERR:exécution impossible";

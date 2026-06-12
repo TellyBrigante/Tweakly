@@ -72,24 +72,11 @@
                         </Grid>
                     </Border>
 
-                    <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTimerResolution}"
-                            MouseLeftButtonUp="Row_Click">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <CheckBox x:Name="ChkTimerResolution" Grid.Column="0" VerticalAlignment="Center"
-                                      Style="{StaticResource CleanSwitch}"/>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE713;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="R&#233;solution timer haute pr&#233;cision" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="GlobalTimerResolution (Windows 11)."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                    <!-- ⚠️ GlobalTimerResolution RETIRÉ (2026-06-12) : mesuré CATASTROPHIQUE
+                         au bench sur build Windows 26200 (score Système effondré) alors que la
+                         doc 22H2/23H2 le dit bénéfique — comportement dépendant du build =
+                         viole la règle « jamais d'instabilité ». NE PAS le remettre sans
+                         re-validation bench avant/après sur le build cible. -->
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkHVCI}"
                             MouseLeftButtonUp="Row_Click">
