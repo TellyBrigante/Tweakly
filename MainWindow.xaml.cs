@@ -66,6 +66,7 @@ namespace Optimisation_Tool
                 ["ReseauMon"] = new Lazy<UserControl>(() => new PageReseauMonitoring(this)),
                 ["Diagnostic"]= new Lazy<UserControl>(() => new PageDiagnostic(this)),
                 ["EventLog"]  = new Lazy<UserControl>(() => new PageEventLog(this)),
+                ["GameSession"]=new Lazy<UserControl>(() => new PageGameSession()),
                 ["Benchmark"] = new Lazy<UserControl>(() => new PageBenchmark(this)),
                 ["Reglages"]  = new Lazy<UserControl>(() => new PageReglages(this)),
             };
@@ -75,7 +76,7 @@ namespace Optimisation_Tool
                 new NavGroup { Header = BtnNavOptGroup,  Panel = OptGroupPanel,  Label = "Optimisations",
                                Tags = new HashSet<string> { "Nettoyage", "Nvidia", "CPU", "Windows", "Reseau", "Privacy" } },
                 new NavGroup { Header = BtnNavDiagGroup, Panel = DiagGroupPanel, Label = "Diagnostic",
-                               Tags = new HashSet<string> { "Diagnostic", "EventLog" } },
+                               Tags = new HashSet<string> { "Diagnostic", "EventLog", "GameSession" } },
                 new NavGroup { Header = BtnNavToolsGroup, Panel = ToolsGroupPanel, Label = "Boîte à outils",
                                Tags = new HashSet<string> { "Apps", "Fresh" } },
                 new NavGroup { Header = BtnNavMonGroup,   Panel = MonGroupPanel,   Label = "Surveillance",

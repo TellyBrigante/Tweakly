@@ -47,6 +47,7 @@
         </Style>
     </UserControl.Resources>
 
+    <Grid>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <Grid Margin="18,16,18,18">
             <Grid.RowDefinitions>
@@ -341,10 +342,15 @@
                         Click="BtnClearHistory_Click"/>
             </StackPanel>
 
-            <!-- ════════════════════════════════════════════════════════════
-                 OVERLAY BENCH EN COURS (modal)
-            ════════════════════════════════════════════════════════════ -->
-            <Border x:Name="BenchOverlay" Grid.RowSpan="6"
+        </Grid>
+    </ScrollViewer>
+
+        <!-- ════════════════════════════════════════════════════════════
+             OVERLAYS (modals) — HORS du ScrollViewer : ils se centrent sur
+             la zone VISIBLE de la page, pas sur la hauteur totale du contenu
+             (sinon la modale descend quand l'historique allonge la page)
+        ════════════════════════════════════════════════════════════ -->
+        <Border x:Name="BenchOverlay"
                     Background="#CC1A1F36" CornerRadius="12"
                     Visibility="Collapsed">
                 <Border Style="{StaticResource BTile}" MaxWidth="520"
@@ -432,7 +438,7 @@
             <!-- ════════════════════════════════════════════════════════════
                  MODAL CONFIRMATION AVANT BENCH
             ════════════════════════════════════════════════════════════ -->
-            <Border x:Name="ConfirmOverlay" Grid.RowSpan="6"
+            <Border x:Name="ConfirmOverlay"
                     Background="#CC1A1F36" CornerRadius="12"
                     Visibility="Collapsed">
                 <Border Style="{StaticResource BTile}" MaxWidth="540"
@@ -474,6 +480,5 @@
                     </StackPanel>
                 </Border>
             </Border>
-        </Grid>
-    </ScrollViewer>
+    </Grid>
 </UserControl>

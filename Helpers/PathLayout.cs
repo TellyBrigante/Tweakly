@@ -43,6 +43,8 @@ namespace Optimisation_Tool.Helpers
         public static string PawnIoSetup     => Path.Combine(DataDrv,   "PawnIO_setup.exe");
         public static string PawnIoLib       => Path.Combine(DataDrv,   "PawnIOLib.dll");   // user-mode DLL
         public static string NvidiaInspector => Path.Combine(DataTools, "nvidiaProfileInspector.exe");
+        public static string PresentMon      => Path.Combine(DataTools, "PresentMon.exe");
+        public static string SessionsFile    => Path.Combine(Config,    "tweakly-sessions.json");
         public static string CpuReference    => Path.Combine(DataRefs,  "cpu_reference.json");
 
         // Dossier où chercher les profils .nip (page Nvidia, onglet « par application »)

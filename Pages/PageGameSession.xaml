@@ -1,0 +1,279 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageGameSession"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+        <Style x:Key="SgTile" TargetType="Border">
+            <Setter Property="Background"      Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush"     Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="12"/>
+            <Setter Property="Padding"         Value="18,16"/>
+        </Style>
+        <Style x:Key="SgCat" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="SgValBig" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="26"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="SgLbl" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid Margin="18,16,18,18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 1 — HERO : titre + état + bouton REC
+                ═══════════════════════════════════════════════════════ -->
+                <Border Grid.Row="0" Style="{StaticResource SgTile}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                            <TextBlock Text="SUIVI EN JEU" Style="{StaticResource SgCat}"/>
+                            <TextBlock Text="Performances en jeu"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="17" FontWeight="SemiBold"
+                                       Margin="0,3,0,3"/>
+                            <TextBlock x:Name="TxtStatus"
+                                       Text="Enregistre une session pour mesurer les FPS, les chutes et leur origine."
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                       TextWrapping="Wrap" Margin="0,0,16,0"/>
+                            <TextBlock x:Name="TxtRecState" Visibility="Collapsed"
+                                       Foreground="#5BA0FF"
+                                       FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"
+                                       Margin="0,8,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="1" x:Name="BtnRec"
+                                Content="ENREGISTRER UNE SESSION"
+                                Style="{StaticResource CleanRunBtn}" Padding="20,10"
+                                VerticalAlignment="Center" Margin="20,0,0,0"
+                                Click="BtnRec_Click"/>
+                    </Grid>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 2 — VERDICT de la session (visible après une capture)
+                ═══════════════════════════════════════════════════════ -->
+                <Border x:Name="VerdictTile" Grid.Row="1" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" x:Name="TxtScore" Text="—"
+                                   Foreground="{DynamicResource ThTextTitle}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="58" FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   LineHeight="58" LineStackingStrategy="BlockLineHeight"
+                                   Margin="4,0,22,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtGameName" Text=""
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="16" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <Border x:Name="GameKnownBadge" Background="#22315FA0" BorderBrush="#5BA0FF"
+                                        BorderThickness="1" CornerRadius="6" Padding="6,1" Margin="10,0,0,0"
+                                        VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock Text="reconnu" Foreground="#8AC0FF"
+                                               FontFamily="{StaticResource AppFont}" FontSize="10"/>
+                                </Border>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtVerdict" Text=""
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="12.5"
+                                       TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 3 — 4 stats clés (avg / 1% low / 0.1% low / mode)
+                ═══════════════════════════════════════════════════════ -->
+                <Grid x:Name="StatsRow" Grid.Row="2" Margin="0,12,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource SgTile}">
+                        <StackPanel>
+                            <TextBlock Text="FPS MOYEN" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtFpsAvg" Text="—" Style="{StaticResource SgValBig}" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="TxtDuration" Text="" Style="{StaticResource SgLbl}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- RÉGULARITÉ : la constance du frametime (CV). LE critère du ressenti
+                         en haut framerate — un fps médian élevé mais instable « se sent ». -->
+                    <Border Grid.Column="2" Style="{StaticResource SgTile}">
+                        <StackPanel>
+                            <TextBlock Text="RÉGULARITÉ" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtRegularity" Text="—" Style="{StaticResource SgValBig}" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="TxtRegularityHint" Text="" Style="{StaticResource SgLbl}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- PIRE FRAME : le fps le plus bas réellement atteint = le chiffre que
+                         tu vois chuter en jeu (le 0,1 % low est un seuil moyen, pas le pire). -->
+                    <Border Grid.Column="4" Style="{StaticResource SgTile}">
+                        <StackPanel>
+                            <TextBlock Text="PIRE FRAME" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtWorstFps" Text="—" Style="{StaticResource SgValBig}" Margin="0,2,0,0"/>
+                            <TextBlock x:Name="TxtWorstHint" Text="le plus bas atteint en jeu" Style="{StaticResource SgLbl}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="6" Style="{StaticResource SgTile}">
+                        <StackPanel>
+                            <TextBlock Text="PRÉSENTATION" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtMode" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="14" FontWeight="SemiBold"
+                                       Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtModeHint" Text="" Style="{StaticResource SgLbl}" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 3.5 — GRAPHE FRAMETIME (le voir = le comprendre)
+                ═══════════════════════════════════════════════════════ -->
+                <Border x:Name="ChartTile" Grid.Row="3" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed" Height="220">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <TextBlock Text="FPS DANS LE TEMPS" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtChartLegend" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                       Text=""/>
+                        </Grid>
+                        <Canvas x:Name="ChartCanvas" Background="Transparent"
+                                Height="150" ClipToBounds="True"
+                                SizeChanged="ChartCanvas_SizeChanged"/>
+                        <Grid Margin="0,4,0,0">
+                            <TextBlock x:Name="TxtChartStart" Style="{StaticResource SgLbl}"
+                                       Text="0 s" HorizontalAlignment="Left"/>
+                            <TextBlock x:Name="TxtChartEnd" Style="{StaticResource SgLbl}"
+                                       Text="" HorizontalAlignment="Right"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 4 — RECOMMANDATIONS personnalisées (cœur du soft)
+                ═══════════════════════════════════════════════════════ -->
+                <Border x:Name="RecoTile" Grid.Row="4" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="DIAGNOSTIC" Style="{StaticResource SgCat}" Margin="0,0,0,8"/>
+                        <StackPanel x:Name="RecoPanel"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 5 — DROPS détaillés (table avec preuves chiffrées)
+                ═══════════════════════════════════════════════════════ -->
+                <Border x:Name="DropsTile" Grid.Row="5" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="DROPS DÉTECTÉS" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtDropsCount" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="10.5"/>
+                        </Grid>
+                        <StackPanel x:Name="DropsPanel"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
+                     BLOC 6 — HISTORIQUE des sessions
+                ═══════════════════════════════════════════════════════ -->
+                <Border x:Name="HistoryTile" Grid.Row="6" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="HISTORIQUE" Style="{StaticResource SgCat}"/>
+                            <Button x:Name="BtnClearHistory" Content="EFFACER"
+                                    Style="{StaticResource SecondaryBtnStyle}"
+                                    HorizontalAlignment="Right" Padding="12,4"
+                                    Click="BtnClearHistory_Click"/>
+                        </Grid>
+                        <StackPanel x:Name="HistoryPanel"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- ═══════════════════════════════════════════════════════
+             OVERLAY ENREGISTREMENT EN COURS (sorti du ScrollViewer)
+        ═══════════════════════════════════════════════════════ -->
+        <Border x:Name="RecOverlay" Background="#CC1A1F36" CornerRadius="12" Visibility="Collapsed">
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
+                    BorderThickness="1" CornerRadius="12" Padding="24,22"
+                    MaxWidth="540" VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Ellipse x:Name="RecDot" Width="12" Height="12" Fill="#E05555" VerticalAlignment="Center"/>
+                        <TextBlock Text="Enregistrement en cours"
+                                   Foreground="{DynamicResource ThTextTitle}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="17" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock Text="Capture des frames en cours. Joue, puis arrête pour obtenir l'analyse."
+                               Foreground="{DynamicResource ThTextBody}"
+                               FontFamily="{StaticResource AppFont}" FontSize="12.5"
+                               TextWrapping="Wrap" Margin="0,12,0,0"/>
+                    <TextBlock x:Name="TxtRecElapsed" Text="00:00"
+                               Foreground="{DynamicResource ThTextTitle}"
+                               FontFamily="{StaticResource AppFont}" FontSize="34" FontWeight="Bold"
+                               HorizontalAlignment="Center" Margin="0,16,0,8"/>
+                    <TextBlock Text="Mesure passive, sans impact sur les performances du jeu."
+                               Foreground="{DynamicResource ThTextDim}"
+                               FontFamily="{StaticResource AppFont}" FontSize="11"
+                               HorizontalAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                    <Button x:Name="BtnStopRec" Content="ARRÊTER ET ANALYSER"
+                            Style="{StaticResource CleanRunBtn}" Padding="20,10"
+                            HorizontalAlignment="Center"
+                            Click="BtnStopRec_Click"/>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Grid>
+</UserControl>
