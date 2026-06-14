@@ -536,29 +536,36 @@
                             </Canvas>
                         </Border>
 
-                        <!-- ═════ LIGNES DE RAPPEL (zone → callout) ═════ -->
+                        <!-- ═════ LIGNES DE RAPPEL (callout → zone) ═════
+                             Coords en repère Grille 900×600. La carte est centrée (Grid
+                             x260..640, y20..580) → les points tombent sur le CENTRE réel
+                             de chaque zone. CPU routé PAR LE HAUT (sinon il croise la RAM,
+                             bug vécu) ; stockage routé par la MARGE GAUCHE (sinon il passe
+                             sur la pile CMOS / le chipset, bug vécu). -->
                         <Canvas>
-                            <!-- OS → panneau I/O -->
-                            <Line X1="222" Y1="118" X2="278" Y2="118" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Ellipse Canvas.Left="274" Canvas.Top="114" Width="7" Height="7" Fill="#5BA0FF"/>
-                            <!-- GPU → slot PCIe -->
-                            <Line X1="222" Y1="288" X2="300" Y2="288" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Ellipse Canvas.Left="296" Canvas.Top="284" Width="7" Height="7" Fill="#5BA0FF"/>
-                            <!-- Stockage → M.2 -->
-                            <Line X1="222" Y1="455" X2="320" Y2="455" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Line X1="320" Y1="455" X2="320" Y2="240" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Ellipse Canvas.Left="316" Canvas.Top="236" Width="7" Height="7" Fill="#5BA0FF"/>
-                            <!-- CPU → socket -->
-                            <Line X1="678" Y1="118" X2="600" Y2="118" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Line X1="600" Y1="118" X2="600" Y2="130" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Ellipse Canvas.Left="596" Canvas.Top="128" Width="7" Height="7" Fill="#5BA0FF"/>
-                            <!-- RAM → slots -->
+                            <!-- OS → panneau I/O (bord gauche haut, Grid ~297,122) -->
+                            <Line X1="222" Y1="122" X2="297" Y2="122" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="293.5" Canvas.Top="118.5" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- GPU → slot PCIe x16 (Grid ~360,289) -->
+                            <Line X1="222" Y1="289" X2="360" Y2="289" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="356.5" Canvas.Top="285.5" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- Stockage → M.2 (remonte par la marge gauche x248, evite la pile/chipset) -->
+                            <Line X1="222" Y1="455" X2="248" Y2="455" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="248" Y1="455" X2="248" Y2="236" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="248" Y1="236" X2="410" Y2="236" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="406.5" Canvas.Top="232.5" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- CPU → socket (route PAR LE HAUT a y46, au-dessus de la RAM, Grid ~420,90) -->
+                            <Line X1="678" Y1="118" X2="678" Y2="46" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="678" Y1="46"  X2="420" Y2="46" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Line X1="420" Y1="46"  X2="420" Y2="90" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="416.5" Canvas.Top="86.5" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- RAM → slots (conserve : valide par l'utilisateur) -->
                             <Line X1="678" Y1="288" X2="616" Y2="288" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
                             <Line X1="616" Y1="288" X2="616" Y2="170" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
                             <Ellipse Canvas.Left="612" Canvas.Top="166" Width="7" Height="7" Fill="#5BA0FF"/>
-                            <!-- Carte mère → chipset -->
-                            <Line X1="678" Y1="465" X2="610" Y2="465" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
-                            <Ellipse Canvas.Left="606" Canvas.Top="461" Width="7" Height="7" Fill="#5BA0FF"/>
+                            <!-- Carte mère → chipset (bord droit du chipset, Grid ~605,466) -->
+                            <Line X1="678" Y1="465" X2="606" Y2="465" Stroke="#3D5BA0FF" StrokeThickness="1.2"/>
+                            <Ellipse Canvas.Left="602.5" Canvas.Top="461.5" Width="7" Height="7" Fill="#5BA0FF"/>
                         </Canvas>
 
                         <!-- ═════ CALLOUTS GAUCHE ═════ -->

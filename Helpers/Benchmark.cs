@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -64,7 +65,10 @@ namespace Optimisation_Tool.Helpers
         public double CpuMemMops;
         public double SysFrameJitterMs;
         public double SysInputJitterUs;
-        public double RamBandwidthGBs;
+        public double RamBandwidthGBs;   // = Read (métrique headline, comparable AIDA)
+        public double RamReadGBs;
+        public double RamWriteGBs;
+        public double RamCopyGBs;
         public double RamLatencyNs;
         public double NetPingMs;
         public double NetJitterMs;
@@ -155,11 +159,14 @@ namespace Optimisation_Tool.Helpers
                     () => SysInputLatencyAsync(ct), progress, Phase.SysInput, ct);
                 r.SysInputJitterUs = input;
 
-                // ── RAM : 2 sondes x 3 runs ──
+                // ── RAM : bande passante (Read/Write/Copy comme AIDA) + latence ──
+                // La sonde bande passante fait deja 6 repetitions internes (stable) → pas
+                // besoin du wrapper 3x. Elle renvoie les 3 valeurs comme AIDA.
                 progress?.Report((Phase.RamBand, 0));
-                var (band, _) = await Run3xAsync(
-                    () => RamBandwidthAsync(ct), progress, Phase.RamBand, ct);
-                r.RamBandwidthGBs = band;
+                var (rd, wr, cp) = await RamBandwidthAllAsync(ct);
+                r.RamReadGBs = rd; r.RamWriteGBs = wr; r.RamCopyGBs = cp;
+                r.RamBandwidthGBs = rd;   // Read = métrique headline (comparable AIDA)
+                progress?.Report((Phase.RamBand, 1));
 
                 progress?.Report((Phase.RamLat, 0));
                 var (lat, _) = await Run3xAsync(
@@ -214,14 +221,14 @@ namespace Optimisation_Tool.Helpers
             r.SysInputScore = ScoreInverse(r.SysInputJitterUs, best: 200, worst: 5000);
             r.SysScore      = (int)Math.Round((r.SysFrameScore + r.SysInputScore) / 2.0);
 
-            // RAM : bandwidth direct, latency inverse
-            // Bandwidth : 5 GB/s = mauvais (DDR3 single-channel),
-            //             22 GB/s = excellent (DDR5 dual 6400, mesure en BUILD RELEASE —
-            //             le JIT Release vectorise mieux les boucles STREAM que le Debug
-            //             sur lequel l'ancien bareme 16 etait cale).
-            r.RamBandwidthScore = ScoreDirect(r.RamBandwidthGBs, worst: 5, best: 22);
-            // Latency : excellent < 60ns, mauvais > 150ns
-            r.RamLatencyScore   = ScoreInverse(r.RamLatencyNs, best: 60, worst: 150);
+            // RAM : bandwidth = READ multi-thread AVX2 (comparable AIDA), latency inverse.
+            // Bareme recale sur la VRAIE bande passante Read : ~20 GB/s = DDR4 lente,
+            // ~95 GB/s = DDR5 dual 6400 (mesure 265K ~88, AIDA ~99).
+            r.RamBandwidthScore = ScoreDirect(r.RamBandwidthGBs, worst: 20, best: 95);
+            // Latency : recalibre sur la VRAIE DRAM (buffer 256 Mo). Mesure managee
+            // (bounds-checks → ~20-30 % au-dessus d'AIDA qui est en AVX) : un bon kit
+            // DDR5 mesure ~100-115 ns ici (265K DDR5-6400 = ~110 ns). best 90 / worst 165.
+            r.RamLatencyScore   = ScoreInverse(r.RamLatencyNs, best: 90, worst: 165);
             r.RamScore          = (int)Math.Round((r.RamBandwidthScore + r.RamLatencyScore) / 2.0);
 
             // Reseau (inchange)
@@ -458,55 +465,158 @@ namespace Optimisation_Tool.Helpers
 
         // ══════ SONDES RAM ═══════════════════════════════════════════════════
 
-        // STREAM-like Copy + Triad sur 64 Mo (assez gros pour saturer les caches).
-        // Returns GB/s.
-        private static Task<double> RamBandwidthAsync(CancellationToken ct)
-            => Task.Run(() =>
+        // Bande passante mémoire façon AIDA64 : Read / Write / Copy, multi-thread, AVX2 +
+        // stores NON-TEMPORELS (streaming, bypass cache write-allocate) + lecture déroulée
+        // sur 4 accumulateurs. Buffers NATIFS alignés 32 o. Validé sur 265K DDR5-6400 :
+        // Read ~88, Write ~81, Copy ~82 GB/s (AIDA Read=99 ; l'écart = asm hand-tuné).
+        // Fallback boucle managée si AVX2 absent (CPU pré-2013).
+        private static Task<(double read, double write, double copy)> RamBandwidthAllAsync(CancellationToken ct)
+            => Task.Run<(double, double, double)>(() =>
             {
-                const int n = 8 * 1024 * 1024;   // 8M doubles = 64 Mo
-                var a = new double[n];
-                var b = new double[n];
-                var c = new double[n];
-                var rng = new Random(42);
-                for (int i = 0; i < n; i++) { a[i] = rng.NextDouble(); b[i] = rng.NextDouble(); }
+                const long BYTES = 256L * 1024 * 1024;          // 256 Mo/buffer (DRAM-bound)
+                int threads = Math.Clamp(Environment.ProcessorCount, 4, 16);
 
-                // Warmup
-                for (int i = 0; i < n; i++) c[i] = a[i] + b[i] * 2.0;
-
-                const int iterations = 8;
-                var sw = Stopwatch.StartNew();
-                double sum = 0;
-                for (int it = 0; it < iterations; it++)
+                if (!System.Runtime.Intrinsics.X86.Avx2.IsSupported)
                 {
-                    if (ct.IsCancellationRequested) break;
-                    // Copy: c = a (8 byte / element, 1 write + 1 read = 16 byte/elt)
-                    for (int i = 0; i < n; i++) c[i] = a[i];
-                    // Triad: a = b + 2*c (3 read + 1 write = 32 byte/elt)
-                    for (int i = 0; i < n; i++) a[i] = b[i] + 2.0 * c[i];
-                    sum += a[0]; // empeche elision JIT
+                    double g = RamBandwidthManagedFallback(BYTES, threads, ct);
+                    return (g, g, g);
                 }
-                sw.Stop();
-                GC.KeepAlive(sum);
-                // Bytes transferes : iterations * (Copy 16B + Triad 32B) * n
-                double totalBytes = (double)iterations * (16 + 32) * n;
-                return totalBytes / sw.Elapsed.TotalSeconds / 1e9; // GB/s
+
+                nint rawS = Marshal.AllocHGlobal((nint)BYTES + 64);
+                nint rawD = Marshal.AllocHGlobal((nint)BYTES + 64);
+                try
+                {
+                    nint s = (rawS + 31) & ~(nint)31;
+                    nint d = (rawD + 31) & ~(nint)31;
+                    unsafe
+                    {
+                        System.Runtime.CompilerServices.Unsafe.InitBlock((void*)s, 1, (uint)BYTES);
+                        System.Runtime.CompilerServices.Unsafe.InitBlock((void*)d, 2, (uint)BYTES);
+                    }
+
+                    // PIC (meilleure passe sur 6), pas la moyenne : la bande passante est
+                    // une métrique de pic (comme AIDA), et ça immunise contre une passe
+                    // ralentie par une charge transitoire (CPU chaud après le bench CPU,
+                    // app de fond) — c'est ce qui donnait un « Read 45 » aberrant.
+                    double Bench(double bytesPerRep, Action body)
+                    {
+                        body();                                  // warmup
+                        double best = 0;
+                        for (int i = 0; i < 6; i++)
+                        {
+                            var sw = Stopwatch.StartNew();
+                            body();
+                            sw.Stop();
+                            double g = bytesPerRep / sw.Elapsed.TotalSeconds / 1e9;
+                            if (g > best) best = g;
+                        }
+                        return best;
+                    }
+
+                    // LECTURE en ENTIER (Avx2.Add sur long) : addition 1 cycle, jamais le
+                    // goulot → mesure PUREMENT memory-bound, insensible à la chauffe des
+                    // cœurs (l'addition FP l'était, d'où le read < write absurde). Garantit
+                    // aussi lecture ≥ écriture.
+                    double read = Bench(BYTES, () => ParallelChunks(threads, BYTES, (lo, hi) =>
+                    {
+                        unsafe
+                        {
+                            byte* p = (byte*)s;
+                            var a0 = Vector256<long>.Zero; var a1 = a0; var a2 = a0; var a3 = a0;
+                            long i = lo;
+                            for (; i + 128 <= hi; i += 128)
+                            {
+                                a0 = System.Runtime.Intrinsics.X86.Avx2.Add(a0, System.Runtime.Intrinsics.X86.Avx.LoadVector256((long*)(p + i)));
+                                a1 = System.Runtime.Intrinsics.X86.Avx2.Add(a1, System.Runtime.Intrinsics.X86.Avx.LoadVector256((long*)(p + i + 32)));
+                                a2 = System.Runtime.Intrinsics.X86.Avx2.Add(a2, System.Runtime.Intrinsics.X86.Avx.LoadVector256((long*)(p + i + 64)));
+                                a3 = System.Runtime.Intrinsics.X86.Avx2.Add(a3, System.Runtime.Intrinsics.X86.Avx.LoadVector256((long*)(p + i + 96)));
+                            }
+                            var sm = System.Runtime.Intrinsics.X86.Avx2.Add(System.Runtime.Intrinsics.X86.Avx2.Add(a0, a1), System.Runtime.Intrinsics.X86.Avx2.Add(a2, a3));
+                            if (sm.GetElement(0) == 123456789L) GC.KeepAlive(sm);
+                        }
+                    }));
+
+                    var one = Vector256.Create(1.5);
+                    double write = Bench(BYTES, () => ParallelChunks(threads, BYTES, (lo, hi) =>
+                    {
+                        unsafe
+                        {
+                            byte* p = (byte*)d;
+                            for (long i = lo; i + 32 <= hi; i += 32)
+                                System.Runtime.Intrinsics.X86.Avx.StoreAlignedNonTemporal((double*)(p + i), one);
+                        }
+                    }));
+
+                    double copy = Bench(BYTES * 2, () => ParallelChunks(threads, BYTES, (lo, hi) =>
+                    {
+                        unsafe
+                        {
+                            byte* ps = (byte*)s; byte* pd = (byte*)d;
+                            for (long i = lo; i + 32 <= hi; i += 32)
+                                System.Runtime.Intrinsics.X86.Avx.StoreAlignedNonTemporal((double*)(pd + i),
+                                    System.Runtime.Intrinsics.X86.Avx.LoadVector256((double*)(ps + i)));
+                        }
+                    }));
+
+                    return (read, write, copy);
+                }
+                finally { Marshal.FreeHGlobal(rawS); Marshal.FreeHGlobal(rawD); }
             }, ct);
 
-        // Memory latency : pointer-chase aleatoire sur 16 Mo (similaire au CPU mem
-        // mais on convertit en ns/access au lieu de Mops/s).
+        /// <summary>Découpe [0,total) en blocs contigus de 64 o alignés, un par thread.</summary>
+        private static void ParallelChunks(int threads, long total, Action<long, long> body)
+            => Parallel.For(0, threads, new ParallelOptions { MaxDegreeOfParallelism = threads }, t =>
+            {
+                long lo = (total * t / threads) & ~63L;
+                long hi = (total * (t + 1) / threads) & ~63L;
+                body(lo, hi);
+            });
+
+        /// <summary>Fallback managé (sans AVX2) : STREAM copy mono-bloc multi-thread.</summary>
+        private static double RamBandwidthManagedFallback(long bytes, int threads, CancellationToken ct)
+        {
+            int n = (int)(bytes / sizeof(double));
+            var a = new double[n]; var b = new double[n];
+            for (int i = 0; i < n; i++) a[i] = i;
+            var sw = Stopwatch.StartNew();
+            const int reps = 6;
+            for (int r = 0; r < reps; r++)
+                Parallel.For(0, threads, new ParallelOptions { MaxDegreeOfParallelism = threads }, t =>
+                {
+                    int lo = (int)((long)n * t / threads), hi = (int)((long)n * (t + 1) / threads);
+                    Array.Copy(a, lo, b, lo, hi - lo);
+                });
+            sw.Stop();
+            return (double)bytes * 2 * reps / sw.Elapsed.TotalSeconds / 1e9;
+        }
+
+        // Memory latency : pointer-chase aleatoire sur 256 Mo.
+        // ⚠️ CORRECTION (bug vecu) : l'ancien buffer de 16 Mo TENAIT DANS LE CACHE L3
+        // (jusqu'a 36 Mo sur Arrow Lake) → on mesurait la latence du L3 (~34 ns), PAS la
+        // DRAM. Mesure reelle validee sur 265K : ~70 ns a 16 Mo, ~110-120 ns des 64 Mo
+        // (regime DRAM stable). 256 Mo garantit qu'on depasse tout cache, sur toute machine.
         private static Task<double> RamLatencyAsync(CancellationToken ct)
             => Task.Run(() =>
             {
-                const int sizeBytes = 16 * 1024 * 1024;
+                const int sizeBytes = 256 * 1024 * 1024;   // >> tout L3 → vraie DRAM
                 const int count = sizeBytes / sizeof(int);
                 var arr = new int[count];
                 var rng = new Random(42);
-                var indices = Enumerable.Range(0, count).OrderBy(_ => rng.Next()).ToArray();
+                // ⚠️ Permutation via Fisher-Yates O(n) EN PLACE — surtout PAS OrderBy(random)
+                // qui ferait un tri O(n log n) de 64 M éléments (dizaines de s + alloc géante).
+                var indices = new int[count];
+                for (int i = 0; i < count; i++) indices[i] = i;
+                for (int i = count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    (indices[i], indices[j]) = (indices[j], indices[i]);
+                }
                 for (int i = 0; i < count - 1; i++) arr[indices[i]] = indices[i + 1];
                 arr[indices[count - 1]] = indices[0];
 
-                const int hops = 50_000_000;
                 int idx = 0;
+                for (int i = 0; i < 2_000_000; i++) idx = arr[idx];   // warmup (TLB/caches froids)
+                const int hops = 30_000_000;
                 var sw = Stopwatch.StartNew();
                 for (int i = 0; i < hops; i++) idx = arr[idx];
                 sw.Stop();

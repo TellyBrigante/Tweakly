@@ -34,14 +34,6 @@ namespace Optimisation_Tool.Helpers
         public const double TrimHeadMs = 12000;
         public const double TrimTailMs = 8000;
 
-        /// <summary>Process qui présentent des frames mais ne sont jamais « le jeu » ni un coupable kernel.</summary>
-        private static readonly HashSet<string> SystemPresenters = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "dwm.exe", "explorer.exe", "csrss.exe", "ApplicationFrameHost.exe",
-            "ShellExperienceHost.exe", "StartMenuExperienceHost.exe", "SearchHost.exe",
-            "TextInputHost.exe", "Tweakly.exe", "PresentMon.exe", "claude.exe",
-        };
-
         public enum DropCause { CpuBound, GpuBound, DisplaySync, ShaderCompile, Mixed }
         public enum RecoSeverity { Info, Warn, Crit }
 
@@ -59,15 +51,6 @@ namespace Optimisation_Tool.Helpers
             public bool GameWasComputing;
         }
 
-        public sealed class CulpritReport
-        {
-            public string Process = "";
-            public int DropsCorrelated;
-            public int TotalDrops;
-            public double CorrelationPct => TotalDrops > 0 ? 100.0 * DropsCorrelated / TotalDrops : 0;
-            public double MaxFrametimeMs;
-            public string EvidenceLine = "";
-        }
 
         public sealed class Recommendation
         {
@@ -104,7 +87,6 @@ namespace Optimisation_Tool.Helpers
             public bool PresentModeOptimal;
             public double CpuGlobalAtDropsPct;   // % CPU global médian au moment des drops (NaN si pas de sample)
             public List<Drop> Drops = new();
-            public List<CulpritReport> Culprits = new();
             public List<Recommendation> Recommendations = new();
             public List<ChartPoint> Chart = new();
             public string Verdict = "";
@@ -114,7 +96,8 @@ namespace Optimisation_Tool.Helpers
             public string GameDiskKind = "Unknown";
             public double TotalRamGb;
             public int MonitorHz;
-            public bool VbsRunning;              // taxe virtualisation active
+            public bool VbsRunning;              // hyperviseur/VBS réellement actif (taxe virtu)
+            public bool HvciEnabled;             // Intégrité de la mémoire (HVCI) ON ? (≠ VBS running)
             public int CompetitiveFps = 144;     // seuil « bon » pour ce jeu
         }
 
@@ -148,6 +131,7 @@ namespace Optimisation_Tool.Helpers
                     r.GameDiskKind = cap.SystemContext.StorageOf(gp).ToString();
                 }
                 r.VbsRunning = cap.SystemContext.VbsRunning;
+                r.HvciEnabled = cap.SystemContext.HvciEnabled;
             }
 
             // Trim bordures. Validé en réel 2026-06-13 : les freezes catastrophiques
@@ -293,57 +277,6 @@ namespace Optimisation_Tool.Helpers
                 foreach (var d in early) d.Cause = DropCause.ShaderCompile;
         }
 
-        // ───────────────────────── corrélateur (PresentMon data) ─────────────────────────
-        private static List<CulpritReport> FindCulprits(List<Drop> drops, SessionCapture cap)
-        {
-            var res = new List<CulpritReport>();
-            if (drops.Count < 3) return res;
-            string mainExe = cap.MainGame()?.Exe ?? "";
-
-            foreach (var p in cap.Processes)
-            {
-                if (string.Equals(p.Exe, mainExe, StringComparison.OrdinalIgnoreCase)) continue;
-                if (SystemPresenters.Contains(p.Exe)) continue;
-                if (p.Frames.Count < 200) continue;   // pas assez d'échantillons = pas fiable
-
-                var sorted = p.Frames.Select(f => f.FrameTimeMs).Where(v => v > 0).OrderBy(v => v).ToArray();
-                if (sorted.Length == 0) continue;
-                double spikeThr = Math.Max(sorted[(int)(sorted.Length * 0.99)], 10.0);
-
-                int hits = 0; double maxFt = 0;
-                foreach (var d in drops)
-                {
-                    double best = 0;
-                    foreach (var f in p.Frames)
-                        if (Math.Abs(f.TimeMs - d.TimeMs) <= 500 && f.FrameTimeMs > spikeThr && f.FrameTimeMs > best)
-                            best = f.FrameTimeMs;
-                    if (best > 0) { hits++; if (best > maxFt) maxFt = best; }
-                }
-                if (hits >= Math.Max(2, drops.Count * 0.5))
-                    res.Add(new CulpritReport
-                    {
-                        Process = p.Exe, DropsCorrelated = hits, TotalDrops = drops.Count, MaxFrametimeMs = maxFt,
-                        EvidenceLine = $"{hits} de tes {drops.Count} drops coïncident avec un spike de {p.Exe} (pire {maxFt:0.#} ms).",
-                    });
-            }
-            return res.OrderByDescending(c => c.CorrelationPct).ThenByDescending(c => c.MaxFrametimeMs).ToList();
-        }
-
-        private static void AnnotateDrops(List<Drop> drops, SessionCapture cap, List<CulpritReport> culprits)
-        {
-            if (culprits.Count == 0) return;
-            var top = culprits[0];
-            var p = cap.Processes.FirstOrDefault(x => string.Equals(x.Exe, top.Process, StringComparison.OrdinalIgnoreCase));
-            if (p == null) return;
-            foreach (var d in drops)
-            {
-                double best = 0;
-                foreach (var f in p.Frames)
-                    if (Math.Abs(f.TimeMs - d.TimeMs) <= 500 && f.FrameTimeMs > best) best = f.FrameTimeMs;
-                if (best > 10) { d.CulpritProcess = top.Process; d.CulpritFrametimeMs = best; }
-            }
-        }
-
         private static double CpuGlobalAtDrops(List<Drop> drops, List<SysSample> samples)
         {
             if (drops.Count == 0 || samples.Count == 0) return double.NaN;
@@ -376,8 +309,7 @@ namespace Optimisation_Tool.Helpers
             if (r.FrametimeCvPct > 12)
             {
                 var levers = new List<string>();
-                if (r.VbsRunning)
-                    levers.Add("Désactiver la virtualisation (VBS/Isolation du noyau) : l'hyperviseur ajoute du jitter de scheduling à chaque frame — cause fréquente de frametime irrégulier sur une machine puissante par ailleurs saine.");
+                if (r.VbsRunning) levers.Add(VbsLever(r));
                 levers.Add("Plafonner les FPS à une valeur stable (cap moteur du jeu + G-Sync/VRR) : empêche le frametime de courir après le max et le resserre nettement.");
                 levers.Add("Fermer une à une les apps de fond et recapturer : la comparaison d'historique te dira si l'une élargit vraiment ton frametime (sans deviner).");
                 levers.Add("Plan d'alim « Performances ultimes » : évite les micro-baisses de fréquence qui font varier le temps de calcul des frames.");
@@ -426,10 +358,8 @@ namespace Optimisation_Tool.Helpers
                 });
 
             // ── ÉTAT : session top / drops sans cause / 0 drop ──
-            // Tout ce qui suit ne s'affiche que si on n'a PAS déjà un coupable + qu'on
-            // n'est pas en pur profil GPU.
-            bool alreadyExplained = r.Culprits.Count > 0
-                                  || (runtime.Count >= 5 && runtimeGpu >= runtime.Count * 0.6);
+            // Tout ce qui suit ne s'affiche que si on n'est pas déjà en pur profil GPU.
+            bool alreadyExplained = runtime.Count >= 5 && runtimeGpu >= runtime.Count * 0.6;
 
             if (!alreadyExplained)
             {
@@ -464,21 +394,33 @@ namespace Optimisation_Tool.Helpers
                 }
             }
 
-            // Levier VBS/hyperviseur : seulement si VBS tourne, drops CPU-bound sans
-            // coupable, ET que la reco « régularité » ne l'a pas déjà mentionné (CV ≤ 12).
-            if (r.VbsRunning && r.Culprits.Count == 0 && r.FrametimeCvPct <= 12
+            // Levier VBS/hyperviseur : seulement si VBS tourne, drops CPU-bound, ET que
+            // la reco « régularité » ne l'a pas déjà mentionné (CV ≤ 12).
+            if (r.VbsRunning && r.FrametimeCvPct <= 12
                 && runtime.Count(d => d.Cause == DropCause.CpuBound) >= 5)
             {
                 list.Add(new Recommendation
                 {
                     Title = "Virtualisation (VBS) active — taxe de scheduling sur le thread du jeu",
-                    Explanation = "Le noyau Windows tourne au-dessus d'un hyperviseur (VBS/Sécurité basée sur la virtualisation actif), ce qui ajoute du jitter de scheduling à chaque frame — sur un jeu mono-thread sensible comme celui-ci, ça gonfle les drops CPU-bound.\n" +
-                        "Pour tester : Sécurité Windows > Sécurité des appareils > Isolation du noyau > Intégrité de la mémoire OFF, et désactive « Plateforme de machine virtuelle » dans Fonctionnalités Windows si tu n'utilises ni WSL ni Sandbox. Reboot, puis refais une capture : si les drops CPU-bound baissent, la taxe virtualisation en était la cause.",
+                    Explanation = "Le noyau Windows tourne au-dessus d'un hyperviseur, ce qui ajoute du jitter de scheduling à chaque frame — sur un jeu mono-thread sensible, ça gonfle les drops CPU-bound.\n" + VbsLever(r),
                     Severity = RecoSeverity.Warn,
                 });
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Levier VBS ADAPTÉ à l'état RÉEL : on ne dit « désactive l'Intégrité de la
+        /// mémoire » QUE si elle est ON. Si HVCI est déjà OFF mais que l'hyperviseur tourne
+        /// quand même, la cause est ailleurs (Plateforme de machine virtuelle / Hyper-V /
+        /// Sandbox / Credential Guard) → on pointe le bon levier (bug de pertinence vécu).
+        /// </summary>
+        private static string VbsLever(Report r)
+        {
+            if (r.HvciEnabled)
+                return "Désactive l'Intégrité de la mémoire (Sécurité Windows > Sécurité des appareils > Isolation du noyau), reboot, recapture. C'est le levier le plus lourd de la taxe virtualisation.";
+            return "⚠ Ton Intégrité de la mémoire est DÉJÀ désactivée, mais l'hyperviseur tourne quand même — la cause vient d'une autre fonctionnalité (Plateforme de machine virtuelle, Hyper-V, Bac à sable Windows, ou Credential Guard). Si tu n'utilises AUCUN de ces outils : désactive « Plateforme de machine virtuelle » et « Hyper-V » dans Fonctionnalités Windows (ou, en admin : bcdedit /set hypervisorlaunchtype off), reboot, recapture. ⚠ ça casse WSL / Sandbox / Hyper-V si tu t'en sers.";
         }
 
         /// <summary>
@@ -539,24 +481,6 @@ namespace Optimisation_Tool.Helpers
             }
             return res;
         }
-
-        private static bool IsSystemProcess(string exe) => exe.ToLowerInvariant() switch
-        {
-            "msmpeng.exe" or "searchindexer.exe" or "wmiprvse.exe" or "tiworker.exe"
-            or "trustedinstaller.exe" or "svchost.exe" or "explorer.exe" or "system"
-            or "dwm.exe" or "audiodg.exe" or "runtimebroker.exe" => true,
-            _ => false,
-        };
-
-        private static string FriendlyHint(string exe) => exe.ToLowerInvariant() switch
-        {
-            "brave.exe" or "chrome.exe" or "firefox.exe" or "msedge.exe" or "opera.exe" or "vivaldi.exe"
-                => "Ferme les onglets vidéo / streaming / sites JS lourds avant de jouer, ou ferme le navigateur.",
-            "discord.exe" => "Désactive l'accélération matérielle de Discord (Réglages > Avancés), surtout si tu streames.",
-            "spotify.exe" => "Spotify spike au changement de piste / crossfade. Lance ta playlist avant le match.",
-            "obs64.exe" or "obs.exe" => "OBS encode sur le CPU ? Bascule sur l'encodeur GPU (NVENC / AMF / QuickSync) dans Sortie.",
-            _ => "",
-        };
 
         // ───────────────────────── verdict + score ─────────────────────────
         private static string BuildVerdict(Report r, List<Drop> runtime)

@@ -21,6 +21,32 @@ namespace Optimisation_Tool
             try { TxtSplashVersion.Text = "v" + Pages.PageReglages.AppVersion; } catch { }
         }
 
+        /// <summary>
+        /// 1re fenêtre post-UAC : Topmost ne suffit PAS à la sortir de la barre des tâches
+        /// (bug vécu — le splash restait caché tant qu'on ne cliquait pas). Dès qu'il est
+        /// RÉELLEMENT peint, on force le premier plan (AttachThreadInput…), avec 2 rappels
+        /// dont le dernier autorise le filet minimize/restore si Windows s'entête.
+        /// </summary>
+        protected override void OnContentRendered(EventArgs e)
+        {
+            base.OnContentRendered(e);
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                Helpers.Foreground.Force(hwnd, allowMinimizeRestore: false);
+                int n = 0;
+                var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                t.Tick += (_, _) =>
+                {
+                    n++;
+                    Helpers.Foreground.Force(hwnd, allowMinimizeRestore: n >= 2);
+                    if (n >= 2) t.Stop();
+                };
+                t.Start();
+            }
+            catch { }
+        }
+
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
             try

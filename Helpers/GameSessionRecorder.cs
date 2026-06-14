@@ -36,8 +36,12 @@ namespace Optimisation_Tool.Helpers
         private System.Threading.Timer? _sampler;
         private DateTime _startedUtc;
         private SystemContextSnap? _sysContext;
+        private GpuTelemetry? _gpu;
 
         public bool IsRecording => _pm != null && !_pm.HasExited;
+
+        /// <summary>Dernier échantillon (pour l'affichage LIVE pendant la capture). null avant le 1er tick.</summary>
+        public SysSample? LastSample { get; private set; }
 
         /// <summary>Démarre la capture. exeName = null → tous les process (on filtre au parsing).</summary>
         public bool Start(string? exeName, out string error)
@@ -49,7 +53,11 @@ namespace Optimisation_Tool.Helpers
                 if (!File.Exists(PathLayout.PresentMon)) { error = "PresentMon.exe introuvable dans data\\tools."; return false; }
 
                 _csvPath = Path.Combine(Path.GetTempPath(), $"tweakly_session_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
-                string args = $"--output_file \"{_csvPath}\" --no_console_stats --stop_existing_session --session_name TweaklySession";
+                // --timed 3600 = filet de sécurité : si PresentMon devenait orphelin (app
+                // fermée en pleine capture), il s'auto-termine au bout d'1 h au lieu de
+                // tourner indéfiniment. Sans effet en usage normal (sessions = minutes,
+                // arrêtées par Ctrl+C bien avant).
+                string args = $"--output_file \"{_csvPath}\" --no_console_stats --stop_existing_session --timed 3600 --session_name TweaklySession";
                 if (!string.IsNullOrWhiteSpace(exeName))
                     args += $" --process_name \"{exeName}\"";
 
@@ -73,6 +81,8 @@ namespace Optimisation_Tool.Helpers
                 // RAM totale, plan d'alim, refresh moniteur — du contexte VRAI, pas de
                 // questions de bot. Process.GetProcesses ici = OK (one-shot, hors jeu).
                 _sysContext = SystemContextSnap.Capture();
+                LastSample = null;
+                try { _gpu = new GpuTelemetry(); } catch { _gpu = null; }
                 // Sampler 1 Hz STRICTEMENT cheap (GetSystemTimes + GlobalMemoryStatusEx,
                 // microsecondes, en process). Donne le % CPU global au moment des drops
                 // = contexte VRAI ("CPU global à 22 % → pas une saturation"). Rien d'autre.
@@ -96,6 +106,7 @@ namespace Optimisation_Tool.Helpers
         {
             if (_pm == null) return null;
             try { _sampler?.Dispose(); _sampler = null; } catch { }
+            try { _gpu?.Dispose(); _gpu = null; } catch { }
 
             var pm = _pm;
             _pm = null;
@@ -143,12 +154,19 @@ namespace Optimisation_Tool.Helpers
         {
             try
             {
-                _samples.Add(new SysSample
+                var g = _gpu?.Read();   // ~2,5 ms in-process (NvAPI), sur ce thread de fond
+                var s = new SysSample
                 {
                     ElapsedMs = (DateTime.UtcNow - _startedUtc).TotalMilliseconds,
                     CpuLoadPct = CheapProbes.CpuLoadPercent(),
                     RamAvailMb = CheapProbes.AvailableRamMb(),
-                });
+                    GpuTempC = g?.TempC ?? double.NaN,
+                    GpuUsagePct = g?.UsagePct ?? double.NaN,
+                    GpuCoreMhz = g?.CoreMhz ?? double.NaN,
+                    GpuVramUsedMB = g?.VramUsedMB ?? double.NaN,
+                };
+                _samples.Add(s);
+                LastSample = s;
             }
             catch { }
         }
@@ -157,8 +175,22 @@ namespace Optimisation_Tool.Helpers
         {
             try { _sampler?.Dispose(); } catch { }
             _sampler = null;
+            try { _gpu?.Dispose(); } catch { }
+            _gpu = null;
             try { if (_pm != null && !_pm.HasExited) _pm.Kill(); } catch { }
             _pm = null;
+        }
+
+        /// <summary>
+        /// Arrêt BRUTAL sans analyse : tue PresentMon + le timer + supprime le CSV partiel.
+        /// À appeler si la page est quittée ou l'app fermée pendant une capture (sinon
+        /// PresentMon resterait à tourner et à grossir le CSV en arrière-plan).
+        /// </summary>
+        public void Abort()
+        {
+            Cleanup();
+            try { if (_csvPath != null && File.Exists(_csvPath)) File.Delete(_csvPath); } catch { }
+            _csvPath = null;
         }
 
         // ─────────────── P/Invoke Ctrl+C console ───────────────
@@ -191,12 +223,16 @@ namespace Optimisation_Tool.Helpers
         public List<FrameRecord> Frames = new();
     }
 
-    /// <summary>Échantillon système ultra-léger (CPU global %, RAM dispo) à 1 Hz.</summary>
+    /// <summary>Échantillon système à 1 Hz : CPU/RAM (P/Invoke gratuit) + GPU (NvAPI ~2,5 ms).</summary>
     public sealed class SysSample
     {
         public double ElapsedMs;
         public double CpuLoadPct;
         public double RamAvailMb;
+        public double GpuTempC = double.NaN;
+        public double GpuUsagePct = double.NaN;
+        public double GpuCoreMhz = double.NaN;
+        public double GpuVramUsedMB = double.NaN;
     }
 
     /// <summary>Résultat brut d'une capture, prêt pour l'analyse.</summary>

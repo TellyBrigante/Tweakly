@@ -40,6 +40,21 @@ namespace Optimisation_Tool.Pages
             RecDot.BeginAnimation(UIElement.OpacityProperty, pulse);
         }
 
+        /// <summary>
+        /// Quitter la page pendant une capture = on ABANDONNE proprement (tue PresentMon +
+        /// le timer + le CSV partiel). Sinon PresentMon continuerait à tourner en fond.
+        /// </summary>
+        private void UserControl_Unloaded(object sender, RoutedEventArgs e)
+        {
+            if (_rec.IsRecording)
+            {
+                _tick?.Stop(); _tick = null;
+                _rec.Abort();
+                RecOverlay.Visibility = Visibility.Collapsed;
+                AppLog.Write("PageGameSession : capture abandonnée (page quittée).");
+            }
+        }
+
         // ───────────────────────── démarrage / arrêt ─────────────────────────
         private void BtnRec_Click(object sender, RoutedEventArgs e)
         {
@@ -59,9 +74,25 @@ namespace Optimisation_Tool.Pages
             {
                 var d = DateTime.UtcNow - _recStart;
                 TxtRecElapsed.Text = $"{(int)d.TotalMinutes:D2}:{d.Seconds:D2}";
+                UpdateLiveTiles();
             };
             _tick.Start();
             AppLog.Write("PageGameSession : capture démarrée.");
+        }
+
+        private static string Live(double v, string unit, string fmt = "0") =>
+            double.IsNaN(v) ? "—" : v.ToString(fmt) + unit;
+
+        private void UpdateLiveTiles()
+        {
+            var s = _rec.LastSample;
+            if (s == null) return;
+            LiveCpu.Text      = Live(s.CpuLoadPct, " %");
+            LiveGpu.Text      = Live(s.GpuUsagePct, " %");
+            LiveGpuClock.Text = Live(s.GpuCoreMhz, " MHz");
+            LiveGpuTemp.Text  = Live(s.GpuTempC, " °C");
+            LiveVram.Text     = double.IsNaN(s.GpuVramUsedMB) ? "—" : (s.GpuVramUsedMB / 1024.0).ToString("0.0") + " Go";
+            LiveRam.Text      = double.IsNaN(s.RamAvailMb) ? "—" : (s.RamAvailMb / 1024.0).ToString("0.0") + " Go";
         }
 
         private async void BtnStopRec_Click(object sender, RoutedEventArgs e)
@@ -229,32 +260,7 @@ namespace Optimisation_Tool.Pages
             if (sender is not Button b || b.Tag is not string target) return;
             try
             {
-                if (target.StartsWith("killprocess:", StringComparison.Ordinal))
-                {
-                    string exe = target.Substring("killprocess:".Length);
-                    string name = System.IO.Path.GetFileNameWithoutExtension(exe);
-                    var procs = Process.GetProcessesByName(name);
-                    if (procs.Length == 0)
-                    {
-                        MessageBox.Show($"{exe} n'est pas en cours d'exécution.",
-                                        "Tweakly", MessageBoxButton.OK, MessageBoxImage.Information);
-                        return;
-                    }
-                    var r = MessageBox.Show(
-                        $"Fermer {procs.Length} processus « {exe} » ? Tu pourras les relancer normalement après.",
-                        "Tweakly — Fermer le coupable",
-                        MessageBoxButton.OKCancel, MessageBoxImage.Question);
-                    if (r != MessageBoxResult.OK) return;
-                    int killed = 0;
-                    foreach (var p in procs)
-                    {
-                        try { p.Kill(); killed++; } catch { }
-                    }
-                    AppLog.Write($"PageGameSession : kill {exe} — {killed}/{procs.Length}.");
-                    MessageBox.Show($"{killed} processus fermé(s). Relance ta partie et refais une capture pour mesurer le gain.",
-                                    "Tweakly", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-                else if (target.StartsWith("nav:", StringComparison.Ordinal))
+                if (target.StartsWith("nav:", StringComparison.Ordinal))
                 {
                     string tag = target.Substring("nav:".Length);
                     if (Window.GetWindow(this) is MainWindow mw)

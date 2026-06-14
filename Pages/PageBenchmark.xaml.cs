@@ -427,8 +427,9 @@ namespace Optimisation_Tool.Pages
             double ramT = Math.Max(0, Math.Min(100, r.RamScore));
             RamCol.Width     = new GridLength(ramT,         GridUnitType.Star);
             RamColRest.Width = new GridLength(100.0 - ramT, GridUnitType.Star);
+            // Affichage façon AIDA64 : Read / Write / Copy + latence. Multi-thread AVX2.
             TxtRamDetail.Text = $"{ShortRam(r.RamScore)}\n"
-                              + $"{r.RamBandwidthGBs:F1} GB/s · latence {r.RamLatencyNs:F0} ns";
+                              + $"Lecture {r.RamReadGBs:F0} GB/s · Écriture {r.RamWriteGBs:F0} GB/s · Copie {r.RamCopyGBs:F0} GB/s · latence {r.RamLatencyNs:F0} ns";
 
             // ── Réseau (échelle 0-100) ─────────────────────────────────────
             TxtNetScore.Text = r.NetScore.ToString();
@@ -454,7 +455,7 @@ namespace Optimisation_Tool.Pages
                 _main.Log($"  CPU  Mem     = {r.CpuMemMops:F2} Mhops/s → score {r.CpuMemScore}");
                 _main.Log($"  SYS  Frame   = {r.SysFrameJitterMs:F2} ms       → score {r.SysFrameScore}");
                 _main.Log($"  SYS  Input   = {r.SysInputJitterUs:F0} µs       → score {r.SysInputScore}");
-                _main.Log($"  RAM  Bandw.  = {r.RamBandwidthGBs:F2} GB/s     → score {r.RamBandwidthScore}");
+                _main.Log($"  RAM  R/W/Copy = {r.RamReadGBs:F0}/{r.RamWriteGBs:F0}/{r.RamCopyGBs:F0} GB/s  → score {r.RamBandwidthScore}");
                 _main.Log($"  RAM  Latence = {r.RamLatencyNs:F1} ns         → score {r.RamLatencyScore}");
                 _main.Log($"  NET  Ping    = {r.NetPingMs:F0} ms · jitter {r.NetJitterMs:F1} ms · perte {r.NetLossPct:F0}%");
                 _main.Log($"  TOTAL = {r.TotalScore} (CPU {r.CpuScore} · SYS {r.SysScore} · RAM {r.RamScore} · NET {r.NetScore}){(r.Unstable?"  ⚠ INSTABLE (écart >30% entre runs)":"")}");
@@ -594,16 +595,24 @@ namespace Optimisation_Tool.Pages
                 LadderPanel.Children.Add(row);
             }
 
-            // Légende discrète (façon Cinebench)
+            // Légende discrète (façon Cinebench) : chaque carré ■ est colorié comme sa
+            // barre (orange = ta mesure, bleu = ton CPU, bleu acier = voisins).
             var legend = new TextBlock
             {
-                Text = "■ orange = ta mesure réelle   ·   ■ bleu = ton CPU (score attendu)   ·   ■ bleu acier = CPUs voisins (moyennes publiques)   —   échelle : 265K = 100",
                 FontFamily   = (FontFamily)FindResource("AppFont"),
                 FontSize     = 10.5,
                 TextWrapping = TextWrapping.Wrap,
                 Margin       = new Thickness(0, 8, 0, 0),
             };
             legend.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            var orange = new SolidColorBrush(Color.FromRgb(0xF5, 0xA6, 0x23));
+            var blue   = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+            var steel  = new SolidColorBrush(Color.FromRgb(0x6E, 0x84, 0xB8));
+            void Sq(SolidColorBrush c) => legend.Inlines.Add(new System.Windows.Documents.Run("■ ") { Foreground = c });
+            Sq(orange); legend.Inlines.Add(new System.Windows.Documents.Run("ta mesure réelle      "));
+            Sq(blue);   legend.Inlines.Add(new System.Windows.Documents.Run("ton CPU (score attendu)      "));
+            Sq(steel);  legend.Inlines.Add(new System.Windows.Documents.Run("CPUs voisins (moyennes publiques)      "));
+            legend.Inlines.Add(new System.Windows.Documents.Run("— échelle : 265K = 100"));
             LadderPanel.Children.Add(legend);
 
             LadderTile.Visibility = Visibility.Visible;

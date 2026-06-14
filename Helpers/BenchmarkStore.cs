@@ -21,6 +21,10 @@ namespace Optimisation_Tool.Helpers
         {
             WriteIndented = true,
             IncludeFields = true,
+            // Durcissement : si une mesure devenait NaN/Infinity (ex. division par un
+            // temps quasi nul), System.Text.Json jetterait à l'écriture → perte
+            // silencieuse de tout l'historique. On l'autorise (même fix que SessionStore).
+            NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         };
 
         public static List<BenchmarkResult> Load()

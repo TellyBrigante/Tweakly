@@ -26,6 +26,10 @@ namespace Optimisation_Tool.Pages
         {
             _main = main;
             InitializeComponent();
+            // État d'onglet figé AVANT le 1er rendu (sinon flash « par application »
+            // le temps que UserControl_Loaded s'exécute). ApplyTemplate pour que
+            // StyleTab trouve les éléments du template dès le constructeur.
+            try { BtnTabGlobal.ApplyTemplate(); BtnTabApp.ApplyTemplate(); SelectTab(true); } catch { }
         }
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)

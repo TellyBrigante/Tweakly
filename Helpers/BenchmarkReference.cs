@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Optimisation_Tool.Helpers
 {
@@ -24,6 +25,7 @@ namespace Optimisation_Tool.Helpers
         {
             WriteIndented = true,
             IncludeFields = true,
+            NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,
         };
 
         private static List<Entry> Load()

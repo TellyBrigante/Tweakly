@@ -124,9 +124,11 @@
                     <Button x:Name="BtnTabGlobal" Click="BtnTabGlobal_Click" Cursor="Hand" Height="32" Width="180">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border x:Name="Bg" CornerRadius="7" Background="Transparent">
+                                <!-- Look SÉLECTIONNÉ par défaut (onglet ouvert au démarrage) :
+                                     évite le flash où aucun onglet n'est surligné au 1er rendu. -->
+                                <Border x:Name="Bg" CornerRadius="7" Background="#254E8C">
                                     <TextBlock x:Name="Lbl" Text="Param&#232;tres globaux"
-                                               Foreground="{DynamicResource ThTextDim}"
+                                               Foreground="White"
                                                FontFamily="{StaticResource AppFont}" FontSize="12" FontWeight="SemiBold"
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
