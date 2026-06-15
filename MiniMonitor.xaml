@@ -44,7 +44,7 @@
             <!-- En-tête : logo mini + bouton retour -->
             <Grid Margin="0,0,0,10">
                 <TextBlock VerticalAlignment="Center" FontSize="14" FontWeight="Bold"
-                           FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/><Run Text="  ·  mini" Foreground="{DynamicResource ThTextDim}" FontSize="10" FontWeight="SemiBold"/></TextBlock>
+                           FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/><Run Text="  ·  mini" Foreground="{DynamicResource ThTextDim}" FontSize="10" FontWeight="SemiBold"/></TextBlock>
                 <Button x:Name="BtnReturn"
                         HorizontalAlignment="Right" VerticalAlignment="Center"
                         Width="28" Height="24" Cursor="Hand"
@@ -83,8 +83,8 @@
                     <StackPanel>
                         <TextBlock Text="CPU" Style="{StaticResource MiCap}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                            <TextBlock x:Name="TxtCpu" Text="—" Style="{StaticResource MiBig}" Foreground="#5BA0FF"/>
-                            <TextBlock Text="%" Foreground="#5BA0FF" FontSize="11" FontWeight="Bold"
+                            <TextBlock x:Name="TxtCpu" Text="—" Style="{StaticResource MiBig}" Foreground="{DynamicResource ThAccentIcon}"/>
+                            <TextBlock Text="%" Foreground="{DynamicResource ThAccentIcon}" FontSize="11" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"
                                        VerticalAlignment="Bottom" Margin="1,0,0,4"/>
                         </StackPanel>
@@ -99,8 +99,8 @@
                     <StackPanel>
                         <TextBlock Text="RAM" Style="{StaticResource MiCap}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                            <TextBlock x:Name="TxtRam" Text="—" Style="{StaticResource MiBig}" Foreground="#C08CF0"/>
-                            <TextBlock Text="%" Foreground="#C08CF0" FontSize="11" FontWeight="Bold"
+                            <TextBlock x:Name="TxtRam" Text="—" Style="{StaticResource MiBig}" Foreground="{DynamicResource ThViolet}"/>
+                            <TextBlock Text="%" Foreground="{DynamicResource ThViolet}" FontSize="11" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"
                                        VerticalAlignment="Bottom" Margin="1,0,0,4"/>
                         </StackPanel>
@@ -115,8 +115,8 @@
                     <StackPanel>
                         <TextBlock Text="GPU" Style="{StaticResource MiCap}"/>
                         <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                            <TextBlock x:Name="TxtGpu" Text="—" Style="{StaticResource MiBig}" Foreground="#2EC46A"/>
-                            <TextBlock Text="%" Foreground="#2EC46A" FontSize="11" FontWeight="Bold"
+                            <TextBlock x:Name="TxtGpu" Text="—" Style="{StaticResource MiBig}" Foreground="{DynamicResource ThOk}"/>
+                            <TextBlock Text="%" Foreground="{DynamicResource ThOk}" FontSize="11" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"
                                        VerticalAlignment="Bottom" Margin="1,0,0,4"/>
                         </StackPanel>
@@ -161,7 +161,7 @@
                     <!-- Débit ↓ / ↑ -->
                     <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <TextBlock Text="&#x2193; " Foreground="#2EC46A" FontSize="11" FontWeight="Bold"
+                            <TextBlock Text="&#x2193; " Foreground="{DynamicResource ThOk}" FontSize="11" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtDown" Text="—" Foreground="{DynamicResource ThTextBody}"
                                        FontSize="11.5" FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
@@ -169,7 +169,7 @@
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
-                            <TextBlock Text="&#x2191; " Foreground="#5BA0FF" FontSize="11" FontWeight="Bold"
+                            <TextBlock Text="&#x2191; " Foreground="{DynamicResource ThAccentIcon}" FontSize="11" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtUp" Text="—" Foreground="{DynamicResource ThTextBody}"
                                        FontSize="11.5" FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>

@@ -215,8 +215,8 @@
                             Cursor="SizeAll">
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
-                                       FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.3.9"
+                                       FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/></TextBlock>
+                            <TextBlock x:Name="TxtVersion" Text="v1.4.0"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -247,7 +247,7 @@
                             <!-- Sous-items Optimisations -->
                             <Border x:Name="OptGroupPanel"
                                     Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
@@ -288,7 +288,7 @@
                                     Click="BtnNavDiagGroup_Click"/>
                             <Border x:Name="DiagGroupPanel"
                                     Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
@@ -315,7 +315,7 @@
                                     Click="BtnNavToolsGroup_Click"/>
                             <Border x:Name="ToolsGroupPanel"
                                     Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
@@ -338,7 +338,7 @@
                                     Click="BtnNavMonGroup_Click"/>
                             <Border x:Name="MonGroupPanel"
                                     Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThSelection}"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
@@ -543,7 +543,7 @@
                 <!-- Logo, sobre (pas de glow) -->
                 <TextBlock HorizontalAlignment="Center" FontSize="34" FontWeight="Bold"
                            FontFamily="{StaticResource AppFont}">
-                    <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/>
+                    <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/>
                 </TextBlock>
 
                 <TextBlock x:Name="TxtUpdTitle" Text="Mise &#224; jour"
@@ -556,7 +556,7 @@
                            FontFamily="{StaticResource AppFont}" FontSize="13">
                     <Run x:Name="RunUpdFrom" Foreground="{DynamicResource ThTextDim}"/><Run
                          Text="   &#x2192;   " Foreground="{DynamicResource ThTextDim}"/><Run
-                         x:Name="RunUpdTo" FontWeight="SemiBold" Foreground="#7C9EF8"/>
+                         x:Name="RunUpdTo" FontWeight="SemiBold" Foreground="{DynamicResource ThAccentIcon}"/>
                 </TextBlock>
 
                 <!-- Carte « Nouveautés » plate : voile très léger + liseré 1px, sans ombre -->
@@ -630,11 +630,11 @@
                 <TextBlock HorizontalAlignment="Center" Margin="0,18,0,0"
                            FontFamily="{StaticResource AppFont}" FontSize="11"
                            Foreground="{DynamicResource ThTextDim}">
-                    <Run Text="&#x2713;" Foreground="#2EC46A"/><Run Text=" R&#233;glages conserv&#233;s"/>
+                    <Run Text="&#x2713;" Foreground="{DynamicResource ThOk}"/><Run Text=" R&#233;glages conserv&#233;s"/>
                     <Run Text="   &#183;   "/>
-                    <Run Text="&#x2713;" Foreground="#2EC46A"/><Run Text=" Int&#233;grit&#233; v&#233;rifi&#233;e"/>
+                    <Run Text="&#x2713;" Foreground="{DynamicResource ThOk}"/><Run Text=" Int&#233;grit&#233; v&#233;rifi&#233;e"/>
                     <Run Text="   &#183;   "/>
-                    <Run Text="&#x2713;" Foreground="#2EC46A"/><Run Text=" Red&#233;marrage automatique"/>
+                    <Run Text="&#x2713;" Foreground="{DynamicResource ThOk}"/><Run Text=" Red&#233;marrage automatique"/>
                 </TextBlock>
 
                 <!-- Boutons : Plus tard (texte) + Continuer (accent), alignés à droite de la zone -->

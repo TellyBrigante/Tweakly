@@ -32,11 +32,11 @@ namespace Optimisation_Tool.Pages
         {
             return (value?.ToString() ?? "") switch
             {
-                var s when s.StartsWith("✓") => new SolidColorBrush(Color.FromRgb(0x2E, 0x9A, 0x52)),
-                var s when s.StartsWith("✗") => new SolidColorBrush(Color.FromRgb(0xC4, 0x2B, 0x1C)),
-                "En cours…"                  => new SolidColorBrush(Color.FromRgb(0x25, 0x6D, 0xCC)),
-                "En attente"                 => new SolidColorBrush(Color.FromRgb(0xB4, 0xBB, 0xE0)),
-                _                            => new SolidColorBrush(Color.FromRgb(0x3C, 0x44, 0x6A)),
+                var s when s.StartsWith("✓") => ThemeManager.Brush("ThOk"),
+                var s when s.StartsWith("✗") => ThemeManager.Brush("ThCrit"),
+                "En cours…"                  => ThemeManager.Brush("ThAccentIcon"),
+                "En attente"                 => ThemeManager.Brush("ThTextDim"),
+                _                            => ThemeManager.Brush("ThTextBody"),
             };
         }
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
@@ -174,13 +174,13 @@ namespace Optimisation_Tool.Pages
         {
             btn.Background = active
                 ? new SolidColorBrush(Color.FromRgb(0x18, 0x70, 0xCC))
-                : new SolidColorBrush(Color.FromRgb(0x2E, 0x35, 0x59));
+                : ThemeManager.Brush("ThSecBtn");
             btn.Foreground = active
                 ? new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFF))
-                : new SolidColorBrush(Color.FromRgb(0xB6, 0xBE, 0xE4));
+                : ThemeManager.Brush("ThTextNav");
             btn.BorderBrush = active
                 ? new SolidColorBrush(Color.FromRgb(0x18, 0x70, 0xCC))
-                : new SolidColorBrush(Color.FromRgb(0x3D, 0x45, 0x6E));
+                : ThemeManager.Brush("ThBorder");
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -218,7 +218,7 @@ namespace Optimisation_Tool.Pages
                 dot.BorderBrush = new SolidColorBrush(Color.FromRgb(0x28, 0xA0, 0x50));
                 num.Text = "✓";
                 num.Foreground = Brushes.White;
-                lbl.Foreground = new SolidColorBrush(Color.FromRgb(0x28, 0xA0, 0x50));
+                lbl.Foreground = ThemeManager.Brush("ThOk");
             }
             else if (_step == stepN)
             {
@@ -227,16 +227,16 @@ namespace Optimisation_Tool.Pages
                 dot.BorderBrush = new SolidColorBrush(Color.FromRgb(0x25, 0x80, 0xE0));
                 num.Text = stepN.ToString();
                 num.Foreground = Brushes.White;
-                lbl.Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0xE0, 0xF6));
+                lbl.Foreground = ThemeManager.Brush("ThTextTitle");
             }
             else
             {
-                // Futur — gris
-                dot.Background = new SolidColorBrush(Color.FromRgb(0x0E, 0x11, 0x28));
-                dot.BorderBrush = new SolidColorBrush(Color.FromRgb(0x3D, 0x45, 0x6E));
+                // Futur — gris (thémé : neutre dans les deux modes)
+                dot.Background = ThemeManager.Brush("ThTrack");
+                dot.BorderBrush = ThemeManager.Brush("ThBorder");
                 num.Text = stepN.ToString();
-                num.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xCC));
-                lbl.Foreground = new SolidColorBrush(Color.FromRgb(0x9C, 0xA3, 0xCC));
+                num.Foreground = ThemeManager.Brush("ThTextDim");
+                lbl.Foreground = ThemeManager.Brush("ThTextDim");
             }
         }
 
@@ -244,7 +244,7 @@ namespace Optimisation_Tool.Pages
         {
             line.Background = _step >= activatesAtStep
                 ? new SolidColorBrush(Color.FromRgb(0x1E, 0x7A, 0x3C))
-                : new SolidColorBrush(Color.FromRgb(0x3D, 0x45, 0x6E));
+                : ThemeManager.Brush("ThBorder");
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -738,14 +738,14 @@ namespace Optimisation_Tool.Pages
             if (zipOk)
             {
                 TxtZipTitle.Text = "✓  ZIP prêt !";
-                TxtZipTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
+                TxtZipTitle.Foreground = ThemeManager.Brush("ThOk");
                 TxtZipPath.Text        = _zipPath;
                 _main.Log($"Pack Réinstallation : ZIP créé → {_zipPath}");
             }
             else
             {
                 TxtZipTitle.Text = "✗  Erreur ZIP";
-                TxtZipTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0x50, 0x3C));
+                TxtZipTitle.Foreground = ThemeManager.Brush("ThCrit");
                 TxtZipPath.Text        = $"Fichiers dans : {_zipPath}";
             }
             _main.ClearTaskbarProgress();
@@ -782,7 +782,7 @@ namespace Optimisation_Tool.Pages
 
             _zipPath = dlg.FileName;
             TxtPickedZip.Text = dlg.FileName;
-            TxtPickedZip.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0x9A, 0x52));
+            TxtPickedZip.Foreground = ThemeManager.Brush("ThOk");
             TxtPickedZip.FontStyle = FontStyles.Normal;
             BtnNextR1.IsEnabled = true;
         }
@@ -851,7 +851,7 @@ namespace Optimisation_Tool.Pages
             _cts = new CancellationTokenSource();
             GoToStep(4);
             TxtInstTitle.Text = "Installation en cours…";
-            TxtInstTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0xE0, 0xF6));
+            TxtInstTitle.Foreground = ThemeManager.Brush("ThTextTitle");
             TxtInstStatus.Text = $"0 / {toInstall.Count}";
             SetBar(BarInst, 0, toInstall.Count);
             BtnCancelInst.IsEnabled = true;
@@ -903,22 +903,22 @@ namespace Optimisation_Tool.Pages
             if (_cts.Token.IsCancellationRequested)
             {
                 TxtInstTitle.Text       = $"Annulé — {done} / {toInstall.Count} traitée(s).";
-                TxtInstTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xC4, 0x2B, 0x1C));
+                TxtInstTitle.Foreground = ThemeManager.Brush("ThCrit");
             }
             else if (failed == 0)
             {
                 TxtInstTitle.Text       = "✓  Tout est installé !";
-                TxtInstTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x2E, 0xCC, 0x71));
+                TxtInstTitle.Foreground = ThemeManager.Brush("ThOk");
             }
             else if (succeeded == 0)
             {
                 TxtInstTitle.Text       = $"✗  Échec — {failed} application(s) non installée(s).";
-                TxtInstTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xC4, 0x2B, 0x1C));
+                TxtInstTitle.Foreground = ThemeManager.Brush("ThCrit");
             }
             else
             {
                 TxtInstTitle.Text       = $"⚠  Partiel — {succeeded} OK, {failed} échec(s).";
-                TxtInstTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xCC, 0x80, 0x20));
+                TxtInstTitle.Foreground = ThemeManager.Brush("ThWarn");
             }
 
             TxtInstApp.Text         = "";

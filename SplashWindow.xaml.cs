@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -19,6 +20,44 @@ namespace Optimisation_Tool
         {
             InitializeComponent();
             try { TxtSplashVersion.Text = "v" + Pages.PageReglages.AppVersion; } catch { }
+        }
+
+        /// <summary>
+        /// Place le splash sur le moniteur où se trouve la SOURIS (celui que l'utilisateur
+        /// utilise), pas le primaire. MainWindow se centrera ensuite sur le splash (cf.
+        /// OpenMainAndClose) → splash + app sur le même écran, celui de la souris.
+        /// </summary>
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                var src = System.Windows.PresentationSource.FromVisual(this);
+                double sx = src?.CompositionTarget?.TransformToDevice.M11 ?? 1.0;
+                double sy = src?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
+                if (GetCursorPos(out POINT pt))
+                {
+                    IntPtr mon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+                    var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                    if (GetMonitorInfo(mon, ref mi))
+                    {
+                        double waLeft = mi.rcWork.left / sx, waTop = mi.rcWork.top / sy;
+                        double waW = (mi.rcWork.right - mi.rcWork.left) / sx;
+                        double waH = (mi.rcWork.bottom - mi.rcWork.top) / sy;
+                        Left = waLeft + (waW - Width) / 2.0;
+                        Top  = waTop + (waH - Height) / 2.0;
+                        return;
+                    }
+                }
+            }
+            catch { }
+            // Repli : centré sur l'écran primaire (l'ancien comportement).
+            try
+            {
+                Left = (SystemParameters.PrimaryScreenWidth - Width) / 2.0;
+                Top  = (SystemParameters.PrimaryScreenHeight - Height) / 2.0;
+            }
+            catch { }
         }
 
         /// <summary>
@@ -94,6 +133,23 @@ namespace Optimisation_Tool
             try
             {
                 var main = new MainWindow();
+
+                // MÊME ÉCRAN que le splash : MainWindow n'a pas de position définie → Windows
+                // l'ouvrait à sa position par défaut, souvent sur un AUTRE moniteur que le splash
+                // (centré primaire). On la centre sur le centre du splash → elle suit le splash,
+                // quel que soit l'écran. (Mêmes coords DIP, même moniteur → pas de souci de DPI.)
+                try
+                {
+                    double cx = Left + Width / 2.0, cy = Top + Height / 2.0;
+                    if (!double.IsNaN(cx) && !double.IsNaN(cy) && main.Width > 0 && main.Height > 0)
+                    {
+                        main.WindowStartupLocation = WindowStartupLocation.Manual;
+                        main.Left = cx - main.Width / 2.0;
+                        main.Top  = cy - main.Height / 2.0;
+                    }
+                }
+                catch { }
+
                 Application.Current.MainWindow = main;   // AVANT Close() : l'app ne doit pas s'éteindre
                 main.Show();
 
@@ -121,5 +177,15 @@ namespace Optimisation_Tool
                 try { Close(); } catch { }
             }
         }
+
+        // ── Moniteur sous le curseur ──
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+        [StructLayout(LayoutKind.Sequential)] private struct POINT { public int x, y; }
+        [StructLayout(LayoutKind.Sequential)] private struct RECT { public int left, top, right, bottom; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+        [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT p);
+        [DllImport("user32.dll")] private static extern IntPtr MonitorFromPoint(POINT p, uint flags);
+        [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO mi);
     }
 }

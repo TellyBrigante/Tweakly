@@ -279,7 +279,7 @@ namespace Optimisation_Tool.Pages
                 FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5, FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Top,
             };
-            if (accent) lbl.Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+            if (accent) lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThAccentIcon");
             else        lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
             sp.Children.Add(lbl);
             sp.Children.Add(Tb(value, "ThTextBody", 12.5, wrap: true, maxWidth: 720));
@@ -438,25 +438,27 @@ namespace Optimisation_Tool.Pages
             };
             if (!string.IsNullOrEmpty(glyph))
             {
-                sp.Children.Add(new TextBlock
+                var gl = new TextBlock
                 {
                     Text       = glyph,
                     FontFamily = new FontFamily("Segoe MDL2 Assets"),
                     FontSize   = 13,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
                     Margin     = new Thickness(0, 0, 8, 0),
                     VerticalAlignment = VerticalAlignment.Center,
-                });
+                };
+                gl.SetResourceReference(TextBlock.ForegroundProperty, "ThAccentIcon");
+                sp.Children.Add(gl);
             }
-            sp.Children.Add(new TextBlock
+            var lblTb = new TextBlock
             {
                 Text       = label,
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 FontSize   = 12.5,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
                 VerticalAlignment = VerticalAlignment.Center,
-            });
+            };
+            lblTb.SetResourceReference(TextBlock.ForegroundProperty, "ThAccentIcon");
+            sp.Children.Add(lblTb);
             return sp;
         }
 
@@ -503,9 +505,9 @@ namespace Optimisation_Tool.Pages
                     FontFamily = (FontFamily)FindResource("AppFont"),
                     FontSize   = 12.5,
                     FontWeight = FontWeights.SemiBold,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
                     VerticalAlignment = VerticalAlignment.Top,
                 };
+                num.SetResourceReference(TextBlock.ForegroundProperty, "ThAccentIcon");
                 Grid.SetColumn(num, 0); row.Children.Add(num);
 
                 var txt = Tb(step, "ThTextBody", 12.5, wrap: true);

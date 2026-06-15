@@ -86,6 +86,11 @@ namespace Optimisation_Tool.Helpers
             public string PresentMode = "";
             public bool PresentModeOptimal;
             public double CpuGlobalAtDropsPct;   // % CPU global médian au moment des drops (NaN si pas de sample)
+            // Temps passé SOUS la normale (médiane) de l'user — le vrai ressenti compétitif :
+            // descendre de sa médiane se SENT, d'autant plus que la chute est profonde.
+            public double FracBelow90;           // fraction de frames sous 90 % de la médiane (chute notable)
+            public double FracBelow80;           // sous 80 % (chute marquée)
+            public double FracBelow70;           // sous 70 % (chute sévère)
             public List<Drop> Drops = new();
             public List<Recommendation> Recommendations = new();
             public List<ChartPoint> Chart = new();
@@ -161,6 +166,10 @@ namespace Optimisation_Tool.Helpers
             double mean = ft.Average();
             r.FpsAvg = 1000.0 / mean;
             r.FpsP50 = 1000.0 / r.FrametimeP50Ms;
+            // Seuil de référence = 90 % de TA médiane (ta normale), pas un chiffre absolu (144).
+            // En dessous = une chute qui se ressent en compétitif. Aligne tout l'UI (ligne seuil
+            // du graphe, compteur « frames sous X », couleurs) sur ce que l'user ressent vraiment.
+            r.CompetitiveFps = Math.Max(1, (int)Math.Round(r.FpsP50 * 0.90));
             r.FpsOnePctLow = 1000.0 / r.FrametimeP99Ms;
             r.FpsZeroOnePctLow = 1000.0 / Pct(ft, 0.999);
 
@@ -176,12 +185,22 @@ namespace Optimisation_Tool.Helpers
             var inp = frames.Where(f => !double.IsNaN(f.InputLatencyMs) && f.InputLatencyMs > 0).ToArray();
             r.InputLatencyAvgMs = inp.Length >= 30 ? inp.Average(f => f.InputLatencyMs) : double.NaN;
 
-            // Drops : par-frame + creux soutenus (les 2 sont prouvés par la donnée)
+            // Temps passé SOUS la normale (médiane) — strict compétitif : descendre de sa propre
+            // médiane SE SENT. Fraction de frames sous 90/80/70 % de la médiane.
+            if (ft.Length > 0)
+            {
+                r.FracBelow90 = ft.Count(x => x > r.FrametimeP50Ms / 0.90) / (double)ft.Length;
+                r.FracBelow80 = ft.Count(x => x > r.FrametimeP50Ms / 0.80) / (double)ft.Length;
+                r.FracBelow70 = ft.Count(x => x > r.FrametimeP50Ms / 0.70) / (double)ft.Length;
+            }
+
+            // Drops : freezes par-frame (stutters) + CREUX compétitifs (sous 90 % de la médiane,
+            // soutenus ~150 ms = assez pour se voir). On compte TOUT ce qui se ressent, sans lisser.
             double dropThr = Math.Max(r.FrametimeP50Ms * DropMultiplier, DropMinMs);
             var byFrame = frames.Where(f => f.FrameTimeMs > dropThr).Select(Classify).ToList();
-            var sustained = DetectSustained(frames, r.FrametimeP50Ms)
-                .Where(s => !byFrame.Any(d => Math.Abs(d.TimeMs - s.TimeMs) < 1000)).ToList();
-            r.Drops = byFrame.Concat(sustained).OrderBy(d => d.TimeMs).ToList();
+            var dips = DetectDips(frames, r.FrametimeP50Ms)
+                .Where(s => !byFrame.Any(d => Math.Abs(d.TimeMs - s.TimeMs) < 250)).ToList();
+            r.Drops = byFrame.Concat(dips).OrderBy(d => d.TimeMs).ToList();
 
             // Shader-comp : UNIQUEMENT si décroissance d'amplitude prouvée en début de session
             MarkShaderCompile(r.Drops);
@@ -228,35 +247,47 @@ namespace Optimisation_Tool.Helpers
         }
 
         /// <summary>Creux soutenu : fenêtre 1 s dont le fps moyen tombe < 70 % du fps de référence.</summary>
-        private static List<Drop> DetectSustained(List<FrameRecord> frames, double p50Ms)
+        // Seuils de creux compétitifs, RELATIFS à la médiane de l'user (sa "normale").
+        private const double DipFrac = 0.90;   // sous 90 % de la médiane = creux qui se ressent
+        private const double DipMinMs = 150;   // soutenu assez longtemps pour être perçu
+
+        /// <summary>
+        /// Creux COMPÉTITIFS : runs de frames où le fps tombe sous 90 % de la médiane (la normale
+        /// de l'user), soutenus ≥ ~150 ms. Sur du haut framerate compétitif, descendre de 319 à
+        /// 287 ou 240 SE RESSENT et fait perdre des duels — on les compte TOUS. Sévérité = le pire
+        /// fps atteint dans le creux (FrameTimeMs = pire frame du run).
+        /// </summary>
+        private static List<Drop> DetectDips(List<FrameRecord> frames, double p50Ms)
         {
             var res = new List<Drop>();
-            if (frames.Count < 30 || p50Ms <= 0) return res;
-            double minFps = (1000.0 / p50Ms) * 0.70;
+            if (frames.Count < 10 || p50Ms <= 0) return res;
+            double dipFtThr = p50Ms / DipFrac;   // frametime au-dessus = on est sous 90 % du fps médian
             int i = 0;
             while (i < frames.Count)
             {
-                double t0 = frames[i].TimeMs, t1 = t0 + 1000;
-                int j = i; while (j < frames.Count && frames[j].TimeMs <= t1) j++;
-                int cnt = j - i;
-                if (cnt >= 10)
+                if (frames[i].FrameTimeMs <= dipFtThr) { i++; continue; }
+                int j = i, n = 0, grace = 0;
+                double tStart = frames[i].TimeMs, sumFt = 0, worstFt = 0, cpu = 0, gpu = 0;
+                while (j < frames.Count)
                 {
-                    double wMs = frames[j - 1].TimeMs - t0;
-                    double fps = wMs > 100 ? 1000.0 * cnt / wMs : 999;
-                    if (fps < minFps)
-                    {
-                        var win = frames.GetRange(i, cnt);
-                        double avgFt = win.Average(f => f.FrameTimeMs);
-                        double cpuAvg = win.Where(f => !double.IsNaN(f.CpuBusyMs)).Select(f => f.CpuBusyMs).DefaultIfEmpty(0).Average();
-                        double gpuAvg = win.Where(f => !double.IsNaN(f.GpuBusyMs)).Select(f => f.GpuBusyMs).DefaultIfEmpty(0).Average();
-                        var d = new Drop { TimeMs = (t0 + frames[j - 1].TimeMs) / 2, FrameTimeMs = avgFt, CpuBusyMs = cpuAvg, GpuBusyMs = gpuAvg };
-                        double c = avgFt > 0 ? cpuAvg / avgFt : 0, g = avgFt > 0 ? gpuAvg / avgFt : 0;
-                        d.Cause = c >= 0.70 ? DropCause.CpuBound : g >= 0.70 ? DropCause.GpuBound : DropCause.Mixed;
-                        res.Add(d);
-                        i = j; continue;
-                    }
+                    if (frames[j].FrameTimeMs <= dipFtThr) { if (++grace > 2) break; }
+                    else grace = 0;
+                    sumFt += frames[j].FrameTimeMs;
+                    if (frames[j].FrameTimeMs > worstFt) worstFt = frames[j].FrameTimeMs;
+                    if (!double.IsNaN(frames[j].CpuBusyMs)) cpu += frames[j].CpuBusyMs;
+                    if (!double.IsNaN(frames[j].GpuBusyMs)) gpu += frames[j].GpuBusyMs;
+                    n++; j++;
                 }
-                i = j > i ? j : i + 1;
+                double durMs = frames[Math.Min(j, frames.Count) - 1].TimeMs - tStart;
+                if (durMs >= DipMinMs && n >= 4)
+                {
+                    double avgFt = sumFt / n, cpuAvg = cpu / n, gpuAvg = gpu / n;
+                    var d = new Drop { TimeMs = tStart + durMs / 2, FrameTimeMs = worstFt, CpuBusyMs = cpuAvg, GpuBusyMs = gpuAvg };
+                    double c = avgFt > 0 ? cpuAvg / avgFt : 0, g = avgFt > 0 ? gpuAvg / avgFt : 0;
+                    d.Cause = c >= 0.70 ? DropCause.CpuBound : g >= 0.70 ? DropCause.GpuBound : DropCause.Mixed;
+                    res.Add(d);
+                }
+                i = Math.Max(j, i + 1);
             }
             return res;
         }
@@ -363,7 +394,7 @@ namespace Optimisation_Tool.Helpers
 
             if (!alreadyExplained)
             {
-                double compFt = 1000.0 / Math.Max(1, r.CompetitiveFps);
+                double compFt = r.FrametimeP50Ms / 0.90;   // creux = sous 90 % de la médiane (strict compétitif)
                 if (runtime.Count == 0)
                 {
                     list.Add(new Recommendation
@@ -378,12 +409,12 @@ namespace Optimisation_Tool.Helpers
                     var below = runtime.Where(d => d.FrameTimeMs > compFt).ToList();
                     double worstFt = runtime.Max(d => d.FrameTimeMs);
                     int worstFps = (int)Math.Round(1000.0 / worstFt);
-                    if (below.Count == 0 && r.FpsZeroOnePctLow >= r.CompetitiveFps)
+                    if (below.Count == 0 && r.FrametimeCvPct <= 8)
                     {
                         list.Add(new Recommendation
                         {
-                            Title = "Session TOP — aucune action requise",
-                            Explanation = $"Tes {runtime.Count} drops restent tous au-dessus du seuil compétitif de {r.CompetitiveFps} fps (pire : {worstFps} fps inst.). 0,1 % low à {r.FpsZeroOnePctLow:0} fps. Setup stable pour ce jeu.",
+                            Title = "Session propre — aucune action requise",
+                            Explanation = $"Aucune chute notable sous ta normale (sous {r.FpsP50 * 0.90:0} fps, soit 90 % de ta médiane de {r.FpsP50:0} fps) et frametime stable (CV {r.FrametimeCvPct:0} %). 0,1 % low à {r.FpsZeroOnePctLow:0} fps. Setup propre pour ce jeu.",
                             Severity = RecoSeverity.Info,
                         });
                     }
@@ -485,20 +516,29 @@ namespace Optimisation_Tool.Helpers
         // ───────────────────────── verdict + score ─────────────────────────
         private static string BuildVerdict(Report r, List<Drop> runtime)
         {
-            // Mène avec la RÉGULARITÉ (le ressenti dominant en haut framerate), exprimée
-            // par rapport à la propre médiane de l'utilisateur, pas un chiffre absolu.
-            string reg = r.FrametimeCvPct <= 8 ? "frametime très régulier"
-                       : r.FrametimeCvPct <= 14 ? "frametime un peu irrégulier"
-                       : r.FrametimeCvPct <= 22 ? "frametime irrégulier (jitter perceptible)"
-                       : "frametime instable";
-            string band = $"{r.FpsP50:0} fps médian, oscille entre {r.PerceivedFpsLow:0} et {r.PerceivedFpsHigh:0} fps (CV {r.FrametimeCvPct:0} %)";
+            // Mène avec les CHUTES relatives à la propre médiane de l'user (sa normale) : en
+            // compétitif, descendre de sa médiane SE RESSENT — on ne lisse rien, on le nomme.
+            string reg = r.FrametimeCvPct <= 6 ? "frametime stable"
+                       : r.FrametimeCvPct <= 10 ? "frametime un peu instable"
+                       : r.FrametimeCvPct <= 16 ? "frametime instable"
+                       : "frametime très instable";
+            string band = $"{r.FpsP50:0} fps médian, plonge jusqu'à {r.PerceivedFpsLow:0} fps (CV {r.FrametimeCvPct:0} %)";
 
-            int deep = runtime.Count(d => d.FrameTimeMs > 0 && 1000.0 / d.FrameTimeMs < r.FpsP50 * 0.70);
-            string deepTail = deep > 0 ? $" {deep} creux marqués (sous {r.FpsP50 * 0.70:0} fps)." : "";
+            double med = r.FpsP50;
+            double FpsOf(Drop d) => d.FrameTimeMs > 0 ? 1000.0 / d.FrameTimeMs : med;
+            int dipsTot = runtime.Count(d => FpsOf(d) < med * 0.90);
+            int dipSev  = runtime.Count(d => FpsOf(d) < med * 0.72);
+            string hz = r.MonitorHz > 0 ? $"{r.MonitorHz} Hz" : "ton écran";
 
-            if (r.FrametimeCvPct <= 8 && deep == 0)
-                return $"Session TOP — {reg}. {band}.{deepTail}";
-            return $"{reg} — {band}.{deepTail}";
+            if (dipsTot == 0 && r.FrametimeCvPct <= 6)
+                return $"Session propre — {reg}. {band}. Aucune chute notable sous ta normale.";
+
+            string dipStr = dipsTot > 0
+                ? $" {dipsTot} chutes sous {med * 0.90:0} fps" +
+                  (dipSev > 0 ? $" dont {dipSev} sévères (sous {med * 0.72:0} fps)" : "") +
+                  $" — sur {hz} en compétitif, c'est ça qui se ressent et te coûte des duels."
+                : "";
+            return $"{reg} — {band}.{dipStr}";
         }
 
         private static int ScoreFor(Report r)
@@ -511,17 +551,15 @@ namespace Optimisation_Tool.Helpers
             //     CV ≤ 8 % = lisse (100), 8-25 % dégressif, ≥ 25 % = instable (0).
             int target = r.MonitorHz > 0 ? r.MonitorHz : Math.Max(1, r.CompetitiveFps);
             double levelScore = Math.Clamp(100.0 * r.FpsP50 / target, 0, 100);
-            // Régularité : CV ≤ 6 % = parfait, −4 pts par % au-delà. CV 16 % → 60.
-            double consistencyScore = Math.Clamp(100.0 - (r.FrametimeCvPct - 6.0) * 4.0, 0, 100);
-            // Le CV capture déjà le jitter ; on n'ajoute qu'une PETITE pénalité pour les
-            // creux VRAIMENT profonds (sous 40 % de la médiane = chute brutale), par minute.
-            double deepFps = r.FpsP50 * 0.40;
-            int deep = r.Drops.Count(d => d.Cause != DropCause.ShaderCompile
-                                        && d.FrameTimeMs > 0 && 1000.0 / d.FrameTimeMs < deepFps);
-            double minutes = Math.Max(0.5, r.DurationSec / 60.0);
-            double deepPenalty = Math.Min(12, (deep / minutes) * 0.5);
-            // Régularité 60 % du ressenti en haut framerate, niveau 40 %.
-            return Math.Clamp((int)Math.Round(0.4 * levelScore + 0.6 * consistencyScore - deepPenalty), 0, 100);
+            // Stabilité = régularité (CV) en barème STRICT compétitif (CV 4 %=100, 8 %=76,
+            // 12 %=52, 16 %=28) : descendre de sa médiane n'est PAS « acceptable ». PLUS une
+            // pénalité explicite pour le TEMPS passé profondément sous la normale (chutes
+            // marquées sous 80 %, sévères sous 70 %) — c'est ce qui coûte des duels.
+            double cvScore = Math.Clamp(100.0 - (r.FrametimeCvPct - 4.0) * 6.0, 0, 100);
+            double dipPenalty = Math.Clamp(r.FracBelow80 * 220 + r.FracBelow70 * 320, 0, 35);
+            double stability = Math.Clamp(cvScore - dipPenalty, 0, 100);
+            // Le ressenti compétitif = surtout NE PAS PLONGER (stabilité 70 %), le niveau 30 %.
+            return Math.Clamp((int)Math.Round(0.30 * levelScore + 0.70 * stability), 0, 100);
         }
 
         // ───────────────────────── utilitaires ─────────────────────────

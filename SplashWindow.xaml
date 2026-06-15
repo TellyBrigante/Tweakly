@@ -4,19 +4,20 @@
         Title="Tweakly"
         Width="420" Height="240"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        WindowStartupLocation="Manual" ResizeMode="NoResize"
         ShowInTaskbar="True" Topmost="True"
         Loaded="Window_Loaded"><!-- Topmost : après l'élévation UAC, Windows rend le
         foreground à explorer — le splash doit gagner SANS l'artillerie AttachThreadInput
         (qui vit dans MainWindow). Il est éphémère (~1,5-3,5 s), c'est le standard splash. -->
 
     <!-- ÉCRAN DE DÉMARRAGE (v1.3.5) : logo + étapes de chargement + barre shimmer
-         (DA validée). TOUJOURS sombre : le thème de l'utilisateur n'est pas encore
-         chargé à cet instant, et le navy est l'identité de marque.
+         (DA validée). THÉMÉ : App.OnStartup applique le thème enregistré AVANT d'afficher
+         le splash → DynamicResource Th* suit le mode clair/sombre. La barre bleue reste
+         saturée (lisible sur les deux thèmes).
          ⚠️ ANTI-CASSE MAJ : tout le code-behind est blindé — quel que soit l'échec,
          MainWindow s'ouvre (voir SplashWindow.xaml.cs). -->
-    <Border CornerRadius="16" Background="#2B3252"
-            BorderBrush="#3D456E" BorderThickness="1" Margin="14">
+    <Border CornerRadius="16" Background="{DynamicResource ThBg}"
+            BorderBrush="{DynamicResource ThBorder}" BorderThickness="1" Margin="14">
         <Border.Effect>
             <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="4" Opacity="0.45"/>
         </Border.Effect>
@@ -30,20 +31,20 @@
             <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <TextBlock HorizontalAlignment="Center" FontSize="32" FontWeight="Bold"
                            FontFamily="{StaticResource AppFont}">
-                    <Run Text="Tweak" Foreground="#E2E6FF"/><Run Text="ly" Foreground="#5BA0FF"/>
+                    <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/>
                 </TextBlock>
                 <TextBlock x:Name="TxtSplashVersion" Text=""
                            HorizontalAlignment="Center" Margin="0,6,0,0"
-                           FontFamily="Consolas" FontSize="11" Foreground="#9CA3CC"/>
+                           FontFamily="Consolas" FontSize="11" Foreground="{DynamicResource ThTextDim}"/>
             </StackPanel>
 
             <!-- Étape + barre de progression -->
             <StackPanel Grid.Row="1" Margin="28,0,28,24">
                 <TextBlock x:Name="TxtSplashStep" Text="Initialisation&#8230;"
                            FontFamily="{StaticResource AppFont}" FontSize="11.5"
-                           Foreground="#B6BEE4" Margin="0,0,0,8"/>
+                           Foreground="{DynamicResource ThTextNav}" Margin="0,0,0,8"/>
                 <Grid Height="6">
-                    <Border Background="#2A3358" CornerRadius="3"/>
+                    <Border Background="{DynamicResource ThTrack}" CornerRadius="3"/>
                     <Grid x:Name="SplashBar" ClipToBounds="True">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="0*"/>

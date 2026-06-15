@@ -290,7 +290,7 @@
                         <!-- Tweakly -->
                         <TextBlock FontFamily="{StaticResource AppFont}" FontSize="14" FontWeight="Bold"
                                    VerticalAlignment="Center">
-                            <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="#5BA0FF"/>
+                            <Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/>
                         </TextBlock>
                         <!-- × -->
                         <TextBlock Text=" &#xD7; " Foreground="{DynamicResource ThTextDim}"

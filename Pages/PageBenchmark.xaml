@@ -105,7 +105,7 @@
                              tweaks ont été appliqués depuis le dernier bench -->
                         <TextBlock x:Name="TxtRebenchHint" Visibility="Collapsed"
                                    TextWrapping="Wrap" Margin="0,6,0,0"
-                                   Foreground="#5BA0FF"
+                                   Foreground="{DynamicResource ThAccentIcon}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11.5" FontWeight="SemiBold"
                                    Text="&#x26A1; Des r&#233;glages ont &#233;t&#233; appliqu&#233;s depuis ce benchmark — relance-le pour mesurer le gain."/>
                     </StackPanel>
@@ -179,7 +179,7 @@
                                         <ColumnDefinition x:Name="CpuCol"     Width="0*"/>
                                         <ColumnDefinition x:Name="CpuColRest" Width="150*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" CornerRadius="2" Background="#3B82E0"/>
+                                    <Border Grid.Column="0" CornerRadius="2" Background="{DynamicResource ThAccentIcon}"/>
                                 </Grid>
                             </Grid>
                         </StackPanel>
@@ -203,7 +203,7 @@
                                         <ColumnDefinition x:Name="SysCol"     Width="0*"/>
                                         <ColumnDefinition x:Name="SysColRest" Width="100*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" CornerRadius="2" Background="#C08CF0"/>
+                                    <Border Grid.Column="0" CornerRadius="2" Background="{DynamicResource ThViolet}"/>
                                 </Grid>
                             </Grid>
                         </StackPanel>
@@ -227,7 +227,7 @@
                                         <ColumnDefinition x:Name="RamCol"     Width="0*"/>
                                         <ColumnDefinition x:Name="RamColRest" Width="100*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" CornerRadius="2" Background="#F08CB8"/>
+                                    <Border Grid.Column="0" CornerRadius="2" Background="{DynamicResource ThPink}"/>
                                 </Grid>
                             </Grid>
                         </StackPanel>
@@ -251,7 +251,7 @@
                                         <ColumnDefinition x:Name="NetCol"     Width="0*"/>
                                         <ColumnDefinition x:Name="NetColRest" Width="100*"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" CornerRadius="2" Background="#2EC46A"/>
+                                    <Border Grid.Column="0" CornerRadius="2" Background="{DynamicResource ThOk}"/>
                                 </Grid>
                             </Grid>
                         </StackPanel>
@@ -460,7 +460,7 @@
                                    Foreground="{DynamicResource ThTextDim}"
                                    FontFamily="{StaticResource AppFont}" FontSize="12"
                                    TextWrapping="Wrap" Margin="0,0,0,10"/>
-                        <Border x:Name="NoiseWarn" Background="#33F5C24A" BorderBrush="#F5C24A"
+                        <Border x:Name="NoiseWarn" Background="#33F5C24A" BorderBrush="{DynamicResource ThWarn}"
                                 BorderThickness="1" CornerRadius="8" Padding="12,8"
                                 Margin="0,0,0,14" Visibility="Collapsed">
                             <TextBlock Text="⚠ Activité système détectée — ferme tes apps avant de lancer pour un score fiable."

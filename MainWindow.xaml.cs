@@ -336,7 +336,7 @@ namespace Optimisation_Tool
                 return;
             }
 
-            var accent = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+            var accent = ThemeManager.Brush("ThAccentIcon");
             bool first = true;
             foreach (var raw in notes.Replace("\r\n", "\n").Split('\n'))
             {

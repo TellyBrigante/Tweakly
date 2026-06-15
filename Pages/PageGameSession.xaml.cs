@@ -68,6 +68,9 @@ namespace Optimisation_Tool.Pages
             _recStart = DateTime.UtcNow;
             RecOverlay.Visibility = Visibility.Visible;
             TxtRecElapsed.Text = "00:00";
+            LiveFps.Text = "—";
+            _fpsHist.Clear();
+            FpsSpark.Children.Clear();
             _tick?.Stop();
             _tick = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _tick.Tick += (_, _) =>
@@ -83,6 +86,9 @@ namespace Optimisation_Tool.Pages
         private static string Live(double v, string unit, string fmt = "0") =>
             double.IsNaN(v) ? "—" : v.ToString(fmt) + unit;
 
+        // Historique FPS LIVE pour la sparkline (fenêtre glissante ~2 min à 1 Hz).
+        private readonly List<double> _fpsHist = new();
+
         private void UpdateLiveTiles()
         {
             var s = _rec.LastSample;
@@ -90,9 +96,46 @@ namespace Optimisation_Tool.Pages
             LiveCpu.Text      = Live(s.CpuLoadPct, " %");
             LiveGpu.Text      = Live(s.GpuUsagePct, " %");
             LiveGpuClock.Text = Live(s.GpuCoreMhz, " MHz");
+            LiveGpuMem.Text   = Live(s.GpuMemMhz, " MHz");
             LiveGpuTemp.Text  = Live(s.GpuTempC, " °C");
             LiveVram.Text     = double.IsNaN(s.GpuVramUsedMB) ? "—" : (s.GpuVramUsedMB / 1024.0).ToString("0.0") + " Go";
             LiveRam.Text      = double.IsNaN(s.RamAvailMb) ? "—" : (s.RamAvailMb / 1024.0).ToString("0.0") + " Go";
+            LiveFps.Text      = double.IsNaN(s.Fps) ? "—" : s.Fps.ToString("0");
+
+            _fpsHist.Add(s.Fps);
+            while (_fpsHist.Count > 120) _fpsHist.RemoveAt(0);
+            DrawFpsSpark();
+        }
+
+        private void FpsSpark_SizeChanged(object sender, SizeChangedEventArgs e) => DrawFpsSpark();
+
+        // Sparkline FPS : tracée à partir du buffer roulant (déjà échantillonné, 0 coût supplémentaire).
+        private void DrawFpsSpark()
+        {
+            FpsSpark.Children.Clear();
+            double w = FpsSpark.ActualWidth, h = FpsSpark.ActualHeight;
+            if (w < 20 || h < 12) return;
+            var pts = _fpsHist.Where(v => !double.IsNaN(v) && v > 0).ToList();
+            if (pts.Count < 2) return;
+
+            double max = pts.Max(), min = pts.Min();
+            if (max - min < 1) { max += 5; min = Math.Max(0, min - 5); }
+            double range = max - min, pad = 4, plotH = h - 2 * pad;
+
+            var coll = new PointCollection();
+            int n = pts.Count;
+            for (int i = 0; i < n; i++)
+            {
+                double x = n == 1 ? 0 : i / (double)(n - 1) * w;
+                double y = pad + (max - pts[i]) / range * plotH;
+                coll.Add(new Point(x, y));
+            }
+            var poly = new System.Windows.Shapes.Polyline
+            {
+                StrokeThickness = 1.6, StrokeLineJoin = PenLineJoin.Round, Points = coll,
+            };
+            poly.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "ThAccentIcon");
+            FpsSpark.Children.Add(poly);
         }
 
         private async void BtnStopRec_Click(object sender, RoutedEventArgs e)
@@ -138,7 +181,7 @@ namespace Optimisation_Tool.Pages
             RenderChart();
 
             TxtScore.Text = r.Score.ToString();
-            TxtScore.Foreground = ScoreBrush(r.Score);
+            TxtScore.SetResourceReference(TextBlock.ForegroundProperty, ScoreRole(r.Score));
             TxtGameName.Text = r.GameDisplay;
             GameKnownBadge.Visibility = r.GameKnown ? Visibility.Visible : Visibility.Collapsed;
             TxtVerdict.Text = r.Verdict;
@@ -150,17 +193,15 @@ namespace Optimisation_Tool.Pages
             string regWord = r.FrametimeCvPct <= 8 ? "très régulier"
                            : r.FrametimeCvPct <= 14 ? "un peu irrégulier"
                            : r.FrametimeCvPct <= 22 ? "jitter perceptible" : "instable";
-            TxtRegularity.Foreground = r.FrametimeCvPct <= 8 ? (Brush)FindResource("ThOk")
-                                     : r.FrametimeCvPct <= 14 ? (Brush)FindResource("ThWarn")
-                                     : (Brush)FindResource("ThCrit");
+            TxtRegularity.SetResourceReference(TextBlock.ForegroundProperty,
+                r.FrametimeCvPct <= 8 ? "ThOk" : r.FrametimeCvPct <= 14 ? "ThWarn" : "ThCrit");
             TxtRegularityHint.Text = $"{regWord} · oscille {r.PerceivedFpsLow:0}–{r.PerceivedFpsHigh:0} fps";
             // PIRE FRAME : fps min réellement atteint (hors bordures déjà trimées) = ce que
             // l'utilisateur voit chuter en jeu, ≠ 0,1 % low qui est un seuil percentile.
             int worstFps = r.FrametimeMaxMs > 0 ? (int)Math.Round(1000.0 / r.FrametimeMaxMs) : 0;
             TxtWorstFps.Text = worstFps.ToString();
-            TxtWorstFps.Foreground = worstFps < r.CompetitiveFps * 0.5 ? (Brush)FindResource("ThCrit")
-                                   : worstFps < r.CompetitiveFps ? (Brush)FindResource("ThWarn")
-                                   : (Brush)FindResource("ThOk");
+            TxtWorstFps.SetResourceReference(TextBlock.ForegroundProperty,
+                worstFps < r.CompetitiveFps * 0.5 ? "ThCrit" : worstFps < r.CompetitiveFps ? "ThWarn" : "ThOk");
             int worstCount = r.Drops.Count(d => d.Cause != SessionAnalyzer.DropCause.ShaderCompile
                                              && 1000.0 / d.FrameTimeMs < r.CompetitiveFps);
             TxtWorstHint.Text = worstCount > 0 ? $"{worstCount} frames sous {r.CompetitiveFps} fps" : "le plus bas atteint en jeu";
@@ -168,12 +209,12 @@ namespace Optimisation_Tool.Pages
             if (r.PresentModeOptimal)
             {
                 TxtModeHint.Text = "présentation optimale, aucun compositeur dans le chemin";
-                TxtMode.Foreground = (Brush)FindResource("ThOk");
+                TxtMode.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
             }
             else if (!string.IsNullOrEmpty(r.PresentMode))
             {
                 TxtModeHint.Text = "compositeur Windows dans le chemin — voir le diagnostic";
-                TxtMode.Foreground = (Brush)FindResource("ThWarn");
+                TxtMode.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
             }
 
             // Recommandations
@@ -190,53 +231,53 @@ namespace Optimisation_Tool.Pages
 
         private Border BuildRecoCard(SessionAnalyzer.Recommendation reco)
         {
+            // Fond translucide : tint léger qui reste lisible sur les DEUX thèmes.
             string colorBg = reco.Severity switch
             {
                 SessionAnalyzer.RecoSeverity.Crit => "#33E05555",
                 SessionAnalyzer.RecoSeverity.Warn => "#33F5C24A",
                 _                                 => "#22315FA0",
             };
-            string colorBd = reco.Severity switch
+            // Accent (bordure + titre) = RÔLE de thème → assombri en clair (le rouge/jaune/bleu
+            // vifs étaient illisibles en mode clair) ET vivant au basculement de thème.
+            string accentRole = reco.Severity switch
             {
-                SessionAnalyzer.RecoSeverity.Crit => "#E05555",
-                SessionAnalyzer.RecoSeverity.Warn => "#F5C24A",
-                _                                 => "#5BA0FF",
-            };
-            string colorText = reco.Severity switch
-            {
-                SessionAnalyzer.RecoSeverity.Crit => "#FF8A8A",
-                SessionAnalyzer.RecoSeverity.Warn => "#F5C24A",
-                _                                 => "#8AC0FF",
+                SessionAnalyzer.RecoSeverity.Crit => "ThCrit",
+                SessionAnalyzer.RecoSeverity.Warn => "ThWarn",
+                _                                 => "ThAccentIcon",
             };
 
             var border = new Border
             {
                 Background = (Brush)new BrushConverter().ConvertFromString(colorBg)!,
-                BorderBrush = (Brush)new BrushConverter().ConvertFromString(colorBd)!,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(14, 10, 14, 12),
                 Margin = new Thickness(0, 0, 0, 8),
             };
+            border.SetResourceReference(Border.BorderBrushProperty, accentRole);
+
             var stack = new StackPanel();
-            stack.Children.Add(new TextBlock
+            var title = new TextBlock
             {
                 Text = reco.Title,
-                Foreground = (Brush)new BrushConverter().ConvertFromString(colorText)!,
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 FontSize = 13.5,
                 FontWeight = FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
-            });
-            stack.Children.Add(new TextBlock
+            };
+            title.SetResourceReference(TextBlock.ForegroundProperty, accentRole);
+            stack.Children.Add(title);
+            var expl = new TextBlock
             {
                 Text = reco.Explanation,
-                Foreground = (Brush)FindResource("ThTextBody"),
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 5, 0, 0),
-            });
+            };
+            expl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");
+            stack.Children.Add(expl);
             if (!string.IsNullOrEmpty(reco.ActionLabel) && !string.IsNullOrEmpty(reco.ActionTarget))
             {
                 var btn = new Button
@@ -291,12 +332,21 @@ namespace Optimisation_Tool.Pages
                 SessionAnalyzer.DropCause.DisplaySync   => "Synchro affichage",
                 _                                       => "Mixte",
             };
-            string causeColor = d.Cause switch
+            // Couleur de cause = RÔLE de thème (lisible en clair ET en sombre, vivant au toggle) ;
+            // le fond de la pilule reste un tint translucide fixe et discret.
+            string causeRole = d.Cause switch
             {
-                SessionAnalyzer.DropCause.CpuBound      => "#F5C24A",
-                SessionAnalyzer.DropCause.GpuBound      => "#FF8A8A",
-                SessionAnalyzer.DropCause.ShaderCompile => "#8AC0FF",
-                _                                       => "#A0A0A0",
+                SessionAnalyzer.DropCause.CpuBound      => "ThWarn",
+                SessionAnalyzer.DropCause.GpuBound      => "ThCrit",
+                SessionAnalyzer.DropCause.ShaderCompile => "ThAccentIcon",
+                _                                       => "ThTextDim",
+            };
+            string pillTint = d.Cause switch
+            {
+                SessionAnalyzer.DropCause.CpuBound      => "#22F5C24A",
+                SessionAnalyzer.DropCause.GpuBound      => "#22E05555",
+                SessionAnalyzer.DropCause.ShaderCompile => "#22315FA0",
+                _                                       => "#22A0A0A0",
             };
             int fps = (int)Math.Round(1000.0 / d.FrameTimeMs);
             string evidence = d.CulpritProcess != null
@@ -305,10 +355,10 @@ namespace Optimisation_Tool.Pages
 
             var border = new Border
             {
-                BorderBrush = (Brush)FindResource("ThBorder"),
                 BorderThickness = new Thickness(0, 0, 0, 1),
                 Padding = new Thickness(0, 8, 0, 8),
             };
+            border.SetResourceReference(Border.BorderBrushProperty, "ThBorder");
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
@@ -318,50 +368,51 @@ namespace Optimisation_Tool.Pages
             var txTime = new TextBlock
             {
                 Text = $"{d.TimeMs / 1000:0.#} s",
-                Foreground = (Brush)FindResource("ThTextDim"),
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            txTime.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
             Grid.SetColumn(txTime, 0);
             var txFt = new TextBlock
             {
                 Text = $"{d.FrameTimeMs:0.#} ms  ({fps} fps)",
-                Foreground = (Brush)FindResource("ThTextTitle"),
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 FontSize = 13,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            txFt.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
             Grid.SetColumn(txFt, 1);
+            var pillTxt = new TextBlock
+            {
+                Text = causeLabel,
+                FontFamily = (FontFamily)FindResource("AppFont"),
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+            };
+            pillTxt.SetResourceReference(TextBlock.ForegroundProperty, causeRole);
             var pill = new Border
             {
-                Background = (Brush)new BrushConverter().ConvertFromString("#22" + causeColor.Substring(1))!,
-                BorderBrush = (Brush)new BrushConverter().ConvertFromString(causeColor)!,
+                Background = (Brush)new BrushConverter().ConvertFromString(pillTint)!,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(8, 1, 8, 2),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
-                Child = new TextBlock
-                {
-                    Text = causeLabel,
-                    Foreground = (Brush)new BrushConverter().ConvertFromString(causeColor)!,
-                    FontFamily = (FontFamily)FindResource("AppFont"),
-                    FontSize = 11,
-                    FontWeight = FontWeights.SemiBold,
-                },
+                Child = pillTxt,
             };
+            pill.SetResourceReference(Border.BorderBrushProperty, causeRole);
             Grid.SetColumn(pill, 2);
             var txEv = new TextBlock
             {
                 Text = evidence,
-                Foreground = (Brush)FindResource("ThTextBody"),
                 FontFamily = (FontFamily)FindResource("AppFont"),
                 FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center,
                 TextWrapping = TextWrapping.Wrap,
             };
+            txEv.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");
             Grid.SetColumn(txEv, 3);
             grid.Children.Add(txTime); grid.Children.Add(txFt); grid.Children.Add(pill); grid.Children.Add(txEv);
             border.Child = grid;
@@ -378,12 +429,12 @@ namespace Optimisation_Tool.Pages
             {
                 var b = new Border
                 {
-                    BorderBrush = (Brush)FindResource("ThBorder"),
                     BorderThickness = new Thickness(0, 0, 0, 1),
                     Padding = new Thickness(0, 8, 0, 8),
                     Cursor = System.Windows.Input.Cursors.Hand,
                     Tag = r,
                 };
+                b.SetResourceReference(Border.BorderBrushProperty, "ThBorder");
                 b.MouseLeftButtonUp += (_, _) => ShowReport((SessionAnalyzer.Report)b.Tag);
                 var grid = new Grid();
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });
@@ -394,30 +445,30 @@ namespace Optimisation_Tool.Pages
                 var sc = new TextBlock
                 {
                     Text = r.Score.ToString(),
-                    Foreground = ScoreBrush(r.Score),
                     FontFamily = (FontFamily)FindResource("AppFont"),
                     FontSize = 20, FontWeight = FontWeights.Bold,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
+                sc.SetResourceReference(TextBlock.ForegroundProperty, ScoreRole(r.Score));
                 Grid.SetColumn(sc, 0);
                 var when = new TextBlock
                 {
                     Text = r.CapturedAtUtc.ToLocalTime().ToString("dd/MM HH:mm"),
-                    Foreground = (Brush)FindResource("ThTextDim"),
                     FontFamily = (FontFamily)FindResource("AppFont"),
                     FontSize = 11,
                     VerticalAlignment = VerticalAlignment.Center,
                 };
+                when.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
                 Grid.SetColumn(when, 1);
                 var info = new TextBlock
                 {
                     Text = $"{r.GameDisplay} — {(int)Math.Round(r.FpsAvg)} fps moy / pire {(r.FrametimeMaxMs > 0 ? (int)Math.Round(1000.0 / r.FrametimeMaxMs) : 0)} fps — {r.Drops.Count} drops",
-                    Foreground = (Brush)FindResource("ThTextBody"),
                     FontFamily = (FontFamily)FindResource("AppFont"),
                     FontSize = 12,
                     VerticalAlignment = VerticalAlignment.Center,
                     TextWrapping = TextWrapping.Wrap,
                 };
+                info.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");
                 Grid.SetColumn(info, 2);
                 grid.Children.Add(sc); grid.Children.Add(when); grid.Children.Add(info);
                 b.Child = grid;
@@ -437,11 +488,7 @@ namespace Optimisation_Tool.Pages
         }
 
         // ───────────────────────── couleurs score ─────────────────────────
-        private Brush ScoreBrush(int score)
-        {
-            string key = score >= 80 ? "ThOk" : (score >= 50 ? "ThWarn" : "ThCrit");
-            return (Brush)FindResource(key);
-        }
+        private static string ScoreRole(int score) => score >= 80 ? "ThOk" : (score >= 50 ? "ThWarn" : "ThCrit");
 
         // ───────────────────────── graphe frametime ─────────────────────────
         private void ChartCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => RenderChart();
@@ -470,10 +517,10 @@ namespace Optimisation_Tool.Pages
             double YfromFps(double fps) => topPad + (fpsTop - Math.Clamp(fps, fpsFloor, fpsTop)) / (fpsTop - fpsFloor) * plotH;
             double XfromT(double t) => leftPad + t / Math.Max(1e-6, tEnd) * plotW;
 
-            var blue   = (Brush)new BrushConverter().ConvertFromString("#5BA0FF")!;
-            var dim    = (Brush)FindResource("ThTextDim");
-            var amber  = (Brush)new BrushConverter().ConvertFromString("#F5C24A")!;
-            var font   = (FontFamily)FindResource("AppFont");
+            // Courbe = bleu signature (lisible sur les deux thèmes) ; grille/seuil/points =
+            // rôles de thème via SetResourceReference (jaune→amber foncé en clair, vivant au toggle).
+            var blue = (Brush)new BrushConverter().ConvertFromString("#5BA0FF")!;
+            var font = (FontFamily)FindResource("AppFont");
 
             // (1) Graduations FPS : valeurs « rondes » dédupliquées + espacées (≥ 18 px)
             //     pour éviter le chevauchement (bug 343/318 vu en réel).
@@ -488,9 +535,12 @@ namespace Optimisation_Tool.Pages
                 double y = YfromFps(fps);
                 if (Math.Abs(y - lastY) < 18) continue;      // anti-chevauchement vertical
                 lastY = y;
-                ChartCanvas.Children.Add(new System.Windows.Shapes.Line { X1 = leftPad, X2 = w, Y1 = y, Y2 = y,
-                    Stroke = dim, StrokeThickness = 0.5, StrokeDashArray = new DoubleCollection { 2, 4 }, Opacity = 0.28 });
-                var lbl = new TextBlock { Text = $"{fps}", Foreground = dim, FontFamily = font, FontSize = 9, Opacity = 0.7 };
+                var gl = new System.Windows.Shapes.Line { X1 = leftPad, X2 = w, Y1 = y, Y2 = y,
+                    StrokeThickness = 0.5, StrokeDashArray = new DoubleCollection { 2, 4 }, Opacity = 0.28 };
+                gl.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "ThTextDim");
+                ChartCanvas.Children.Add(gl);
+                var lbl = new TextBlock { Text = $"{fps}", FontFamily = font, FontSize = 9, Opacity = 0.7 };
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
                 Canvas.SetLeft(lbl, 4); Canvas.SetTop(lbl, Math.Clamp(y - 7, 0, h - 12));
                 ChartCanvas.Children.Add(lbl);
             }
@@ -499,9 +549,12 @@ namespace Optimisation_Tool.Pages
             if (r.CompetitiveFps > fpsFloor && r.CompetitiveFps < fpsTop)
             {
                 double y = YfromFps(r.CompetitiveFps);
-                ChartCanvas.Children.Add(new System.Windows.Shapes.Line { X1 = leftPad, X2 = w, Y1 = y, Y2 = y,
-                    Stroke = amber, StrokeThickness = 0.9, StrokeDashArray = new DoubleCollection { 4, 3 }, Opacity = 0.6 });
-                var lbl = new TextBlock { Text = $"seuil {r.CompetitiveFps} fps", Foreground = amber, FontFamily = font, FontSize = 9.5, Opacity = 0.9 };
+                var tl = new System.Windows.Shapes.Line { X1 = leftPad, X2 = w, Y1 = y, Y2 = y,
+                    StrokeThickness = 0.9, StrokeDashArray = new DoubleCollection { 4, 3 }, Opacity = 0.6 };
+                tl.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "ThWarn");
+                ChartCanvas.Children.Add(tl);
+                var lbl = new TextBlock { Text = $"seuil {r.CompetitiveFps} fps", FontFamily = font, FontSize = 9.5, Opacity = 0.9 };
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
                 lbl.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 Canvas.SetLeft(lbl, w - lbl.DesiredSize.Width - 6); Canvas.SetTop(lbl, Math.Clamp(y - 13, 0, h - 14));
                 ChartCanvas.Children.Add(lbl);
@@ -530,12 +583,13 @@ namespace Optimisation_Tool.Pages
                 if (tDrop < 0 || tDrop > tEnd) continue;
                 double fps = 1000.0 / d.FrameTimeMs;
                 double x = XfromT(tDrop), y = YfromFps(fps);
-                string color = d.Cause == SessionAnalyzer.DropCause.GpuBound ? "#FF8A8A" : "#F5C24A";
-                var b = (Brush)new BrushConverter().ConvertFromString(color)!;
-                var dot = new System.Windows.Shapes.Ellipse { Width = 8, Height = 8, Fill = b };
+                string markerRole = d.Cause == SessionAnalyzer.DropCause.GpuBound ? "ThCrit" : "ThWarn";
+                var dot = new System.Windows.Shapes.Ellipse { Width = 8, Height = 8 };
+                dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, markerRole);
                 Canvas.SetLeft(dot, x - 4); Canvas.SetTop(dot, y - 4);
                 ChartCanvas.Children.Add(dot);
-                var lbl = new TextBlock { Text = $"{fps:0}", Foreground = b, FontFamily = font, FontSize = 10.5, FontWeight = FontWeights.SemiBold };
+                var lbl = new TextBlock { Text = $"{fps:0}", FontFamily = font, FontSize = 10.5, FontWeight = FontWeights.SemiBold };
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, markerRole);
                 Canvas.SetLeft(lbl, Math.Clamp(x - 8, leftPad, w - 24)); Canvas.SetTop(lbl, Math.Clamp(y + 6, 0, h - 14));
                 ChartCanvas.Children.Add(lbl);
             }

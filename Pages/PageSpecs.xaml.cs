@@ -62,7 +62,7 @@ namespace Optimisation_Tool.Pages
         {
             if (btn.Template.FindName("Bg",  btn) is not Border bg)     return;
             if (btn.Template.FindName("Lbl", btn) is not TextBlock lbl) return;
-            bg.Background  = active ? new SolidColorBrush(Color.FromRgb(0x25, 0x4E, 0x8C))
+            bg.Background  = active ? ThemeManager.Brush("ThTabSel")
                                     : new SolidColorBrush(Colors.Transparent);
             lbl.Foreground = active ? new SolidColorBrush(Colors.White)
                                     : ThemeManager.Brush("ThTextDim");
@@ -325,7 +325,7 @@ namespace Optimisation_Tool.Pages
                 Color col; string status;
                 if (g.curGen == g.maxGen && g.curWidth == g.maxWidth)
                 {
-                    col = Color.FromRgb(0x2E, 0xC4, 0x6A);
+                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThOk");
                     status = $"OPTIMAL — le GPU tourne à pleine vitesse ({pct:F0} %)";
                 }
                 else if (g.atRest)
@@ -333,7 +333,7 @@ namespace Optimisation_Tool.Pages
                     // Driver Nvidia downclock le lien PCIe quand le GPU est inactif (ASPM). Comportement
                     // NORMAL : la vraie vitesse revient en charge. On l'affiche en bleu informatif,
                     // PAS en jaune alerte — sinon on inquiète l'utilisateur pour rien.
-                    col = Color.FromRgb(0x5B, 0xA0, 0xFF);
+                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThAccentIcon");
                     status = $"GPU AU REPOS — le lien descend à {GenName[g.curGen]} x{g.curWidth} pour économiser. " +
                              $"En charge, il revient à {GenName[g.maxGen]} x{g.maxWidth}.";
                     // On gonfle la barre au max pour refléter la capacité réelle, pas le repos
@@ -341,12 +341,12 @@ namespace Optimisation_Tool.Pages
                 }
                 else if (g.curGen < g.maxGen)
                 {
-                    col = Color.FromRgb(0xE0, 0x9A, 0x28);
+                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThWarn");
                     status = $"SLOT LIMITÉ — actuel {GenName[g.curGen]} x{g.curWidth}, le GPU supporte {GenName[g.maxGen]} x{g.maxWidth} ({pct:F0} %)";
                 }
                 else
                 {
-                    col = Color.FromRgb(0xE0, 0x9A, 0x28);
+                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThWarn");
                     status = $"VOIES RÉDUITES — x{g.curWidth} actuel / max x{g.maxWidth} ({pct:F0} %)";
                 }
                 CompatGpuFill.Background = new SolidColorBrush(col);
@@ -515,17 +515,17 @@ namespace Optimisation_Tool.Pages
                     item.Badge = $"{GenName[spec.gen]} x{spec.w}";
                     item.BadgeColor = FrozenBrush(spec.gen switch
                     {
-                        5 => Color.FromRgb(0xFF, 0xC8, 0x00),
-                        4 => Color.FromRgb(0x2E, 0xC4, 0x6A),
-                        3 => Color.FromRgb(0x3B, 0x82, 0xE0),
-                        _ => Color.FromRgb(0x9C, 0xA3, 0xCC),
+                        5 => Optimisation_Tool.Helpers.ThemeManager.C("ThWarn"),
+                        4 => Optimisation_Tool.Helpers.ThemeManager.C("ThOk"),
+                        3 => Optimisation_Tool.Helpers.ThemeManager.C("ThAccentIcon"),
+                        _ => Optimisation_Tool.Helpers.ThemeManager.C("ThTextDim"),
                     });
                 }
                 else
                 {
                     item.Info  = "Modèle non répertorié — consulter les specs du fabricant";
                     item.Badge = "?";
-                    item.BadgeColor = FrozenBrush(Color.FromRgb(0x9C, 0xA3, 0xCC));
+                    item.BadgeColor = FrozenBrush(Optimisation_Tool.Helpers.ThemeManager.C("ThTextDim"));
                 }
                 list.Add(item);
             }

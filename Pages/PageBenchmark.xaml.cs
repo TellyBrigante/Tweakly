@@ -547,17 +547,21 @@ namespace Optimisation_Tool.Pages
                 var bar = new Border { CornerRadius = new CornerRadius(4) };
                 if (kind == 2)
                 {
-                    bar.Background = new LinearGradientBrush(
-                        Color.FromRgb(0xD9, 0x6E, 0x28), Color.FromRgb(0xF5, 0xA6, 0x23), 0);
+                    // ORANGE thémé : vif en sombre, brûlé profond en clair (sinon criard sur le bleu-ardoise).
+                    var oc = Optimisation_Tool.Helpers.ThemeManager.C("ThOrange");
+                    var ocDk = Color.FromRgb((byte)(oc.R * 0.82), (byte)(oc.G * 0.82), (byte)(oc.B * 0.82));
+                    bar.Background = new LinearGradientBrush(ocDk, oc, 0);
                 }
                 else if (kind == 1)
                 {
-                    bar.Background = new LinearGradientBrush(
-                        Color.FromRgb(0x3B, 0x82, 0xE0), Color.FromRgb(0x5B, 0xA0, 0xFF), 0);
+                    var bc = Optimisation_Tool.Helpers.ThemeManager.C("ThLadderCpu");
+                    var bcDk = Color.FromRgb((byte)(bc.R * 0.74), (byte)(bc.G * 0.74), (byte)(bc.B * 0.88));
+                    bar.Background = new LinearGradientBrush(bcDk, bc, 0);
                 }
                 else
                 {
-                    bar.Background = new SolidColorBrush(Color.FromArgb(0x96, 0x4F, 0x6E, 0xA8));
+                    var sc = Optimisation_Tool.Helpers.ThemeManager.C("ThSteel");
+                    bar.Background = new SolidColorBrush(Color.FromArgb(0x96, sc.R, sc.G, sc.B));
                 }
                 Grid.SetColumn(bar, 0); barHost.Children.Add(bar);
                 row.Children.Add(barHost);
@@ -588,7 +592,7 @@ namespace Optimisation_Tool.Pages
                     VerticalAlignment   = VerticalAlignment.Center,
                     Margin = new Thickness(0, 0, 8, 0),
                 };
-                if (kind == 2) val.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0xA6, 0x23));
+                if (kind == 2) val.SetResourceReference(TextBlock.ForegroundProperty, "ThOrange");
                 else           val.SetResourceReference(TextBlock.ForegroundProperty, kind == 1 ? "ThTextTitle" : "ThTextNav");
                 row.Children.Add(val);
 
@@ -605,9 +609,9 @@ namespace Optimisation_Tool.Pages
                 Margin       = new Thickness(0, 8, 0, 0),
             };
             legend.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
-            var orange = new SolidColorBrush(Color.FromRgb(0xF5, 0xA6, 0x23));
-            var blue   = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
-            var steel  = new SolidColorBrush(Color.FromRgb(0x6E, 0x84, 0xB8));
+            var orange = Optimisation_Tool.Helpers.ThemeManager.Brush("ThOrange");
+            var blue   = Optimisation_Tool.Helpers.ThemeManager.Brush("ThLadderCpu");
+            var steel  = Optimisation_Tool.Helpers.ThemeManager.Brush("ThSteel");
             void Sq(SolidColorBrush c) => legend.Inlines.Add(new System.Windows.Documents.Run("■ ") { Foreground = c });
             Sq(orange); legend.Inlines.Add(new System.Windows.Documents.Run("ta mesure réelle      "));
             Sq(blue);   legend.Inlines.Add(new System.Windows.Documents.Run("ton CPU (score attendu)      "));
@@ -769,7 +773,7 @@ namespace Optimisation_Tool.Pages
             {
                 Points = pts,
                 StrokeThickness = 1.8,
-                Stroke = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF)),
+                Stroke = Optimisation_Tool.Helpers.ThemeManager.Brush("ThLadderCpu"),
                 StrokeLineJoin = PenLineJoin.Round,
             };
             SparkCanvas.Children.Add(line);
@@ -779,7 +783,7 @@ namespace Optimisation_Tool.Pages
             {
                 X1 = 0, X2 = w, Y1 = y100, Y2 = y100,
                 StrokeThickness = 1, Opacity = 0.4,
-                Stroke = new SolidColorBrush(Color.FromRgb(0x2E, 0xC4, 0x6A)),
+                Stroke = Optimisation_Tool.Helpers.ThemeManager.Brush("ThOk"),
                 StrokeDashArray = new DoubleCollection { 3, 3 },
             };
             SparkCanvas.Children.Insert(0, refLine);

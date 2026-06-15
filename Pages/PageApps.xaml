@@ -168,11 +168,11 @@
             <Border CornerRadius="12" Background="#0F5BA0FF" BorderBrush="#2E5BA0FF"
                     BorderThickness="1" Padding="0" Margin="0,0,10,0">
                 <Grid>
-                    <Border Width="3" CornerRadius="2" Background="#5BA0FF"
+                    <Border Width="3" CornerRadius="2" Background="{DynamicResource ThAccentIcon}"
                             HorizontalAlignment="Left" Margin="0,10,0,10"/>
                     <StackPanel Orientation="Horizontal" Margin="18,11">
                         <TextBlock Text="&#xE71D;" FontFamily="Segoe MDL2 Assets" FontSize="20"
-                                   Foreground="#5BA0FF" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                                   Foreground="{DynamicResource ThAccentIcon}" VerticalAlignment="Center" Margin="0,0,13,0"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="TxtStatTotal" Text="—" FontSize="23" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"
@@ -188,14 +188,14 @@
             <Border CornerRadius="12" Background="#0F5FD98C" BorderBrush="#2E5FD98C"
                     BorderThickness="1" Padding="0" Margin="0,0,10,0">
                 <Grid>
-                    <Border Width="3" CornerRadius="2" Background="#5FD98C"
+                    <Border Width="3" CornerRadius="2" Background="{DynamicResource ThOk}"
                             HorizontalAlignment="Left" Margin="0,10,0,10"/>
                     <StackPanel Orientation="Horizontal" Margin="18,11">
                         <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="20"
-                                   Foreground="#5FD98C" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                                   Foreground="{DynamicResource ThOk}" VerticalAlignment="Center" Margin="0,0,13,0"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="TxtStatOk" Text="—" FontSize="23" FontWeight="Bold"
-                                       FontFamily="{StaticResource AppFont}" Foreground="#5FD98C"/>
+                                       FontFamily="{StaticResource AppFont}" Foreground="{DynamicResource ThOk}"/>
                             <TextBlock Text="&#192; JOUR" FontSize="9.5" FontWeight="SemiBold"
                                        FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
                                        Foreground="{DynamicResource ThTextDim}"/>
@@ -207,14 +207,14 @@
             <Border CornerRadius="12" Background="#0F5BA0FF" BorderBrush="#2E5BA0FF"
                     BorderThickness="1" Padding="0" Margin="0,0,10,0">
                 <Grid>
-                    <Border Width="3" CornerRadius="2" Background="#5BA0FF"
+                    <Border Width="3" CornerRadius="2" Background="{DynamicResource ThAccentIcon}"
                             HorizontalAlignment="Left" Margin="0,10,0,10"/>
                     <StackPanel Orientation="Horizontal" Margin="18,11">
                         <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="20"
-                                   Foreground="#5BA0FF" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                                   Foreground="{DynamicResource ThAccentIcon}" VerticalAlignment="Center" Margin="0,0,13,0"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="TxtStatAvail" Text="—" FontSize="23" FontWeight="Bold"
-                                       FontFamily="{StaticResource AppFont}" Foreground="#5BA0FF"/>
+                                       FontFamily="{StaticResource AppFont}" Foreground="{DynamicResource ThAccentIcon}"/>
                             <TextBlock Text="MISES &#192; JOUR DISPONIBLES" FontSize="9.5" FontWeight="SemiBold"
                                        FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
                                        Foreground="{DynamicResource ThTextDim}"/>
@@ -227,14 +227,14 @@
                     BorderBrush="#3DE05555" BorderThickness="1" Padding="0"
                     Visibility="Collapsed">
                 <Grid>
-                    <Border Width="3" CornerRadius="2" Background="#E05555"
+                    <Border Width="3" CornerRadius="2" Background="{DynamicResource ThCrit}"
                             HorizontalAlignment="Left" Margin="0,10,0,10"/>
                     <StackPanel Orientation="Horizontal" Margin="18,11">
                         <TextBlock Text="&#xE783;" FontFamily="Segoe MDL2 Assets" FontSize="20"
-                                   Foreground="#E05555" VerticalAlignment="Center" Margin="0,0,13,0"/>
+                                   Foreground="{DynamicResource ThCrit}" VerticalAlignment="Center" Margin="0,0,13,0"/>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="TxtStatFailed" Text="—" FontSize="23" FontWeight="Bold"
-                                       FontFamily="{StaticResource AppFont}" Foreground="#E05555"/>
+                                       FontFamily="{StaticResource AppFont}" Foreground="{DynamicResource ThCrit}"/>
                             <TextBlock Text="&#201;CHECS" FontSize="9.5" FontWeight="SemiBold"
                                        FontFamily="{StaticResource AppFont}" Margin="0,1,0,0"
                                        Foreground="{DynamicResource ThTextDim}"/>
@@ -516,19 +516,19 @@
                                                         <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding UpdateStatus}" Value="UpToDate">
-                                                        <Setter Property="Foreground" Value="#5FD98C"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource ThOk}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding UpdateStatus}" Value="UpdateAvailable">
-                                                        <Setter Property="Foreground" Value="#5BA0FF"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource ThAccentIcon}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding UpdateStatus}" Value="Updating">
-                                                        <Setter Property="Foreground" Value="#F5C24A"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource ThWarn}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding UpdateStatus}" Value="Updated">
-                                                        <Setter Property="Foreground" Value="#5FD98C"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource ThOk}"/>
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding UpdateStatus}" Value="Failed">
-                                                        <Setter Property="Foreground" Value="#E05555"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource ThCrit}"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>

@@ -69,8 +69,8 @@
                     <TextBlock Text="LATENCE (PING)" Style="{StaticResource MHdr}"/>
                     <TextBlock x:Name="TxtTarget" Text="&#8212;" Style="{StaticResource MName}"/>
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock x:Name="TxtPing" Text="&#8212;" Style="{StaticResource MBig}" Foreground="#3B82E0"/>
-                        <TextBlock Text="ms" Foreground="#3B82E0" FontSize="16" FontWeight="Bold"
+                        <TextBlock x:Name="TxtPing" Text="&#8212;" Style="{StaticResource MBig}" Foreground="{DynamicResource ThAccentIcon}"/>
+                        <TextBlock Text="ms" Foreground="{DynamicResource ThAccentIcon}" FontSize="16" FontWeight="Bold"
                                    FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
                         <Border x:Name="PillVerdict" CornerRadius="9" Padding="10,3" Margin="12,0,0,5"
                                 VerticalAlignment="Bottom" Background="#3B456E">
@@ -98,11 +98,11 @@
                     <!-- Réception (↓) -->
                     <Grid Margin="0,4,0,10">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="&#8595;" Foreground="#29C7D6" FontSize="16" FontWeight="Bold"
+                            <TextBlock Text="&#8595;" Foreground="{DynamicResource ThCyan}" FontSize="16" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                            <TextBlock x:Name="TxtDown" Text="&#8212;" Foreground="#29C7D6" FontSize="20" FontWeight="Bold"
+                            <TextBlock x:Name="TxtDown" Text="&#8212;" Foreground="{DynamicResource ThCyan}" FontSize="20" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Mbps" Foreground="#29C7D6" FontSize="12" FontWeight="SemiBold"
+                            <TextBlock Text="Mbps" Foreground="{DynamicResource ThCyan}" FontSize="12" FontWeight="SemiBold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="3,0,0,2"/>
                         </StackPanel>
                         <TextBlock Text="R&#233;ception" Style="{StaticResource MRowLbl}"
@@ -112,11 +112,11 @@
                     <!-- Envoi (↑) -->
                     <Grid Margin="0,0,0,2">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="&#8593;" Foreground="#29C7D6" FontSize="16" FontWeight="Bold"
+                            <TextBlock Text="&#8593;" Foreground="{DynamicResource ThCyan}" FontSize="16" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center" Margin="0,0,7,0"/>
-                            <TextBlock x:Name="TxtUp" Text="&#8212;" Foreground="#29C7D6" FontSize="20" FontWeight="Bold"
+                            <TextBlock x:Name="TxtUp" Text="&#8212;" Foreground="{DynamicResource ThCyan}" FontSize="20" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Center"/>
-                            <TextBlock Text="Mbps" Foreground="#29C7D6" FontSize="12" FontWeight="SemiBold"
+                            <TextBlock Text="Mbps" Foreground="{DynamicResource ThCyan}" FontSize="12" FontWeight="SemiBold"
                                        FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="3,0,0,2"/>
                         </StackPanel>
                         <TextBlock Text="Envoi" Style="{StaticResource MRowLbl}"

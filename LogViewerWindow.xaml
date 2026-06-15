@@ -50,7 +50,13 @@
                          TextWrapping="NoWrap" AcceptsReturn="True"
                          VerticalScrollBarVisibility="Auto"
                          HorizontalScrollBarVisibility="Auto"
-                         Padding="10,8"/>
+                         Padding="10,8">
+                    <TextBox.Resources>
+                        <!-- Coin entre les 2 barres de défilement : transparent (le fond ThLogBg
+                             apparaît). Sinon carré blanc système en bas à droite, vu en clair ET sombre. -->
+                        <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="Transparent"/>
+                    </TextBox.Resources>
+                </TextBox>
             </Border>
 
             <!-- Pied : note vie privée + actions -->

@@ -68,7 +68,7 @@
                                        FontFamily="{StaticResource AppFont}" FontSize="11.5"
                                        TextWrapping="Wrap" Margin="0,0,16,0"/>
                             <TextBlock x:Name="TxtRecState" Visibility="Collapsed"
-                                       Foreground="#5BA0FF"
+                                       Foreground="{DynamicResource ThAccentIcon}"
                                        FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"
                                        Margin="0,8,0,0"/>
                         </StackPanel>
@@ -105,10 +105,10 @@
                                            FontFamily="{StaticResource AppFont}"
                                            FontSize="16" FontWeight="SemiBold"
                                            VerticalAlignment="Center"/>
-                                <Border x:Name="GameKnownBadge" Background="#22315FA0" BorderBrush="#5BA0FF"
+                                <Border x:Name="GameKnownBadge" Background="#22315FA0" BorderBrush="{DynamicResource ThAccentIcon}"
                                         BorderThickness="1" CornerRadius="6" Padding="6,1" Margin="10,0,0,0"
                                         VerticalAlignment="Center" Visibility="Collapsed">
-                                    <TextBlock Text="reconnu" Foreground="#8AC0FF"
+                                    <TextBlock Text="reconnu" Foreground="{DynamicResource ThAccentIcon}"
                                                FontFamily="{StaticResource AppFont}" FontSize="10"/>
                                 </Border>
                             </StackPanel>
@@ -248,7 +248,7 @@
         <Border x:Name="RecOverlay" Background="#CC1A1F36" CornerRadius="12" Visibility="Collapsed">
             <Border Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
                     BorderThickness="1" CornerRadius="12" Padding="24,22"
-                    MaxWidth="540" VerticalAlignment="Center" HorizontalAlignment="Center">
+                    MaxWidth="600" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Ellipse x:Name="RecDot" Width="12" Height="12" Fill="#E05555" VerticalAlignment="Center"/>
@@ -263,12 +263,30 @@
                                TextWrapping="Wrap" Margin="0,12,0,0"/>
                     <TextBlock x:Name="TxtRecElapsed" Text="00:00"
                                Foreground="{DynamicResource ThTextTitle}"
-                               FontFamily="{StaticResource AppFont}" FontSize="34" FontWeight="Bold"
-                               HorizontalAlignment="Center" Margin="0,14,0,10"/>
+                               FontFamily="{StaticResource AppFont}" FontSize="30" FontWeight="Bold"
+                               HorizontalAlignment="Center" Margin="0,12,0,10"/>
+
+                    <!-- Graphe FPS LIVE : alimenté par le tail PASSIF du CSV PresentMon
+                         (FileShare.ReadWrite, octets ajoutés, thread de fond) → 0 impact jeu. -->
+                    <Border Background="{DynamicResource ThTrack}" CornerRadius="10" Padding="14,10" Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="FPS" Style="{StaticResource SgCat}"/>
+                                <TextBlock x:Name="LiveFps" Text="—" Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="26" FontWeight="Bold"/>
+                            </StackPanel>
+                            <Canvas Grid.Column="1" x:Name="FpsSpark" Height="54" Background="Transparent"
+                                    ClipToBounds="True" SizeChanged="FpsSpark_SizeChanged"/>
+                        </Grid>
+                    </Border>
 
                     <!-- Lecture LIVE (1 Hz) : CPU/RAM gratuits + GPU via NvAPI in-process.
                          Pas de spawn de process → pas d'impact sur le jeu. -->
-                    <UniformGrid x:Name="LiveTiles" Columns="3" Rows="2" Margin="0,0,0,12">
+                    <UniformGrid x:Name="LiveTiles" Columns="4" Rows="2" Margin="0,0,0,12">
                         <StackPanel Margin="4">
                             <TextBlock Text="CPU" Style="{StaticResource SgCat}" HorizontalAlignment="Center"/>
                             <TextBlock x:Name="LiveCpu" Text="—" HorizontalAlignment="Center"
@@ -284,6 +302,12 @@
                         <StackPanel Margin="4">
                             <TextBlock Text="GPU clock" Style="{StaticResource SgCat}" HorizontalAlignment="Center"/>
                             <TextBlock x:Name="LiveGpuClock" Text="—" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource ThTextTitle}" FontFamily="{StaticResource AppFont}"
+                                       FontSize="16" FontWeight="Bold"/>
+                        </StackPanel>
+                        <StackPanel Margin="4">
+                            <TextBlock Text="GPU mém" Style="{StaticResource SgCat}" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="LiveGpuMem" Text="—" HorizontalAlignment="Center"
                                        Foreground="{DynamicResource ThTextTitle}" FontFamily="{StaticResource AppFont}"
                                        FontSize="16" FontWeight="Bold"/>
                         </StackPanel>

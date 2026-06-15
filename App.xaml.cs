@@ -49,6 +49,12 @@ namespace Optimisation_Tool
             try
             {
                 var settings = Helpers.AppSettings.Load();   // lecture best-effort (défauts si absent)
+                // Appliquer le thème ENREGISTRÉ avant d'afficher quoi que ce soit : le splash
+                // s'affiche AVANT MainWindow.Loaded (où le thème était appliqué jusqu'ici), donc
+                // sans ça il restait coincé sur les valeurs sombres par défaut même en mode clair.
+                Helpers.ThemeManager.Apply(settings.Theme == "Light"
+                    ? Helpers.ThemeManager.Mode.Light
+                    : Helpers.ThemeManager.Mode.Dark);
                 if (!settings.StartMinimized)
                 {
                     new SplashWindow().Show();

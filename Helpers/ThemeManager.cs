@@ -41,40 +41,51 @@ namespace Optimisation_Tool.Helpers
         // ⚠️ Si v4 échoue : descendre encore (~68 %), JAMAIS éclaircir ni réchauffer.
         private static readonly Dictionary<string, (string dark, string light)> Roles = new()
         {
-            ["ThBg"]        = ("#2B3252", "#C2C4C9"),   // fond page — gris éteint, micro-biais froid
-            ["ThPanel"]     = ("#313858", "#CFD1D6"),   // cartes — plus claires que le fond (hiérarchie)
-            ["ThSidebar"]   = ("#262C49", "#B3B5BB"),
-            ["ThSecBtn"]    = ("#2E3559", "#C7C9CE"),
-            ["ThPill"]      = ("#2B3358", "#CACCD1"),
-            ["ThTrack"]     = ("#252C4A", "#ADAFB5"),   // creux des barres (dosage validé en sombre v1.3.5)
-            ["ThLogBg"]     = ("#242A45", "#CBCDD2"),
-            ["ThLogHdr"]    = ("#20253E", "#BABCC2"),
-            ["ThHover"]     = ("#2E3658", "#AFBCD2"),   // hover bleuté = se voit
-            ["ThSelection"] = ("#34408A", "#9FB5D8"),   // sélection bleu doux
-            ["ThBorder"]    = ("#3D456E", "#999BA2"),
-            ["ThTextTitle"] = ("#E2E6FF", "#26282E"),   // encre ardoise, PAS noir
-            ["ThTextBody"]  = ("#DCE0F6", "#34373F"),
-            ["ThTextLabel"] = ("#C6CDEC", "#464952"),
-            ["ThTextSub"]   = ("#B4BBE0", "#54575F"),
-            ["ThTextNav"]   = ("#B6BEE4", "#3F424D"),
-            ["ThTextDim"]   = ("#9CA3CC", "#6B6E77"),
+            // CLAIR = palette RÉGLÉE AU CURSEUR par l'utilisateur (2026-06-15) : fond ~70 %,
+            // tuiles CREUSÉES sous le fond, sidebar/track/bordure plus profonds, texte tranché.
+            // Les 8 valeurs (fond/tuile/sidebar/bordure/track/titre/corps/dim) sont les SIENNES ;
+            // secbtn/pill/loghdr/hover/sélection/label/sub/nav sont dérivés dans le même esprit.
+            ["ThBg"]        = ("#2B3252", "#ABB1BB"),   // fond page (réglage user)
+            ["ThPanel"]     = ("#313858", "#A0A6B0"),   // tuiles creusées sous le fond (réglage user)
+            ["ThSidebar"]   = ("#262C49", "#9DA3AD"),   // rail (réglage user)
+            ["ThSecBtn"]    = ("#2E3559", "#A6ACB6"),   // dérivé : entre tuile et fond
+            ["ThPill"]      = ("#2B3358", "#A3A9B3"),   // dérivé
+            ["ThTrack"]     = ("#252C4A", "#9399A3"),   // creux des barres (réglage user)
+            ["ThLogBg"]     = ("#242A45", "#A0A6B0"),   // journal = niveau tuile
+            ["ThLogHdr"]    = ("#20253E", "#989EA8"),   // dérivé : sous la sidebar
+            ["ThHover"]     = ("#2E3658", "#A2AAB9"),   // dérivé : hover un peu plus bleu
+            ["ThSelection"] = ("#34408A", "#A4AFC6"),   // dérivé : sélection périwinkle
+            ["ThBorder"]    = ("#3D456E", "#797F89"),   // bordures nettes (réglage user)
+            ["ThTextTitle"] = ("#E2E6FF", "#191C21"),   // titre (réglage user)
+            ["ThTextBody"]  = ("#DCE0F6", "#2F3237"),   // corps (réglage user)
+            ["ThTextLabel"] = ("#C6CDEC", "#3D4046"),   // dérivé entre corps et dim
+            ["ThTextSub"]   = ("#B4BBE0", "#45484E"),   // dérivé
+            ["ThTextNav"]   = ("#B6BEE4", "#383B41"),   // dérivé (nav sur sidebar)
+            ["ThTextDim"]   = ("#9CA3CC", "#4A4C50"),   // dim (réglage user)
             ["ThLogText"]   = ("#5FD98C", "#1E6E38"),  // vert journal : clair sur sombre, foncé sur clair
             ["ThAccentIcon"]= ("#8FC0FF", "#2A62C4"),  // glyphes/initiales sur fond bleu alpha : clairs en sombre, PROFONDS en clair (sinon illisibles — retour utilisateur v1.3.5)
             // Couleurs de statut — vives en sombre, ASSOMBRIES en clair pour rester lisibles
             ["ThOk"]        = ("#2EC46A", "#1E9E55"),
             ["ThWarn"]      = ("#F5C24A", "#A87900"),   // amber foncé en clair (le jaune vif était illisible)
             ["ThCrit"]      = ("#E05555", "#C0392B"),
+            ["ThViolet"]    = ("#C08CF0", "#7A3FB8"),   // RAM / accent violet — assombri en clair (le mauve clair était illisible sur fond clair)
+            ["ThCyan"]      = ("#29C7D6", "#0E7C8A"),   // débits réseau — assombri en clair
+            ["ThOrange"]    = ("#F5A623", "#C26A12"),   // classement « ta mesure » — vif en sombre, brûlé profond en clair (l'orange vif était illisible/criard sur le bleu-ardoise clair)
+            ["ThPink"]      = ("#F08CB8", "#B5417A"),   // accent mémoire (rose) — assombri en clair
+            ["ThTabSel"]    = ("#254E8C", "#2A62C4"),   // pastille d'onglet sélectionné (segmented) : bleu assez foncé pour du texte blanc dans les DEUX thèmes
+            ["ThLadderCpu"] = ("#5BA0FF", "#2A62C4"),   // classement « ton CPU » — SOMBRE = valeur validée (dark intact), clair = bleu profond
+            ["ThSteel"]     = ("#4F6EA8", "#566C98"),   // classement « voisins » bleu acier — dark validé, clair ajusté
         };
 
         // Couleurs (pour les dégradés : carte de score, pilule des switches)
         private static readonly Dictionary<string, (string dark, string light)> ColorRoles = new()
         {
-            ["ThCardA"]    = ("#353D66", "#CDCFD4"),   // carte score — haut (gris éteint v4)
-            ["ThCardB"]    = ("#272D4C", "#BDBFC5"),   // carte score — bas
-            ["ThSwOffA"]   = ("#10132C", "#C5C7CC"),   // switch OFF fond haut
-            ["ThSwOffB"]   = ("#080A1E", "#B7B9BF"),   // switch OFF fond bas
-            ["ThSwOffBdA"] = ("#2C3462", "#9C9EA5"),   // switch OFF bordure haut
-            ["ThSwOffBdB"] = ("#07091B", "#82848B"),   // switch OFF bordure bas
+            ["ThCardA"]    = ("#353D66", "#A6ACB6"),   // carte score — haut (dérivé palette user)
+            ["ThCardB"]    = ("#272D4C", "#989EAA"),   // carte score — bas
+            ["ThSwOffA"]   = ("#10132C", "#A6ACB6"),   // switch OFF fond haut
+            ["ThSwOffB"]   = ("#080A1E", "#989EAA"),   // switch OFF fond bas
+            ["ThSwOffBdA"] = ("#2C3462", "#868C96"),   // switch OFF bordure haut
+            ["ThSwOffBdB"] = ("#07091B", "#6E7480"),   // switch OFF bordure bas
         };
 
         /// <summary>Couleur courante d'un rôle (pour le code-behind).</summary>

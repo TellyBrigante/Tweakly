@@ -562,9 +562,9 @@ namespace Optimisation_Tool.Pages
             { GoState.Pass => "✓", GoState.Warn => "⚠", GoState.Fail => "✗", _ => "…" };
             icon.Foreground = state switch
             {
-                GoState.Pass => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2E, 0xC4, 0x6A)),
-                GoState.Warn => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE8, 0xA0, 0x2E)),
-                GoState.Fail => new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE0, 0x55, 0x55)),
+                GoState.Pass => Optimisation_Tool.Helpers.ThemeManager.Brush("ThOk"),
+                GoState.Warn => Optimisation_Tool.Helpers.ThemeManager.Brush("ThWarn"),
+                GoState.Fail => Optimisation_Tool.Helpers.ThemeManager.Brush("ThCrit"),
                 _ => icon.Foreground,
             };
             txt.Text = $"{txt.Tag} — {detail}";

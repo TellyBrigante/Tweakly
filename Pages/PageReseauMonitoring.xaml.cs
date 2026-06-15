@@ -261,7 +261,7 @@ namespace Optimisation_Tool.Pages
                 var dot = new Ellipse
                 {
                     Width = 6, Height = 6,
-                    Fill = new SolidColorBrush(Color.FromRgb(0xE0, 0x55, 0x55)),
+                    Fill = Optimisation_Tool.Helpers.ThemeManager.Brush("ThCrit"),
                 };
                 Canvas.SetLeft(dot, x - 3);
                 Canvas.SetTop(dot, 3);

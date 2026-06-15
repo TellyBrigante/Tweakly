@@ -62,7 +62,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="#254E8C"/>
+                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ThTabSel}"/>
                                 <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -99,8 +99,8 @@
                     <TextBlock x:Name="TxtCpuName" Text="&#8212;" Style="{StaticResource MName}"/>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="TxtCpuUsage" Text="&#8212;" Style="{StaticResource MBig}"
-                                   Foreground="#3B82E0"/>
-                        <TextBlock Text="%" Foreground="#3B82E0" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource ThAccentIcon}"/>
+                        <TextBlock Text="%" Foreground="{DynamicResource ThAccentIcon}" FontSize="16" FontWeight="Bold"
                                    FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
                     </StackPanel>
                     <!-- Barre usage -->
@@ -148,8 +148,8 @@
                     <TextBlock x:Name="TxtGpuName" Text="&#8212;" Style="{StaticResource MName}"/>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="TxtGpuUsage" Text="&#8212;" Style="{StaticResource MBig}"
-                                   Foreground="#2EC46A"/>
-                        <TextBlock Text="%" Foreground="#2EC46A" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource ThOk}"/>
+                        <TextBlock Text="%" Foreground="{DynamicResource ThOk}" FontSize="16" FontWeight="Bold"
                                    FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
                     </StackPanel>
                     <Grid Height="6" Margin="0,8,0,12">
@@ -204,8 +204,8 @@
                     </Grid>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="TxtRamUsage" Text="&#8212;" Style="{StaticResource MBig}"
-                                   Foreground="#C08CF0"/>
-                        <TextBlock Text="%" Foreground="#C08CF0" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource ThViolet}"/>
+                        <TextBlock Text="%" Foreground="{DynamicResource ThViolet}" FontSize="16" FontWeight="Bold"
                                    FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
                     </StackPanel>
                     <Grid Height="6" Margin="0,8,0,12">
