@@ -243,11 +243,11 @@ namespace Optimisation_Tool.Pages
 
         private static string ScoreVerdict(int s) => s switch
         {
-            >= 110 => "excellent — tu surperformes le nominal",
-            >= 95  => "dans la norme — ton matériel rend ce qu'il doit",
-            >= 80  => "correct — léger en-dessous du nominal",
-            >= 60  => "faible — quelque chose te ralentit",
-            _      => "très faible — système en souffrance ou bruit pendant la mesure"
+            >= 110 => "au-dessus du nominal",
+            >= 95  => "dans la norme",
+            >= 80  => "légèrement en dessous du nominal",
+            >= 60  => "en dessous du nominal — un facteur te ralentit",
+            _      => "très en dessous — mesure parasitée ou système anormal"
         };
 
         /// <summary>
@@ -260,8 +260,8 @@ namespace Optimisation_Tool.Pages
         // la machine juste en dessous (BenchAdvisor) avec un bouton par correction.
         private static string Verdict(int score, string axis) => (score, axis) switch
         {
-            ( >= 105, _      ) => "Au-dessus du nominal.\nTu tires le meilleur de ton matériel.",
-            ( >=  90, _      ) => "Dans la norme.\nRien à signaler, ton matériel rend ce qu'il doit.",
+            ( >= 105, _      ) => "Au-dessus du nominal pour ce modèle.\nRien à corriger côté performance.",
+            ( >=  90, _      ) => "Dans la norme du modèle.\nRien à corriger.",
             ( >=  75, "CPU"      ) => "Légèrement en dessous de ce que ce processeur sait faire.\nCause la plus fréquente : il chauffe trop et se bride, ou le plan d'alimentation le freine.",
             ( >=  75, "Système"  ) => "Windows répond avec un léger retard.\nConcrètement : en jeu, ça peut se sentir comme des micro-saccades. Les causes trouvées sur TA machine sont listées ci-dessous.",
             ( >=  75, _          ) => "Légèrement en dessous.\nCompare avec ton historique pour voir si c'est nouveau.",
@@ -269,7 +269,7 @@ namespace Optimisation_Tool.Pages
             ( >=  60, "Système"  ) => "Windows met trop de temps à réagir.\nConcrètement : saccades probables en jeu et lenteurs à l'usage. Corrige les causes listées ci-dessous, puis relance le bench.",
             ( >=  60, _          ) => "Nettement en dessous.\nQuelque chose t'empêche de rendre la performance attendue.",
             (    _,    "CPU"     ) => "Très en dessous — anormal.\nSoit le CPU surchauffe fortement, soit un programme tournait pendant la mesure : relance le bench, seul.",
-            (    _,    "Système" ) => "Windows est en souffrance.\nLe système est tellement irrégulier que tout doit sembler lent. Corrige les causes ci-dessous puis relance le bench.",
+            (    _,    "Système" ) => "Windows répond très mal.\nLe système est si irrégulier que tout paraît lent. Corrige les causes ci-dessous puis relance le bench.",
             (    _,    _         ) => "Très en dessous — résultat anormal.\nRelance le bench sans rien d'autre d'ouvert."
         };
 
@@ -629,13 +629,15 @@ namespace Optimisation_Tool.Pages
             HistoryPanel.Children.Clear();
             if (_history.Count == 0)
             {
-                HistoryPanel.Children.Add(new TextBlock
+                var empty = new TextBlock
                 {
                     Text = "Aucune mesure encore. Clique « LANCER LE BENCHMARK » pour démarrer.",
-                    Foreground = (Brush)FindResource("ThTextDim"),
                     FontFamily = (FontFamily)FindResource("AppFont"),
                     FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 6, 0, 0),
-                });
+                };
+                // SetResourceReference (et pas FindResource qui fige le brush) → suit le thème.
+                empty.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+                HistoryPanel.Children.Add(empty);
                 return;
             }
             foreach (var r in _history) HistoryPanel.Children.Add(BuildHistoryRow(r));

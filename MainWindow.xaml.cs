@@ -89,17 +89,23 @@ namespace Optimisation_Tool
                 // DOIT être appelée AVANT tout helper qui touche aux fichiers. Idempotente, blindée.
                 try { Helpers.PathLayout.MigrateIfNeeded(); } catch { }
 
+                // Répare en arrière-plan les tâches « démarrer avec Windows » créées par
+                // d'anciennes versions (sans le flag --startup) — sinon l'app s'ouvrirait en
+                // grand au boot au lieu de rester minimisée. Best-effort, ne bloque pas l'UI.
+                _ = Task.Run(() => { try { Helpers.StartupManager.EnsureStartupArg(); } catch { } });
+
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;
                 Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode);
-                // Tray déjà initialisé dans le ctor (voir commentaire là-bas). Ici on
-                // applique juste « démarrer minimisé » : si tray dispo → on cache fenêtre
-                // + barre des tâches (seule la tray icon reste visible). Sinon fallback :
-                // minimisation classique.
-                if (Settings.StartMinimized)
+                // Tray déjà initialisé dans le ctor (voir commentaire là-bas). « Démarrer
+                // minimisé » ne s'applique QUE si Windows nous a lancés au boot (--startup) :
+                // un lancement manuel affiche toujours l'app. Quand il s'applique, la fenêtre
+                // est réduite dans la barre des tâches (l'icône tray reste présente — cf.
+                // HideToTray). Voir App.ShouldStartMinimized.
+                if (App.ShouldStartMinimized(Settings.StartMinimized))
                 {
                     if (_tray?.IsAvailable == true) _tray.HideToTray();
                     else                            this.WindowState = WindowState.Minimized;
@@ -138,7 +144,8 @@ namespace Optimisation_Tool
                 // Forcer la fenêtre au PREMIER PLAN (pas seulement Topmost flicker, qui ne
                 // suffit pas si une autre app détient le foreground). On utilise
                 // AttachThreadInput pour bypass la protection Win10/11. Voir ForceForeground.
-                if (!Settings.StartMinimized)
+                // (Relance après MAJ + lancement manuel inclus : on veut voir l'app.)
+                if (!App.ShouldStartMinimized(Settings.StartMinimized))
                 {
                     // 1) Tentative immédiate (cas où on est déjà foreground ou rien ne bloque).
                     try
@@ -263,6 +270,20 @@ namespace Optimisation_Tool
             _updTag = tag;
             _updCts?.Dispose();
             _updCts = new System.Threading.CancellationTokenSource();
+
+            // L'overlay de MAJ ne sert à rien si la fenêtre est réduite dans la barre des
+            // tâches (ou démarrée minimisée) : l'utilisateur ne la verrait jamais. On la
+            // surface AU PREMIER PLAN avant d'afficher l'overlay — y compris quand
+            // « Démarrer minimisé » est coché (ici on PASSE OUTRE volontairement : une MAJ
+            // disponible est un événement qui mérite d'être vu).
+            try
+            {
+                if (!IsVisible) Show();
+                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                Activate();
+                ForceForeground();
+            }
+            catch { }
 
             UpdateOverlay.Visibility  = Visibility.Visible;
             TxtUpdTitle.Text          = "Une mise à jour est disponible";
@@ -711,7 +732,7 @@ namespace Optimisation_Tool
         protected override void OnContentRendered(EventArgs e)
         {
             base.OnContentRendered(e);
-            if (Settings.StartMinimized) return;
+            if (App.ShouldStartMinimized(Settings.StartMinimized)) return;
 
             ForceForeground();
             int attempt = 0;
@@ -759,7 +780,7 @@ namespace Optimisation_Tool
         {
             try
             {
-                if (Settings.StartMinimized) return;
+                if (App.ShouldStartMinimized(Settings.StartMinimized)) return;
                 ForceForeground();
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
                 if (hwnd != IntPtr.Zero && GetForegroundWindow() != hwnd)

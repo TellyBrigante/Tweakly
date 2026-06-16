@@ -30,6 +30,135 @@
             <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
             <Setter Property="FontSize"   Value="11"/>
         </Style>
+
+        <!-- ComboBox thémé (le défaut WPF est blanc d'usine, illisible dans les 2 thèmes).
+             Template court mais complet : bouton (ToggleButton) + popup + items. Toutes les
+             couleurs en Th* → vivant au toggle clair/sombre. S'applique à tous les ComboBox
+             de la page (pas de x:Key). -->
+        <Style TargetType="ComboBox">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11.5"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="MinHeight"  Value="30"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Focusable="False" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bd"
+                                                Background="{DynamicResource ThSecBtn}"
+                                                BorderBrush="{DynamicResource ThBorder}"
+                                                BorderThickness="1" CornerRadius="6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0" Margin="10,4,6,4"
+                                                                  VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"/>
+                                                <Path Grid.Column="1" Margin="0,0,9,0" Width="9" Height="6"
+                                                      Fill="{DynamicResource ThTextDim}"
+                                                      VerticalAlignment="Center"
+                                                      Data="M 0 0 L 4.5 6 L 9 0 Z"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThHover}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              Margin="11,0,28,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"
+                                              TextElement.Foreground="{DynamicResource ThTextBody}"/>
+                            <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                                   AllowsTransparency="True" PopupAnimation="Slide" Focusable="False">
+                                <Border Background="{DynamicResource ThPanel}"
+                                        BorderBrush="{DynamicResource ThBorder}"
+                                        BorderThickness="1" CornerRadius="6" Margin="0,3,0,0"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <StackPanel IsItemsHost="True"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11.5"/>
+            <Setter Property="Padding"    Value="11,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="B" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="B" Property="Background" Value="{DynamicResource ThHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="B" Property="Background" Value="{DynamicResource ThSelection}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Chip de superposition télémétrie (ToggleButton) : pastille de couleur (= identité
+             de la courbe, toujours visible) + libellé. Coché = fond léger + bordure accent +
+             plein opacité ; décoché = atténué. La couleur de la pastille vient du Tag (un brush
+             de rôle de thème, lisible dans les 2 modes). Content = StackPanel via ContentPresenter
+             (template maison → pas le piège « Content = string only » des boutons de marque). -->
+        <Style x:Key="TeleChip" TargetType="ToggleButton">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="Cursor"     Value="Hand"/>
+            <Setter Property="Margin"     Value="0,0,6,0"/>
+            <Setter Property="Opacity"    Value="0.8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" CornerRadius="9" Padding="9,3,10,4"
+                                Background="Transparent"
+                                BorderBrush="{DynamicResource ThBorder}" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="8" Height="8" VerticalAlignment="Center"
+                                         Fill="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThHover}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThAccentIcon}"/>
+                                <Setter Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Opacity" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -46,39 +175,82 @@
                 </Grid.RowDefinitions>
 
                 <!-- ═══════════════════════════════════════════════════════
-                     BLOC 1 — HERO : titre + état + bouton REC
+                     BLOC 1 — HERO : titre + état + bouton REC + config (délai, durée)
                 ═══════════════════════════════════════════════════════ -->
                 <Border Grid.Row="0" Style="{StaticResource SgTile}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                            <TextBlock Text="SUIVI EN JEU" Style="{StaticResource SgCat}"/>
-                            <TextBlock Text="Performances en jeu"
-                                       Foreground="{DynamicResource ThTextTitle}"
-                                       FontFamily="{StaticResource AppFont}"
-                                       FontSize="17" FontWeight="SemiBold"
-                                       Margin="0,3,0,3"/>
-                            <TextBlock x:Name="TxtStatus"
-                                       Text="Enregistre une session pour mesurer les FPS, les chutes et leur origine."
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                <TextBlock Text="SUIVI EN JEU" Style="{StaticResource SgCat}"/>
+                                <TextBlock Text="Performances en jeu"
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="17" FontWeight="SemiBold"
+                                           Margin="0,3,0,3"/>
+                                <TextBlock x:Name="TxtStatus"
+                                           Text="Enregistre une session pour mesurer les FPS, les chutes et leur origine."
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                           TextWrapping="Wrap" Margin="0,0,16,0"/>
+                                <TextBlock x:Name="TxtRecState" Visibility="Collapsed"
+                                           Foreground="{DynamicResource ThAccentIcon}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"
+                                           Margin="0,8,0,0"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="BtnRec"
+                                    Content="ENREGISTRER UNE SESSION"
+                                    Style="{StaticResource CleanRunBtn}" Padding="20,10"
+                                    VerticalAlignment="Center" Margin="20,0,0,0"
+                                    Click="BtnRec_Click"/>
+                        </Grid>
+
+                        <!-- Config avant capture : retardateur (laisse le temps d'alt-tab dans le jeu)
+                             + durée auto-stop (0 = manuel via le bouton ARRÊTER). -->
+                        <Grid x:Name="ConfigRow" Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Délai avant départ"
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" FontSize="11.5"
-                                       TextWrapping="Wrap" Margin="0,0,16,0"/>
-                            <TextBlock x:Name="TxtRecState" Visibility="Collapsed"
-                                       Foreground="{DynamicResource ThAccentIcon}"
-                                       FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"
-                                       Margin="0,8,0,0"/>
-                        </StackPanel>
-
-                        <Button Grid.Column="1" x:Name="BtnRec"
-                                Content="ENREGISTRER UNE SESSION"
-                                Style="{StaticResource CleanRunBtn}" Padding="20,10"
-                                VerticalAlignment="Center" Margin="20,0,0,0"
-                                Click="BtnRec_Click"/>
-                    </Grid>
+                                       VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="1" x:Name="CmbDelay"
+                                      Margin="10,0,28,0" VerticalAlignment="Center"
+                                      Width="120" HorizontalAlignment="Left"
+                                      SelectedIndex="2">
+                                <ComboBoxItem Content="Aucun"      Tag="0"/>
+                                <ComboBoxItem Content="5 secondes" Tag="5"/>
+                                <ComboBoxItem Content="10 secondes" Tag="10"/>
+                                <ComboBoxItem Content="20 secondes" Tag="20"/>
+                                <ComboBoxItem Content="30 secondes" Tag="30"/>
+                            </ComboBox>
+                            <TextBlock Grid.Column="2" Text="Durée du test"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                       VerticalAlignment="Center"/>
+                            <ComboBox Grid.Column="3" x:Name="CmbDuration"
+                                      Margin="10,0,0,0" VerticalAlignment="Center"
+                                      Width="160" HorizontalAlignment="Left"
+                                      SelectedIndex="0">
+                                <ComboBoxItem Content="Manuel (j'arrête)" Tag="0"/>
+                                <ComboBoxItem Content="30 secondes"  Tag="30"/>
+                                <ComboBoxItem Content="1 minute"     Tag="60"/>
+                                <ComboBoxItem Content="2 minutes"    Tag="120"/>
+                                <ComboBoxItem Content="3 minutes"    Tag="180"/>
+                                <ComboBoxItem Content="5 minutes"    Tag="300"/>
+                                <ComboBoxItem Content="10 minutes"   Tag="600"/>
+                            </ComboBox>
+                        </Grid>
+                    </StackPanel>
                 </Border>
 
                 <!-- ═══════════════════════════════════════════════════════
@@ -91,13 +263,19 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" x:Name="TxtScore" Text="—"
-                                   Foreground="{DynamicResource ThTextTitle}"
-                                   FontFamily="{StaticResource AppFont}"
-                                   FontSize="58" FontWeight="Bold"
-                                   VerticalAlignment="Center"
-                                   LineHeight="58" LineStackingStrategy="BlockLineHeight"
-                                   Margin="4,0,22,0"/>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                    HorizontalAlignment="Center" Margin="4,0,22,0">
+                            <TextBlock x:Name="TxtScore" Text="—"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="58" FontWeight="Bold"
+                                       HorizontalAlignment="Center"
+                                       LineHeight="58" LineStackingStrategy="BlockLineHeight"/>
+                            <TextBlock Text="/ 100"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11"
+                                       HorizontalAlignment="Center" Margin="0,1,0,0"/>
+                        </StackPanel>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock x:Name="TxtGameName" Text=""
@@ -111,11 +289,21 @@
                                     <TextBlock Text="reconnu" Foreground="{DynamicResource ThAccentIcon}"
                                                FontFamily="{StaticResource AppFont}" FontSize="10"/>
                                 </Border>
+                                <Border x:Name="GradeBadge" Background="Transparent"
+                                        BorderThickness="1" CornerRadius="6" Padding="7,1" Margin="8,0,0,0"
+                                        VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock x:Name="TxtGrade" Text=""
+                                               FontFamily="{StaticResource AppFont}" FontSize="10"/>
+                                </Border>
                             </StackPanel>
-                            <TextBlock x:Name="TxtVerdict" Text=""
-                                       Foreground="{DynamicResource ThTextBody}"
-                                       FontFamily="{StaticResource AppFont}" FontSize="12.5"
-                                       TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+                                <Ellipse x:Name="VerdictDot" Width="8" Height="8"
+                                         VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="TxtVerdict" Text=""
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="13"
+                                           TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -175,7 +363,7 @@
                      BLOC 3.5 — GRAPHE FRAMETIME (le voir = le comprendre)
                 ═══════════════════════════════════════════════════════ -->
                 <Border x:Name="ChartTile" Grid.Row="3" Style="{StaticResource SgTile}"
-                        Margin="0,12,0,0" Visibility="Collapsed" Height="220">
+                        Margin="0,12,0,0" Visibility="Collapsed" Height="262">
                     <StackPanel>
                         <Grid Margin="0,0,0,6">
                             <TextBlock Text="FPS DANS LE TEMPS" Style="{StaticResource SgCat}"/>
@@ -184,9 +372,36 @@
                                        FontFamily="{StaticResource AppFont}" FontSize="10.5"
                                        Text=""/>
                         </Grid>
-                        <Canvas x:Name="ChartCanvas" Background="Transparent"
-                                Height="150" ClipToBounds="True"
-                                SizeChanged="ChartCanvas_SizeChanged"/>
+
+                        <!-- Chips : superposer une télémétrie 1 Hz à la courbe FPS (même axe temps).
+                             Masquées si la session n'a pas de samples (vieil historique). -->
+                        <StackPanel x:Name="TeleChips" Orientation="Horizontal" Margin="0,0,0,8">
+                            <ToggleButton x:Name="ChkTemp"  Style="{StaticResource TeleChip}" Content="GPU temp"
+                                          Tag="{DynamicResource ThPink}"
+                                          Checked="TeleChip_Changed" Unchecked="TeleChip_Changed"/>
+                            <ToggleButton x:Name="ChkClock" Style="{StaticResource TeleChip}" Content="GPU clock"
+                                          Tag="{DynamicResource ThCyan}"
+                                          Checked="TeleChip_Changed" Unchecked="TeleChip_Changed"/>
+                            <ToggleButton x:Name="ChkVram"  Style="{StaticResource TeleChip}" Content="VRAM"
+                                          Tag="{DynamicResource ThViolet}"
+                                          Checked="TeleChip_Changed" Unchecked="TeleChip_Changed"/>
+                            <ToggleButton x:Name="ChkCpu"   Style="{StaticResource TeleChip}" Content="CPU"
+                                          Tag="{DynamicResource ThOk}"
+                                          Checked="TeleChip_Changed" Unchecked="TeleChip_Changed"/>
+                        </StackPanel>
+
+                        <!-- ChartCanvas dessine la courbe ; ScrubCanvas (overlay transparent)
+                             capte la souris et trace la règle + le panneau de valeurs au survol,
+                             sans jamais redessiner la courbe. -->
+                        <Grid Height="150">
+                            <Canvas x:Name="ChartCanvas" Background="Transparent"
+                                    ClipToBounds="True"
+                                    SizeChanged="ChartCanvas_SizeChanged"/>
+                            <Canvas x:Name="ScrubCanvas" Background="Transparent"
+                                    ClipToBounds="True"
+                                    MouseMove="ScrubCanvas_MouseMove"
+                                    MouseLeave="ScrubCanvas_MouseLeave"/>
+                        </Grid>
                         <Grid Margin="0,4,0,0">
                             <TextBlock x:Name="TxtChartStart" Style="{StaticResource SgLbl}"
                                        Text="0 s" HorizontalAlignment="Left"/>

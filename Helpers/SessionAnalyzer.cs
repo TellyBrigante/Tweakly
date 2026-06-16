@@ -31,8 +31,15 @@ namespace Optimisation_Tool.Helpers
 
         // Trim des bordures : les 1res/dernières secondes = clic + alt-tab + menu,
         // pas du jeu. On les exclut de TOUTE analyse.
-        public const double TrimHeadMs = 12000;
-        public const double TrimTailMs = 8000;
+        // ⚠️ Le gros trim historique (12 s/8 s) datait du temps où l'utilisateur cliquait sur
+        // ENREGISTRER puis alt-tabait à la main : bordures pourries à absorber. Avec le
+        // RETARDATEUR (alt-tab avant que ça démarre) + l'ARRÊT AUTO (coupe à la durée pile),
+        // ces frames-bordures n'existent plus → rogner = perdre 33 % d'une capture d'1 min.
+        // Trim réduit au strict minimum : 2 s/2 s pour amortir un démarrage de PresentMon
+        // qui ne stabilise sa cadence qu'après ~1 s. La garde anti-bordure (> 100 ms dans
+        // les 5 s extrêmes) reste en filet de sécurité contre un alt-tab tardif.
+        public const double TrimHeadMs = 2000;
+        public const double TrimTailMs = 2000;
 
         public enum DropCause { CpuBound, GpuBound, DisplaySync, ShaderCompile, Mixed }
         public enum RecoSeverity { Info, Warn, Crit }
@@ -45,8 +52,6 @@ namespace Optimisation_Tool.Helpers
             public double CpuWaitMs;            // le thread du jeu ATTENDAIT (bloqué) pendant la frame
             public double GpuBusyMs;
             public DropCause Cause;
-            public string? CulpritProcess;      // (legacy, non utilisé — plus d'accusation)
-            public double CulpritFrametimeMs;
             /// <summary>true si le jeu CALCULAIT (CpuBusy domine) → moteur. false s'il ATTENDAIT.</summary>
             public bool GameWasComputing;
         }
@@ -61,7 +66,12 @@ namespace Optimisation_Tool.Helpers
             public RecoSeverity Severity;
         }
 
-        public sealed class ChartPoint { public double T; public double Ft; }
+        public sealed class ChartPoint
+        {
+            public double T;
+            public double Ft;        // médiane du frametime dans le paquet → ce que l'utilisateur joue
+            public double FtFloor;   // PIRE frametime du paquet → la variance réelle ; 0 = absent (vieilles sessions)
+        }
 
         public sealed class Report
         {
@@ -104,6 +114,19 @@ namespace Optimisation_Tool.Helpers
             public bool VbsRunning;              // hyperviseur/VBS réellement actif (taxe virtu)
             public bool HvciEnabled;             // Intégrité de la mémoire (HVCI) ON ? (≠ VBS running)
             public int CompetitiveFps = 144;     // seuil « bon » pour ce jeu
+            // Télémétrie 1 Hz (GPU temp/clock/VRAM, CPU%…) pour superposer au graphe FPS.
+            // ChartStartMs = décalage MURAL (ms) entre le début de capture et t=0 du graphe
+            // → permet d'aligner les SysSample (ElapsedMs depuis le début de capture) sur l'axe.
+            public double ChartStartMs;
+            // Origine ABSOLUE de l'axe temps du graphe = TimeMs (PresentMon) de la 1re frame
+            // analysée (ce que Downsample soustrait). Les Drops sont horodatés sur la MÊME
+            // horloge absolue → tDrop = (Drop.TimeMs − ChartOriginMs)/1000 les aligne sur la
+            // courbe. ⚠️ Sans ça, les points de drop étaient décalés (origine non soustraite).
+            public double ChartOriginMs;
+            // PERSISTÉE dans l'historique (tweakly-sessions.json) : un enregistrement rouvert
+            // doit pouvoir réafficher ses courbes de télémétrie (~1 échantillon/s, coût modéré).
+            // ⚠️ les enregistrements faits AVANT cette version n'en ont pas → chips masquées.
+            public List<SysSample> Samples = new();
         }
 
         // ───────────────────────── analyse ─────────────────────────
@@ -148,7 +171,9 @@ namespace Optimisation_Tool.Helpers
             //      réel — exclue quelle que soit la durée de session.
             var all = pf.Frames;
             double tMin = all.Min(f => f.TimeMs), tMax = all.Max(f => f.TimeMs);
-            List<FrameRecord> frames = (tMax - tMin > TrimHeadMs + TrimTailMs + 30000)
+            // Trim léger 2 s/2 s dès que la session dépasse 10 s — sinon (capture très courte)
+            // on garde tout. Voir le commentaire sur les constantes TrimHeadMs/TailMs.
+            List<FrameRecord> frames = (tMax - tMin > TrimHeadMs + TrimTailMs + 10000)
                 ? all.Where(f => f.TimeMs >= tMin + TrimHeadMs && f.TimeMs <= tMax - TrimTailMs).ToList()
                 : all;
             frames = frames.Where(f => !(
@@ -156,6 +181,17 @@ namespace Optimisation_Tool.Helpers
                         (f.TimeMs <= tMin + 5000 || f.TimeMs >= tMax - 5000))).ToList();
             r.FrameCount = frames.Count;
             r.DurationSec = frames.Count > 0 ? (frames.Max(f => f.TimeMs) - frames.Min(f => f.TimeMs)) / 1000.0 : 0;
+
+            // Télémétrie pour la superposition au graphe. ⚠️ PIÈGE VÉCU : PresentMon TimeInMs
+            // est un timestamp ABSOLU géant (~1,8e15), PAS relatif à 0. Le graphe FPS marche
+            // car Downsample soustrait l'origine (delta). Mais les SysSample sont horodatés en
+            // ElapsedMs = ms d'horloge MURALE depuis le début de capture (~0). Pour les aligner
+            // sur l'axe du graphe (t=0 = 1re frame ANALYSÉE), ChartStartMs = décalage MURAL entre
+            // le début de capture (≈ 1re frame brute tMin) et la 1re frame gardée après trim :
+            //   t_sample = (ElapsedMs - ChartStartMs) / 1000.
+            r.Samples = cap.Samples ?? new();
+            r.ChartStartMs = frames.Count > 0 ? frames[0].TimeMs - tMin : 0;
+            r.ChartOriginMs = frames.Count > 0 ? frames[0].TimeMs : 0;   // = t0 de Downsample
 
             // Stats
             var ft = frames.Select(f => f.FrameTimeMs).Where(v => v > 0 && !double.IsNaN(v)).OrderBy(v => v).ToArray();
@@ -207,14 +243,17 @@ namespace Optimisation_Tool.Helpers
 
             var runtimeDrops = r.Drops.Where(d => d.Cause != DropCause.ShaderCompile).ToList();
 
-            // CPU global au moment des drops (contexte, pas une cause)
-            r.CpuGlobalAtDropsPct = CpuGlobalAtDrops(runtimeDrops, cap.Samples);
+            // CPU global au moment des drops (contexte, pas une cause). r.Samples est garanti
+            // non-null (null-coalescé plus haut) → pas d'avertissement nullable.
+            r.CpuGlobalAtDropsPct = CpuGlobalAtDrops(runtimeDrops, r.Samples);
 
             // Pas de corrélateur de « coupable » tiers : structurellement incapable de
-            // distinguer cause et co-victime (cf. BuildRecommendations). r.Culprits reste vide.
+            // distinguer cause et co-victime (cf. BuildRecommendations).
 
-            // Graphe
-            r.Chart = Downsample(frames, 1000);
+            // Graphe : résolution généreuse (40 ms/paquet à 161 s = ~13 frames/paquet à 320 fps)
+            // pour voir les vraies oscillations, pas un trait lisse menteur. Persistance OK
+            // (~100 ko/session). Si l'utilisateur veut chaque frame brute, c'est un autre calibre.
+            r.Chart = Downsample(frames, 4000);
 
             // Score + verdict + recos — uniquement du prouvé
             r.Score = ScoreFor(r);
@@ -514,31 +553,21 @@ namespace Optimisation_Tool.Helpers
         }
 
         // ───────────────────────── verdict + score ─────────────────────────
+        // Verdict = phrase FACTUELLE et courte. Le jugement (stable/moyen/instable) est porté
+        // par la pastille de grade ; les chiffres (médian, CV, pire frame, présentation) sont
+        // dans les tuiles. Ici on ne dit QUE le fait marquant : le résumé des chutes.
         private static string BuildVerdict(Report r, List<Drop> runtime)
         {
-            // Mène avec les CHUTES relatives à la propre médiane de l'user (sa normale) : en
-            // compétitif, descendre de sa médiane SE RESSENT — on ne lisse rien, on le nomme.
-            string reg = r.FrametimeCvPct <= 6 ? "frametime stable"
-                       : r.FrametimeCvPct <= 10 ? "frametime un peu instable"
-                       : r.FrametimeCvPct <= 16 ? "frametime instable"
-                       : "frametime très instable";
-            string band = $"{r.FpsP50:0} fps médian, plonge jusqu'à {r.PerceivedFpsLow:0} fps (CV {r.FrametimeCvPct:0} %)";
-
             double med = r.FpsP50;
             double FpsOf(Drop d) => d.FrameTimeMs > 0 ? 1000.0 / d.FrameTimeMs : med;
             int dipsTot = runtime.Count(d => FpsOf(d) < med * 0.90);
             int dipSev  = runtime.Count(d => FpsOf(d) < med * 0.72);
-            string hz = r.MonitorHz > 0 ? $"{r.MonitorHz} Hz" : "ton écran";
 
-            if (dipsTot == 0 && r.FrametimeCvPct <= 6)
-                return $"Session propre — {reg}. {band}. Aucune chute notable sous ta normale.";
-
-            string dipStr = dipsTot > 0
-                ? $" {dipsTot} chutes sous {med * 0.90:0} fps" +
-                  (dipSev > 0 ? $" dont {dipSev} sévères (sous {med * 0.72:0} fps)" : "") +
-                  $" — sur {hz} en compétitif, c'est ça qui se ressent et te coûte des duels."
-                : "";
-            return $"{reg} — {band}.{dipStr}";
+            if (dipsTot == 0) return "Aucune chute notable.";
+            string chutes = dipsTot > 1 ? $"{dipsTot} chutes de FPS" : "1 chute de FPS";
+            if (dipSev == 0) return chutes + ".";
+            string sev = dipSev > 1 ? $"{dipSev} sévères" : "1 sévère";
+            return $"{chutes}, dont {sev}.";
         }
 
         private static int ScoreFor(Report r)
@@ -573,19 +602,33 @@ namespace Optimisation_Tool.Helpers
                 foreach (var f in frames) res.Add(new ChartPoint { T = (f.TimeMs - t0) / 1000.0, Ft = f.FrameTimeMs });
                 return res;
             }
+            // ⚠️ La 1re version gardait le MAX frametime (= pire fps) par paquet, dans l'idée de
+            // « faire ressortir les drops » : ça a violemment loupé — sur ~50 frames/paquet à
+            // 319 fps médian, il y en a quasi toujours une un peu pire → la courbe se traînait à
+            // ~260 alors que la tuile FPS moyen disait 319. La courbe traçait le PLANCHER, pas la
+            // valeur typique. CORRECTION : MÉDIANE par paquet → la courbe = ce que l'utilisateur
+            // voit sur son compteur en jeu. Les vrais drops restent visibles via les pastilles
+            // colorées (étape 4 du rendu) : on sépare la valeur typique des évènements rares.
             double tEnd = frames[^1].TimeMs;
             double bucket = (tEnd - t0) / target;
             int idx = 0;
+            var bag = new List<double>(64);
             for (int b = 0; b < target; b++)
             {
                 double bEnd = t0 + (b + 1) * bucket;
-                double maxFt = 0, tAt = t0 + b * bucket;
+                bag.Clear();
+                double tAt = t0 + (b + 0.5) * bucket;
                 while (idx < frames.Count && frames[idx].TimeMs <= bEnd)
                 {
-                    if (frames[idx].FrameTimeMs > maxFt) { maxFt = frames[idx].FrameTimeMs; tAt = frames[idx].TimeMs; }
+                    double ft = frames[idx].FrameTimeMs;
+                    if (ft > 0 && !double.IsNaN(ft)) bag.Add(ft);
                     idx++;
                 }
-                if (maxFt > 0) res.Add(new ChartPoint { T = (tAt - t0) / 1000.0, Ft = maxFt });
+                if (bag.Count == 0) continue;
+                bag.Sort();
+                double med = bag[bag.Count / 2];
+                double worst = bag[^1];   // pire frametime du paquet → variance visible sur la 2e courbe
+                res.Add(new ChartPoint { T = (tAt - t0) / 1000.0, Ft = med, FtFloor = worst });
             }
             return res;
         }

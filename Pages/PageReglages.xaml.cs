@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.4.0";
+        public const string AppVersion = "1.4.1";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -363,7 +363,10 @@ namespace Optimisation_Tool.Pages
                 ")\r\n" +
                 "timeout /t 1 /nobreak >nul\r\n" +
                 $"robocopy \"{srcDir}\" \"{installDir}\" /E /R:10 /W:2 /NFL /NDL /NJH /NJS /NP >nul\r\n" +
-                $"start \"\" \"{exePath}\"\r\n" +
+                // --after-update : signale à la nouvelle instance qu'elle revient d'une MAJ →
+                // elle se ramène au premier plan même si « Démarrer minimisé » est coché (la
+                // relance via cmd.exe sans fenêtre n'a aucun droit de foreground sinon).
+                $"start \"\" \"{exePath}\" --after-update\r\n" +
                 "del \"%~f0\"\r\n";
             File.WriteAllText(bat, script);
             return bat;

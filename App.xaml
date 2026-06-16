@@ -30,6 +30,11 @@
         <SolidColorBrush x:Key="ThTextNav"   Color="#B6BEE4"/>
         <SolidColorBrush x:Key="ThTextDim"   Color="#9CA3CC"/>
         <SolidColorBrush x:Key="ThAccentIcon" Color="#8FC0FF"/>
+        <SolidColorBrush x:Key="ThChartLine"  Color="#3F88C5"/>
+        <SolidColorBrush x:Key="ThWarnTint"    Color="#33F5C24A"/>
+        <SolidColorBrush x:Key="ThCritTint"    Color="#33E05555"/>
+        <SolidColorBrush x:Key="ThInfoTint"    Color="#22315FA0"/>
+        <SolidColorBrush x:Key="ThNeutralTint" Color="#22A0A0A0"/>
         <SolidColorBrush x:Key="ThLogText"   Color="#5FD98C"/>
         <SolidColorBrush x:Key="ThOk"        Color="#2EC46A"/>
         <SolidColorBrush x:Key="ThWarn"      Color="#F5C24A"/>

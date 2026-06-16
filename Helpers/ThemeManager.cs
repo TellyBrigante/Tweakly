@@ -64,6 +64,16 @@ namespace Optimisation_Tool.Helpers
             ["ThTextDim"]   = ("#9CA3CC", "#4A4C50"),   // dim (réglage user)
             ["ThLogText"]   = ("#5FD98C", "#1E6E38"),  // vert journal : clair sur sombre, foncé sur clair
             ["ThAccentIcon"]= ("#8FC0FF", "#2A62C4"),  // glyphes/initiales sur fond bleu alpha : clairs en sombre, PROFONDS en clair (sinon illisibles — retour utilisateur v1.3.5)
+            ["ThChartLine"] = ("#3F88C5", "#1F4E94"),  // courbe FPS du Suivi en jeu : bleu MAT en sombre, sensiblement plus foncé/sobre que le #8FC0FF historique (qui pétait) ; bleu profond en clair
+
+            // ── « Tints » : fonds COLORÉS thémés (alpha) pour cartes/pastilles. Avant : hex en
+            // dur #33F5C24A (jaune vif) → en LIGHT, le jaune vif traversait l'alpha et arrachait
+            // les yeux. Désormais chaque tint a sa version sombre + clair, calibrée pour rester
+            // DISCRÈTE dans les deux modes.
+            ["ThWarnTint"]    = ("#33F5C24A", "#1AA87900"),   // ambre / brun profond très léger en clair
+            ["ThCritTint"]    = ("#33E05555", "#1AC0392B"),   // rouge / rouge profond très léger en clair
+            ["ThInfoTint"]    = ("#22315FA0", "#1A1F4E94"),   // bleu très léger
+            ["ThNeutralTint"] = ("#22A0A0A0", "#1A4A4D52"),   // gris très léger
             // Couleurs de statut — vives en sombre, ASSOMBRIES en clair pour rester lisibles
             ["ThOk"]        = ("#2EC46A", "#1E9E55"),
             ["ThWarn"]      = ("#F5C24A", "#A87900"),   // amber foncé en clair (le jaune vif était illisible)

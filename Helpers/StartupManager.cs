@@ -72,7 +72,10 @@ namespace Optimisation_Tool.Helpers
                 // PAS d'XML, donc pas de problème d'encodage UTF-16/UTF-8.
                 // PAS de /ru/rp : la tâche tourne sous l'utilisateur courant par défaut, ce qui
                 // évite les problèmes de SID Azure AD (compte Microsoft) qu'on avait en v1.2.9.
-                var args = $"/create /tn \"{TaskName}\" /tr \"\\\"{exe}\\\"\" /sc ONLOGON /rl HIGHEST /F";
+                // --startup : marque ce lancement comme « par Windows au boot » → c'est le SEUL
+                // cas où le réglage « Démarrer minimisé » s'applique (un lancement manuel affiche
+                // toujours l'app au premier plan). Cf. App.LaunchedAtStartup / ShouldStartMinimized.
+                var args = $"/create /tn \"{TaskName}\" /tr \"\\\"{exe}\\\" --startup\" /sc ONLOGON /rl HIGHEST /F";
                 var (exit, stdout, stderr) = RunSchtasks(args);
 
                 if (exit != 0)
@@ -100,6 +103,29 @@ namespace Optimisation_Tool.Helpers
                 LastError = ex.Message;
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Auto-réparation des tâches créées par d'anciennes versions (sans l'argument
+        /// « --startup ») : si la tâche existe mais que sa commande ne contient pas le flag,
+        /// on la re-crée AVEC (l'app est élevée → schtasks /F écrase sans UAC). Sans ça,
+        /// un user qui a « démarrer avec Windows » verrait l'app s'ouvrir EN GRAND au boot
+        /// (faute du flag) au lieu de rester minimisée comme avant. Silencieux et idempotent.
+        /// À appeler une fois au démarrage (best-effort, en arrière-plan).
+        /// </summary>
+        public static void EnsureStartupArg()
+        {
+            try
+            {
+                if (!IsEnabled()) return;
+                // /v /fo LIST : sortie verbeuse incluant la commande. On ne parse PAS de
+                // libellé localisé (piège FR/EN) — on cherche juste la sous-chaîne du flag.
+                var (exit, stdout, _) = RunSchtasks($"/query /tn \"{TaskName}\" /v /fo LIST");
+                if (exit != 0) return;
+                if (!(stdout ?? "").Contains("--startup", StringComparison.OrdinalIgnoreCase))
+                    Enable();   // re-crée la tâche avec le flag (chemin de l'exe rafraîchi au passage)
+            }
+            catch { }
         }
 
         /// <summary>Désactive : supprime la tâche planifiée (et l'ancienne clé Run si présente).</summary>

@@ -22,10 +22,11 @@ namespace Optimisation_Tool.Helpers
     ///
     /// COMPORTEMENT FIGE :
     ///   - X (fermer) : ferme l'app pour de vrai (inchange, gere par MainWindow).
-    ///   - _ (reduire) : cache la fenetre + barre des taches -> seule la tray reste.
+    ///   - _ (reduire) : reduit dans la barre des taches ; l'icone tray reste presente
+    ///                   en parallele (la fenetre n'est PLUS cachee de la barre des taches).
     ///   - Double-clic gauche tray : Ouvrir Tweakly (restore + focus).
     ///   - Clic droit tray : menu { Ouvrir Tweakly, Ouvrir mode mini, Fermer Tweakly }.
-    ///   - "Demarrer minimise" (Reglages) : demarre directement dans le tray.
+    ///   - "Demarrer minimise" (Reglages) : demarre reduit dans la barre des taches (+ tray).
     /// </summary>
     internal sealed class TrayIconManager : IDisposable
     {
@@ -171,10 +172,20 @@ namespace Optimisation_Tool.Helpers
             return false;
         }
 
-        /// <summary>Cache MainWindow (fenetre + barre des taches) -> seule la tray reste.</summary>
+        /// <summary>
+        /// Reduit MainWindow dans la barre des taches. Avant : _main.Hide() retirait la
+        /// fenetre de la barre des taches (seule la tray restait) -> l'utilisateur veut la
+        /// voir AUSSI dans la barre des taches. Desormais : reduction classique, l'icone
+        /// tray (enregistree au ctor) reste presente en parallele.
+        /// </summary>
         public void HideToTray()
         {
-            try { _main.Hide(); } catch { }
+            try
+            {
+                if (!_main.IsVisible) _main.Show();
+                _main.WindowState = WindowState.Minimized;
+            }
+            catch { }
         }
 
         /// <summary>Restaure MainWindow au premier plan (depuis le tray ou le mode mini).</summary>

@@ -8,9 +8,43 @@ namespace Optimisation_Tool
     /// </summary>
     public partial class App : Application
     {
+        /// <summary>
+        /// True quand l'app a été relancée par le script de MAJ (update.bat passe l'argument
+        /// « --after-update »). Dans ce cas on FORCE l'affichage au premier plan même si
+        /// « Démarrer minimisé » est coché : l'utilisateur vient d'updater, il veut VOIR la
+        /// nouvelle version revenir, pas la retrouver muette dans la barre des tâches.
+        /// ⚠️ MAJ-SENSIBLE : l'argument est ajouté par le batch de la version EN COURS → ce
+        /// confort ne profite qu'aux MAJ PARTANT de cette version (les installs plus
+        /// anciennes relancent sans l'argument, comportement inchangé chez elles).
+        /// </summary>
+        public static bool LaunchedAfterUpdate { get; private set; }
+
+        /// <summary>
+        /// True quand l'app a été lancée par la tâche planifiée « démarrer avec Windows »
+        /// (qui passe l'argument « --startup »). C'est le SEUL cas où « Démarrer minimisé »
+        /// s'applique : un lancement MANUEL par l'utilisateur affiche toujours le splash +
+        /// l'app au premier plan, quelle que soit la valeur du réglage.
+        /// ⚠️ MAJ-SENSIBLE : les tâches créées par d'anciennes versions n'ont pas l'argument
+        /// → StartupManager.EnsureStartupArg() les répare au démarrage (re-création silencieuse).
+        /// </summary>
+        public static bool LaunchedAtStartup { get; private set; }
+
+        /// <summary>
+        /// Faut-il VRAIMENT démarrer minimisé ? Uniquement si le réglage est coché ET que
+        /// Windows nous a lancés au boot (--startup) ET qu'on ne revient pas d'une MAJ.
+        /// Un lancement manuel ou une relance post-MAJ = splash + premier plan.
+        /// </summary>
+        public static bool ShouldStartMinimized(bool settingStartMinimized)
+            => settingStartMinimized && LaunchedAtStartup && !LaunchedAfterUpdate;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            LaunchedAfterUpdate = Array.Exists(e.Args,
+                a => string.Equals(a, "--after-update", StringComparison.OrdinalIgnoreCase));
+            LaunchedAtStartup = Array.Exists(e.Args,
+                a => string.Equals(a, "--startup", StringComparison.OrdinalIgnoreCase));
 
             // ── Capture des exceptions NON GÉRÉES (v1.3.3) ──────────────────────
             // Avant : un crash (surtout au démarrage) ne laissait AUCUNE trace → les
@@ -55,7 +89,9 @@ namespace Optimisation_Tool
                 Helpers.ThemeManager.Apply(settings.Theme == "Light"
                     ? Helpers.ThemeManager.Mode.Light
                     : Helpers.ThemeManager.Mode.Dark);
-                if (!settings.StartMinimized)
+                // Splash sauf si on doit réellement démarrer minimisé (réglage coché ET
+                // lancé au boot par Windows). Lancement manuel ou relance post-MAJ = splash.
+                if (!ShouldStartMinimized(settings.StartMinimized))
                 {
                     new SplashWindow().Show();
                     return;
