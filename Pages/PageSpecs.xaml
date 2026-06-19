@@ -205,13 +205,6 @@
             </Style.Triggers>
         </Style>
 
-        <!-- Nœud CPU : le cœur du schéma — bordure accent permanente + fond légèrement teinté -->
-        <Style x:Key="SchemaNodeCpu" TargetType="Border" BasedOn="{StaticResource SchemaNode}">
-            <Setter Property="BorderBrush"     Value="#555BA0FF"/>
-            <Setter Property="Background"      Value="#0D5BA0FF"/>
-            <Setter Property="BorderThickness" Value="1.5"/>
-        </Style>
-
         <!-- Étiquette de catégorie d'un nœud -->
         <Style x:Key="SchemaCat" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
@@ -623,7 +616,7 @@
                         <!-- ═════ CALLOUTS DROITE ═════ -->
                         <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top" Width="212" Margin="0,60,8,0">
                             <!-- CPU -->
-                            <Border Style="{StaticResource SchemaNodeCpu}" MouseLeftButtonUp="NodeCpu_Click">
+                            <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeCpu_Click">
                                 <StackPanel>
                                     <TextBlock Text="PROCESSEUR" Style="{StaticResource SchemaCat}" Margin="0,0,0,5"/>
                                     <TextBlock x:Name="TxtCpuHead" Text="Chargement…"

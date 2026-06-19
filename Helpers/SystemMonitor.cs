@@ -410,9 +410,12 @@ namespace Optimisation_Tool.Helpers
                 var gpu = SelectDisplayGpu();   // dédiée d'abord, IGP en dernier recours
                 if (gpu == null) { s.GpuOk = false; CacheGpu(s); return; }
 
-                // Carte Nvidia → nvidia-smi (usage + VRAM + temp + watts + horloge). Si le pilote
-                // ne répond pas, on retombe proprement sur la voie WMI/compteurs ci-dessous.
-                if (gpu.Vendor == GpuVendor.Nvidia && TryNvidiaSmi(s))
+                // Carte Nvidia → NvAPI IN-PROCESS (~2,5 ms : usage/temp/horloge/VRAM) au lieu de
+                // spawner nvidia-smi (jusqu'à 4 s → bloquait Collect et saccadait le monitoring).
+                // Les watts (que NvAPI ne donne pas de façon fiable) arrivent par un refresh
+                // nvidia-smi LENT et NON BLOQUANT en arrière-plan (cf. EnsureWattsFetch). Si NvAPI
+                // est indisponible (pilote KO), on retombe sur nvidia-smi, puis WMI.
+                if (gpu.Vendor == GpuVendor.Nvidia && (TryNvapiGpu(s, gpu) || TryNvidiaSmi(s)))
                 {
                     s.GpuIsIntegrated = false;
                     CacheGpu(s);
@@ -437,6 +440,74 @@ namespace Optimisation_Tool.Helpers
             _gpuCache = (s.GpuOk, s.GpuName, s.GpuUsage, s.GpuVramUsedMB, s.GpuVramTotalMB,
                          s.GpuTemp, s.GpuWatts, s.GpuMHz, s.GpuIsIntegrated);
             _gpuCacheTime = DateTime.UtcNow;
+        }
+
+        // ── GPU Nvidia via NvAPI in-process (rapide) + watts en arrière-plan ──────────────
+        private static GpuTelemetry? _nvapi;
+        private static bool _nvapiTried;
+        private static double _gpuWattsCached;          // dernier watts connu (nvidia-smi lent)
+        private static DateTime _gpuWattsTime;
+        private static int _gpuWattsFetching;           // garde anti-empilement (Interlocked)
+
+        // Remplit s via NvAPI (usage/temp/horloge/VRAM en process, ~2,5 ms). Watts = valeur
+        // mise en cache par EnsureWattsFetch (refresh nvidia-smi lent, non bloquant). Renvoie
+        // false si NvAPI indisponible → l'appelant retombe sur nvidia-smi.
+        private static bool TryNvapiGpu(MonSnapshot s, GpuInfo gpu)
+        {
+            try
+            {
+                if (!_nvapiTried) { _nvapiTried = true; try { _nvapi = new GpuTelemetry(); } catch { _nvapi = null; } }
+                if (_nvapi == null || !_nvapi.Available) return false;
+
+                var r = _nvapi.Read();
+                // Si rien d'exploitable (ni usage ni temp), NvAPI ne sert à rien → fallback.
+                if (double.IsNaN(r.UsagePct) && double.IsNaN(r.TempC)) return false;
+
+                s.GpuName        = gpu.Name;
+                s.GpuUsage       = double.IsNaN(r.UsagePct)    ? 0 : r.UsagePct;
+                s.GpuTemp        = double.IsNaN(r.TempC)       ? 0 : r.TempC;
+                s.GpuMHz         = double.IsNaN(r.CoreMhz)     ? 0 : r.CoreMhz;
+                s.GpuVramUsedMB  = double.IsNaN(r.VramUsedMB)  ? 0 : r.VramUsedMB;
+                s.GpuVramTotalMB = double.IsNaN(r.VramTotalMB) ? gpu.DedicatedVramMB : r.VramTotalMB;
+                s.GpuWatts       = _gpuWattsCached;            // rempli en arrière-plan
+                s.GpuOk          = true;
+                EnsureWattsFetch();                           // refresh watts lent si nécessaire
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // Refresh des watts via nvidia-smi, au plus toutes les 5 s, sur un thread de fond →
+        // ne bloque JAMAIS le tick du monitoring (c'était la cause du lag).
+        private static void EnsureWattsFetch()
+        {
+            if (_gpuWattsTime != default && (DateTime.UtcNow - _gpuWattsTime).TotalMilliseconds < 5000) return;
+            if (System.Threading.Interlocked.CompareExchange(ref _gpuWattsFetching, 1, 0) != 0) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
+                        "--query-gpu=power.draw --format=csv,noheader,nounits")
+                    {
+                        UseShellExecute = false, CreateNoWindow = true,
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                    });
+                    if (p != null)
+                    {
+                        var line = p.StandardOutput.ReadLine();
+                        p.WaitForExit(4000);
+                        if (double.TryParse((line ?? "").Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var w))
+                            _gpuWattsCached = w;
+                    }
+                }
+                catch { }
+                finally
+                {
+                    _gpuWattsTime = DateTime.UtcNow;
+                    System.Threading.Interlocked.Exchange(ref _gpuWattsFetching, 0);
+                }
+            });
         }
 
         // Remplit s via nvidia-smi. Renvoie false si nvidia-smi absent / muet (pas de carte Nvidia active).

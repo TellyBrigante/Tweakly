@@ -145,7 +145,7 @@ namespace Optimisation_Tool.Helpers
                 string key = ev.Provider + "|" + ev.Id;
                 if (!groups.TryGetValue(key, out var e))
                 {
-                    e = Decode(ev.Provider, ev.Id, ev.Raw);
+                    e = Decode(ev.Provider, ev.Id, ev.Raw, ev.RawFull);
                     e.Last = ev.Time;
                     groups[key] = e;
                 }
@@ -196,7 +196,7 @@ namespace Optimisation_Tool.Helpers
             if (cluster.Count == 0) return null;
 
             var decoded = cluster
-                .Select(e => (e.Time, e.Raw, Info: Decode(e.Provider, e.Id, e.Raw), Kind: KindOf(e.Provider, e.Id)))
+                .Select(e => (e.Time, e.Raw, Info: Decode(e.Provider, e.Id, e.Raw, e.RawFull), Kind: KindOf(e.Provider, e.Id)))
                 .ToList();
 
             // On ne retient un incident que s'il y a un vrai signal : >=2 events OU au moins un sérieux
@@ -287,6 +287,19 @@ namespace Optimisation_Tool.Helpers
                     var drv = GetNvidiaDriverVersion();
                     string drvLine = drv.Length > 0 ? $" Pilote installé : NVIDIA {drv}." : "";
 
+                    // SUSPECT CONCRET (pas de la coïncidence) : un adaptateur d'affichage VIRTUEL
+                    // installé est une cause MÉCANIQUE et documentée de reset nvlddmkm (il s'insère
+                    // dans le pipeline WDDM). On le NOMME quand il est réellement présent.
+                    var vdisp = DetectVirtualDisplayAdapters();
+                    string suspectStep = vdisp.Length > 0
+                        ? $"SUSPECT n°1 détecté sur TA machine : « {string.Join(", ", vdisp)} ». Les adaptateurs "
+                          + "d'affichage VIRTUELS s'insèrent dans le pipeline graphique (WDDM) et sont une cause "
+                          + "CONNUE de reset du pilote nvlddmkm — surtout à l'attache/détache d'un écran virtuel. "
+                          + "Ça colle avec un PC sans OC, bien refroidi (ni thermique ni overclock). TEST DÉCISIF : "
+                          + "Gestionnaire de périphériques > Cartes graphiques > clic droit dessus > Désactiver, "
+                          + "puis joue : si les TDR cessent, c'est lui. (Tu peux le réactiver à la demande.)"
+                        : "";
+
                     if (recDays <= 1)
                     {
                         // ÉPISODE ISOLÉ (un seul jour concerné sur toute la période) → pas
@@ -296,19 +309,24 @@ namespace Optimisation_Tool.Helpers
                                      : "aucune récidive pour l'instant";
                         inc.Title  = "Plantage ponctuel du pilote graphique";
                         inc.Icon   = "";
-                        inc.Advice = $"Le pilote GPU a planté{rafale}{appPart} — mais c'est un épisode ISOLÉ "
-                                   + $"(un seul jour concerné sur la période, {since}).{drvLine} "
-                                   + "Un pilote peut crasher une fois (un jeu précis, une sortie de veille, un pic ponctuel) "
-                                   + "sans que ta config soit en cause. Inutile de sortir l'artillerie.";
+                        inc.Advice = $"Le pilote GPU a cessé de répondre{rafale}{appPart} : il a mis trop longtemps à "
+                                   + "répondre, alors Windows l'a réinitialisé (mécanisme « TDR — Timeout Detection & "
+                                   + "Recovery », EventID 4101). Ça vient du couple PILOTE + GPU, pas de Windows. "
+                                   + $"Mais c'est un épisode ISOLÉ (un seul jour concerné sur la période, {since}).{drvLine} "
+                                   + "Causes typiques d'un TDR ponctuel : pilote un peu instable, sortie de veille, pic de "
+                                   + "charge, overclock limite, ou l'accélération matérielle d'un navigateur/overlay. "
+                                   + "Pour un cas unique, inutile de sortir l'artillerie (surtout pas DDU).";
                         inc.Steps  = new List<string>
                         {
-                            "Rien d'urgent : note ce que tu faisais à ce moment-là (quel jeu / quelle appli) et surveille si ça revient.",
-                            "Si ça se reproduit DANS LE MÊME jeu : le coupable est ce jeu ou le pilote pour ce jeu — pas ton matériel.",
+                            "Note ce que tu faisais à cet instant (jeu / appli / simple bureau) : ça oriente direct la cause si ça revient.",
+                            "Vérifie la température GPU en charge (bouton « Voir Monitoring ») : un pic au-delà de ~83 °C suffit à déclencher un TDR.",
+                            "Si tu as un overclock GPU (MSI Afterburner), c'est le suspect n°1 d'un TDR isolé : reviens aux réglages d'usine et re-teste.",
                             drv.Length > 0
-                                ? $"Si ça se reproduit dans plusieurs jeux : bascule du pilote {drv} vers le Studio Driver équivalent (plus conservateur que le Game Ready)."
-                                : "Si ça se reproduit dans plusieurs jeux : teste le Studio Driver (plus conservateur que le Game Ready).",
+                                ? $"Si ça se reproduit dans plusieurs jeux : passe du pilote {drv} au Studio Driver (plus conservateur que le Game Ready) via l'« installation propre » de la NVIDIA App — pas besoin de DDU pour ça."
+                                : "Si ça se reproduit dans plusieurs jeux : passe au Studio Driver via l'« installation propre » de la NVIDIA App (pas besoin de DDU).",
                             "Relance une analyse ici dans quelques jours : si cette carte ne réapparaît pas, classe l'affaire.",
                         };
+                        if (suspectStep.Length > 0) inc.Steps.Insert(0, suspectStep);
                         inc.Actions = new List<LogAction>
                         {
                             new LogAction { Label = "Voir Monitoring", Tooltip = "Températures GPU en temps réel.",          Kind = LogActionKind.Navigate, Target = "Monitoring" },
@@ -320,23 +338,28 @@ namespace Optimisation_Tool.Helpers
                     // RÉCURRENT (plusieurs jours distincts) → escalade complète.
                     inc.Title  = $"Effondrements répétés du pilote graphique ({recDays} jours concernés)";
                     inc.Icon   = "";
-                    inc.Advice = $"Le pilote GPU a cessé de répondre{rafale}{appPart} — et ce n'est pas la première fois : "
+                    inc.Advice = $"Le pilote GPU a cessé de répondre{rafale}{appPart} : trop long à répondre, Windows l'a "
+                               + "réinitialisé (mécanisme « TDR », EventID 4101). Et ce n'est pas la première fois — "
                                + $"des TDR sur {recDays} jours différents de la période analysée.{drvLine} "
-                               + "Là, c'est un vrai problème à traiter.";
+                               + "Là c'est un vrai problème à traiter, méthodiquement, du plus simple au plus lourd "
+                               + "(DDU n'arrive qu'en dernier).";
                     inc.Steps  = new List<string>
                     {
+                        "Température GPU sous charge (bouton « Voir Monitoring ») : au-delà de ~83 °C, revoir le flux d'air / dépoussiérer / pâte thermique. Une surchauffe répétée provoque des TDR.",
+                        "Retirer tout overclock GPU le temps du diagnostic (même un undervolt « stable » peut devenir limite avec un nouveau pilote — à re-valider).",
                         drv.Length > 0
-                            ? $"Désinstaller le pilote {drv} proprement avec DDU en mode sans échec, puis réinstaller une version STABLE (Studio Driver, ou la version précédente)."
-                            : "Désinstaller le pilote graphique proprement avec DDU en mode sans échec, puis réinstaller une version STABLE.",
-                        "Tweakly > Surveillance > Monitoring système : vérifier la température GPU sous charge. Au-delà de ~83 °C, revoir flux d'air / pâte thermique.",
-                        "Retirer tout overclock GPU le temps du diagnostic (même un undervolt « stable » peut devenir limite avec un nouveau pilote — re-valide-le).",
-                        "Si ça persiste après tout ça : suspecter l'alimentation (TDR sur les pics de charge) ou un problème matériel GPU — tester sur un autre PC si possible.",
+                            ? $"Réinstaller un pilote STABLE SANS DDU d'abord : NVIDIA App > Pilotes > Installation personnalisée > « Effectuer une installation propre » (Studio Driver, ou la Game Ready N-1 ; plusieurs récentes ont causé des TDR). Tu es sur {drv}."
+                            : "Réinstaller un pilote STABLE SANS DDU d'abord : NVIDIA App > Pilotes > Installation personnalisée > « Effectuer une installation propre » (Studio Driver, ou la Game Ready N-1).",
+                        "Couper les overlays (Discord/GeForce) et l'accélération matérielle des navigateurs si les TDR arrivent aussi au bureau (cause fréquente).",
+                        "SEULEMENT si ça persiste : désinstaller avec DDU en mode sans échec puis réinstaller propre. C'est le dernier recours, pas la première étape.",
+                        "Toujours rien : suspecter l'alimentation (TDR sur les pics de charge) ou un défaut matériel GPU — tester sur un autre PC si possible.",
                     };
+                    if (suspectStep.Length > 0) inc.Steps.Insert(0, suspectStep);
                     inc.Actions = new List<LogAction>
                     {
-                        new LogAction { Label = "Voir Monitoring",   Tooltip = "Températures GPU en temps réel.",     Kind = LogActionKind.Navigate, Target = "Monitoring" },
-                        new LogAction { Label = "Télécharger DDU",   Tooltip = "Page Wagnardsoft (DDU officiel).",     Kind = LogActionKind.Url,      Target = "https://www.wagnardsoft.com/" },
-                        new LogAction { Label = "Pilotes NVIDIA",    Tooltip = "Page officielle de téléchargement.",   Kind = LogActionKind.Url,      Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
+                        new LogAction { Label = "Voir Monitoring",       Tooltip = "Températures GPU en temps réel.",                                  Kind = LogActionKind.Navigate, Target = "Monitoring" },
+                        new LogAction { Label = "Pilotes NVIDIA",        Tooltip = "Page officielle de téléchargement (Studio / Game Ready).",         Kind = LogActionKind.Url,      Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
+                        new LogAction { Label = "DDU (dernier recours)", Tooltip = "Display Driver Uninstaller — uniquement si les étapes précédentes échouent.", Kind = LogActionKind.Url, Target = "https://www.wagnardsoft.com/" },
                     };
                     return;
                 }
@@ -580,37 +603,47 @@ namespace Optimisation_Tool.Helpers
         //    = horloge (Clock)             = bouclier (sécurité TLS)
         //    = Bluetooth-ish               = audio
         //    = enregistrer (sauvegarder)   = corbeille (delete)
-        private static LogEntry Decode(string prov, int id, string raw)
+        private static LogEntry Decode(string prov, int id, string raw, string rawFull)
         {
             var e = new LogEntry { Provider = prov, Id = id, Raw = raw, Known = true };
             string p = prov.ToLowerInvariant();
+            // Détection sur le message COMPLET (rawFull), pas seulement la 1re ligne (raw) :
+            // le module fautif (« nvlddmkm » d'un TDR loggé sous la source « Display »/4101) est
+            // souvent au-delà de la 1re ligne. Sans ça, le crash GPU retombait en générique.
+            string rl = (rawFull.Length > 0 ? rawFull : raw).ToLowerInvariant();
 
             // -- GPU NVIDIA (TDR Timeout Detection & Recovery) --------------
-            if (p.Contains("nvlddmkm"))
+            // On reconnaît aussi un TDR loggé sous la source « Display » (EventID 4101) dont le
+            // module fautif « nvlddmkm » est dans le message brut → fini le verdict générique.
+            if (p.Contains("nvlddmkm") || rl.Contains("nvlddmkm"))
             {
                 e.Sev   = LogSev.Serious;
                 e.Icon  = "";
                 e.Title = "Pilote graphique NVIDIA — perte de réponse (TDR)";
-                e.What  = "Le GPU a cessé de répondre puis a été réinitialisé par Windows (Timeout Detection & Recovery). En jeu, ça se traduit par un freeze de 1-2 s avec écran qui clignote noir, parfois un crash de l'appli.";
-                e.Cause = "Pilote instable ou version buguée · overclock GPU (Afterburner) · surchauffe (>83 °C) · alimentation insuffisante sur les pics de charge · parfois un jeu/appli précis qui stresse le shader compiler.";
+                e.What  = "Le GPU a cessé de répondre puis a été réinitialisé par Windows (mécanisme « Timeout Detection & Recovery », EventID 4101). Concrètement : un freeze de 1-2 s, l'écran qui clignote noir, parfois le crash de l'appli en cours. L'origine est le couple PILOTE + GPU (module nvlddmkm), PAS Windows.";
+                e.Cause = "Pilote instable ou version buguée · overclock GPU (Afterburner) · surchauffe (>83 °C) · alimentation insuffisante sur les pics de charge · accélération matérielle d'un navigateur ou overlay · parfois un jeu précis qui stresse le compilateur de shaders.";
+                // ⚠️ Étapes du PLUS DOUX au PLUS LOURD — DDU est le DERNIER recours, pas le premier
+                // (retour utilisateur : ne pas envoyer direct sur DDU + clean install).
                 e.Steps = new List<string>
                 {
-                    "Désinstaller le pilote NVIDIA PROPREMENT avec DDU (Display Driver Uninstaller) en mode sans échec, puis réinstaller une version STABLE (Studio Driver ou la Game Ready N-1, plusieurs récentes ont causé des TDR).",
-                    "Ouvrir Tweakly > Surveillance > Monitoring système et regarder la température GPU en charge. Au-delà de ~83 °C : revoir le flux d'air boîtier, dépoussiérer, ou refaire la pâte thermique.",
-                    "Retirer tout overclock GPU (MSI Afterburner : Core Clock / Memory Clock à 0, Power Limit à 100 %). Un léger UNDERVOLT stabilise souvent les TDR.",
-                    "Si ça persiste : suspecter l'alimentation (PSU sous-dimensionnée ou âgée → TDR sur les pics de courant) ; tester le GPU sur un autre PC pour isoler.",
+                    "Vérifier la TEMPÉRATURE GPU en charge (Tweakly > Surveillance > Monitoring système). Au-delà de ~83 °C le GPU se bride et peut provoquer un TDR : améliorer le flux d'air, dépoussiérer, voire refaire la pâte thermique.",
+                    "Retirer tout OVERCLOCK GPU (MSI Afterburner : Core/Memory Clock à 0, Power Limit à 100 %). Un léger UNDERVOLT stabilise très souvent les TDR sans perdre de performance.",
+                    "Réinstaller un pilote STABLE SANS DDU d'abord : NVIDIA App > Pilotes > Installation personnalisée > cocher « Effectuer une installation propre » (prendre un Studio Driver, ou la Game Ready N-1 — plusieurs versions récentes ont causé des TDR).",
+                    "Si le TDR n'arrive que dans UNE appli/jeu précis ou au bureau : couper son overlay (Discord/GeForce) et l'ACCÉLÉRATION MATÉRIELLE des navigateurs (cause classique de TDR à l'idle).",
+                    "SEULEMENT si ça persiste après tout ça : désinstaller le pilote avec DDU (mode sans échec) puis réinstaller propre. C'est le dernier recours, pas la première étape.",
+                    "Toujours rien : suspecter l'alimentation (PSU sous-dimensionnée/âgée → TDR sur les pics de courant) ou un défaut matériel GPU (le tester sur un autre PC pour isoler).",
                 };
                 e.Actions = new List<LogAction>
                 {
                     new LogAction { Label = "Voir Monitoring",   Tooltip = "Ouvre la page Monitoring système pour vérifier les températures GPU.", Kind = LogActionKind.Navigate, Target = "Monitoring" },
-                    new LogAction { Label = "Télécharger DDU",   Tooltip = "Page officielle de Display Driver Uninstaller (Wagnardsoft).",          Kind = LogActionKind.Url,      Target = "https://www.wagnardsoft.com/" },
-                    new LogAction { Label = "Pilotes NVIDIA",    Tooltip = "Page officielle de téléchargement des pilotes NVIDIA.",                 Kind = LogActionKind.Url,      Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
+                    new LogAction { Label = "Pilotes NVIDIA",    Tooltip = "Page officielle de téléchargement des pilotes NVIDIA (Studio / Game Ready).", Kind = LogActionKind.Url,  Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
+                    new LogAction { Label = "DDU (dernier recours)", Tooltip = "Display Driver Uninstaller (Wagnardsoft) — uniquement si les étapes précédentes échouent.", Kind = LogActionKind.Url, Target = "https://www.wagnardsoft.com/" },
                 };
                 return e;
             }
 
             // -- GPU AMD ----------------------------------------------------
-            if (p.Contains("amdkmdag") || p.Contains("amdwddmg"))
+            if (p.Contains("amdkmdag") || p.Contains("amdwddmg") || rl.Contains("amdkmdag") || rl.Contains("amdwddmg"))
             {
                 e.Sev   = LogSev.Serious;
                 e.Icon  = "";
@@ -755,6 +788,27 @@ namespace Optimisation_Tool.Helpers
                         new LogAction { Label = "Protection système", Tooltip = "Ouvre les paramètres de Protection du système.",        Kind = LogActionKind.Command, Target = "cmd /c SystemPropertiesProtection.exe", Confirm = false },
                         new LogAction { Label = "Voir Nettoyage",     Tooltip = "Page Nettoyage de Tweakly.",                            Kind = LogActionKind.Navigate, Target = "Nettoyage" },
                         new LogAction { Label = "Voir Bilan de santé", Tooltip = "Page Bilan de santé de Tweakly.",                       Kind = LogActionKind.Navigate, Target = "Diagnostic" },
+                    };
+                    return e;
+
+                // -- VSS (service Cliché instantané des volumes) -------------
+                case "vss":
+                    e.Sev   = LogSev.Warning;
+                    e.Title = "Service de clichés VSS — erreur";
+                    e.What  = "Le service « Cliché instantané des volumes » (VSS) a échoué — généralement pendant une sauvegarde, la création d'un point de restauration, ou déclenché par un logiciel de sauvegarde tiers. Ce n'est PAS un plantage du PC.";
+                    e.Cause = "Un « writer » VSS dans un état défaillant · logiciel de sauvegarde tiers en conflit (Veeam, Acronis, OneDrive…) · disque système saturé · service VSS arrêté.";
+                    e.Steps = new List<string>
+                    {
+                        "Lister l'état des writers : invite de commandes ADMIN > « vssadmin list writers ». Un writer en état « Failed » / « Timed out » désigne le composant fautif.",
+                        "Libérer de l'espace sur le disque système (VSS échoue souvent par manque de place) : Tweakly > Optimisations > Nettoyage.",
+                        "Redémarrer le service : services.msc > « Cliché instantané des volumes » > Redémarrer (le laisser en démarrage Manuel).",
+                        "Si ça vient d'un logiciel de sauvegarde tiers, le mettre à jour ou revoir sa planification (deux sauvegardes simultanées se gênent).",
+                        "Ponctuel = sans gravité (Windows réessaie). À traiter sérieusement seulement si l'erreur REVIENT sur plusieurs jours.",
+                    };
+                    e.Actions = new List<LogAction>
+                    {
+                        new LogAction { Label = "Ouvrir services.msc", Tooltip = "Console des services Windows (redémarrer le service VSS).", Kind = LogActionKind.Diag, Target = "services.msc" },
+                        new LogAction { Label = "Voir Nettoyage",      Tooltip = "Page Nettoyage de Tweakly (libérer de l'espace disque).",   Kind = LogActionKind.Navigate, Target = "Nettoyage" },
                     };
                     return e;
 
@@ -1127,9 +1181,28 @@ namespace Optimisation_Tool.Helpers
             e.Sev   = LogSev.Warning;
             e.Icon  = "";
             e.Title = prov;
-            e.What  = $"Erreur signalée par « {prov} » (EventID {id}).";
-            e.Cause = "Source non répertoriée par Tweakly — voir le détail brut.";
-            e.Fix   = "Rechercher « " + prov + " " + id + " » sur le web.";
+            // Pas de cause inventée : on donne une vraie DÉMARCHE (lire le détail brut, juger la
+            // récurrence) au lieu d'un « cherchez sur le web » fainéant.
+            e.What  = $"Erreur signalée par « {prov} » (EventID {id}). Cette source précise n'est pas dans la base de Tweakly.";
+            e.Cause = "Événement peu courant ou propre à un logiciel/pilote tiers. Sans signature connue, Tweakly ne devine pas une cause au hasard — mais le détail brut ci-dessous nomme presque toujours le responsable.";
+            e.Steps = new List<string>
+            {
+                "Lis le DÉTAIL BRUT ci-dessous : il contient souvent le nom de l'application, du pilote ou du fichier en cause.",
+                "Regarde la RÉCURRENCE : un événement isolé est très probablement sans gravité (ignore-le) ; le même qui revient sur plusieurs jours = un vrai problème à creuser.",
+                "Croise avec Diagnostic > Bilan de santé pour voir si l'horaire coïncide avec un autre incident (BSOD, coupure, disque).",
+                $"En dernier, recherche « {prov} {id} » + le nom trouvé dans le détail, sur le web.",
+            };
+            e.Actions = new List<LogAction>
+            {
+                new LogAction
+                {
+                    Label = "Rechercher sur le web",
+                    Tooltip = "Ouvre une recherche web pour cet événement.",
+                    Kind = LogActionKind.Url,
+                    Target = "https://www.google.com/search?q=" + Uri.EscapeDataString(prov + " event id " + id + " windows"),
+                },
+            };
+            e.Fix   = $"Lire le détail brut (il nomme souvent le coupable) ; agir surtout si « {prov} » {id} revient sur plusieurs jours.";
             return e;
         }
 
@@ -1182,6 +1255,39 @@ namespace Optimisation_Tool.Helpers
             }
             catch { }
             return _nvDriverCache = "";
+        }
+
+        // Adaptateurs d'affichage VIRTUELS présents sur la machine. Ils s'insèrent dans le
+        // pipeline WDDM et sont une cause documentée de reset nvlddmkm (Parsec, Moonlight, OBS
+        // Virtual Camera display variants, Steam Link, Sunshine, USB display, IddSampleDriver,
+        // etc.). On filtre par PNPDeviceID : un vrai GPU est sur PCI\…, tout ce qui est en
+        // ROOT\… / SWD\… est un driver logiciel. Cache statique.
+        private static string[]? _vDispCache;
+        private static string[] DetectVirtualDisplayAdapters()
+        {
+            if (_vDispCache != null) return _vDispCache;
+            var found = new List<string>();
+            try
+            {
+                using var s = new System.Management.ManagementObjectSearcher(
+                    "SELECT Name, PNPDeviceID FROM Win32_VideoController");
+                foreach (System.Management.ManagementObject o in s.Get())
+                {
+                    var name = o["Name"]?.ToString() ?? "";
+                    var pnp  = (o["PNPDeviceID"]?.ToString() ?? "").ToUpperInvariant();
+                    o.Dispose();
+                    if (name.Length == 0) continue;
+                    // Tout ce qui n'est pas sur PCI\… n'est pas un vrai GPU physique : c'est un
+                    // adaptateur virtuel (sauf l'affichage de base Microsoft qui peut apparaître
+                    // momentanément après un TDR — on l'ignore pour ne pas accuser à tort).
+                    if (pnp.StartsWith("PCI\\")) continue;
+                    if (name.IndexOf("Microsoft Basic Display", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (name.IndexOf("Remote Display Adapter", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    found.Add(name);
+                }
+            }
+            catch { }
+            return _vDispCache = found.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
         private static string Extract(string text, string pattern)

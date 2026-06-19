@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 
 namespace Optimisation_Tool
@@ -8,6 +10,23 @@ namespace Optimisation_Tool
     /// </summary>
     public partial class App : Application
     {
+        // ── INSTANCE UNIQUE ───────────────────────────────────────────────────
+        // Mutex nommé global à la session : si on en crée déjà un, c'est qu'une instance
+        // Tweakly tourne. On envoie alors un message Win32 ENREGISTRÉ (= identifiant unique
+        // au système, partagé par toutes les apps qui ont fait le même RegisterWindowMessage)
+        // en broadcast HWND_BROADCAST → seule la 1re instance Tweakly réagit (cf. MainWindow
+        // WindowProc), elle se met au 1er plan, et nous on quitte sans rien afficher.
+        // GUID stable dans le nom = impossible de collisionner avec une autre app.
+        private const string SingleInstanceMutexName = "Tweakly_SingleInstance_F7B3A19C-2D4E-4A8B-B6F0-A2C1D9E5B742";
+        public static readonly uint WM_TWEAKLY_SHOW = RegisterWindowMessage("Tweakly.Show.B742D9C1");
+        private static Mutex? _singleInstanceMutex;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern uint RegisterWindowMessage(string lpString);
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+        private static readonly IntPtr HWND_BROADCAST = new(0xFFFF);
+
         /// <summary>
         /// True quand l'app a été relancée par le script de MAJ (update.bat passe l'argument
         /// « --after-update »). Dans ce cas on FORCE l'affichage au premier plan même si
@@ -40,6 +59,23 @@ namespace Optimisation_Tool
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // ── INSTANCE UNIQUE : la 2e instance NE FAIT RIEN d'autre que réveiller la 1re.
+            // PLACÉ AVANT toute autre action (log, thème, splash…) pour ne pas écrire dans le
+            // journal, allumer un splash ou voler le verrou de fichier de la 1re. Toléré
+            // d'exception : si le mutex échoue (cas pathologique), on laisse l'app démarrer
+            // normalement plutôt que de la bloquer (RÈGLE 3 anti-casse).
+            try
+            {
+                _singleInstanceMutex = new Mutex(initiallyOwned: true, SingleInstanceMutexName, out bool createdNew);
+                if (!createdNew)
+                {
+                    try { PostMessage(HWND_BROADCAST, WM_TWEAKLY_SHOW, IntPtr.Zero, IntPtr.Zero); } catch { }
+                    Shutdown(0);
+                    return;
+                }
+            }
+            catch { /* fail-open : si la sécurité plante, on n'empêche pas Tweakly de tourner */ }
 
             LaunchedAfterUpdate = Array.Exists(e.Args,
                 a => string.Equals(a, "--after-update", StringComparison.OrdinalIgnoreCase));
@@ -102,6 +138,16 @@ namespace Optimisation_Tool
                 Helpers.AppLog.Error("Démarrage : splash indisponible — ouverture directe", ex);
             }
             new MainWindow().Show();
+        }
+
+        // Libère le mutex à la fermeture : sinon, sur certaines fins brutales, le système
+        // attend l'expiration du handle avant de permettre à la prochaine instance de démarrer.
+        protected override void OnExit(ExitEventArgs e)
+        {
+            try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
+            try { _singleInstanceMutex?.Dispose(); } catch { }
+            _singleInstanceMutex = null;
+            base.OnExit(e);
         }
     }
 }

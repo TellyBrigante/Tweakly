@@ -650,6 +650,23 @@ namespace Optimisation_Tool
 
         private IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            // 0) INSTANCE UNIQUE : une 2e instance Tweakly a tenté de démarrer et broadcaste
+            //    WM_TWEAKLY_SHOW (cf. App.OnStartup). On se montre + on revient au 1er plan
+            //    pour que l'user voie qu'on est déjà là. Filtre strict sur l'ID enregistré
+            //    → aucun risque de réagir à autre chose qu'à un nous-même.
+            if (msg != 0 && (uint)msg == App.WM_TWEAKLY_SHOW)
+            {
+                try
+                {
+                    if (!IsVisible) Show();
+                    if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+                    EnsureForeground();
+                }
+                catch { }
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             // 1) Messages tray (clic / double-clic / clic droit sur l'icône tray).
             //    Le tray utilise WM_USER+1 comme callback custom.
             if (_tray != null && _tray.TryHandleMessage(msg, lParam))

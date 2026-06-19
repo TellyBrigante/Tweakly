@@ -293,6 +293,10 @@ namespace Optimisation_Tool.Helpers
                     var model = o["Model"]?.ToString()?.Trim() ?? "";
                     if (string.IsNullOrEmpty(model)) { o.Dispose(); continue; }
                     long sizeB  = o["Size"] != null ? Convert.ToInt64(o["Size"].ToString()) : 0L;
+                    // Ignore les disques de taille nulle : lecteurs de cartes vides, périphériques
+                    // fantômes… (une vraie unité interne a toujours une taille). C'était le
+                    // « disque de trop » affiché dans Informations Système.
+                    if (sizeB <= 0) { o.Dispose(); continue; }
                     totalB += sizeB;
                     var  sizeGb = sizeB > 0 ? $"  {Math.Round(sizeB / 1_000_000_000.0, 0)} Go" : "";
                     // Type déduit du modèle + interface

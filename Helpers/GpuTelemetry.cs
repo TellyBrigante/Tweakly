@@ -54,6 +54,7 @@ namespace Optimisation_Tool.Helpers
                 double totalKb = mi.DedicatedVideoMemoryInkB;
                 double freeKb = mi.CurrentAvailableDedicatedVideoMemoryInkB;
                 r.VramUsedMB = (totalKb - freeKb) / 1024.0;
+                r.VramTotalMB = totalKb / 1024.0;
             }
             catch { }
             return r;
@@ -69,6 +70,7 @@ namespace Optimisation_Tool.Helpers
         public double CoreMhz;
         public double MemMhz;
         public double VramUsedMB;
+        public double VramTotalMB = double.NaN;
         public double PowerW;
     }
 }

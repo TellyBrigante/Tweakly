@@ -241,7 +241,11 @@ namespace Optimisation_Tool.Pages
         private static (string big, string details) DiskExtract(string raw)
         {
             var lines = raw.Replace("\r", "").Split('\n').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
-            return (lines.Count > 0 ? lines.Count.ToString() : "", string.Join("\n", lines));
+            // Le compteur « N DISQUES » ne doit PAS inclure la ligne récapitulative
+            // « Capacité totale : … » (sinon il affiche 1 disque de trop). Le détail, lui,
+            // garde toutes les lignes (total compris).
+            int diskCount = lines.Count(l => !l.StartsWith("Capacité totale", StringComparison.OrdinalIgnoreCase));
+            return (diskCount > 0 ? diskCount.ToString() : "", string.Join("\n", lines));
         }
 
         // ── Schéma machine (v1.3.3) : détail au clic sur un nœud ────────────────

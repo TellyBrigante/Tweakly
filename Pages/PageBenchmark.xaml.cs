@@ -23,9 +23,18 @@ namespace Optimisation_Tool.Pages
         {
             _main = main;
             InitializeComponent();
+            // Charge l'historique DÈS LA CONSTRUCTION (pas seulement au Loaded) : au démarrage
+            // automatique avec Windows, la fenêtre est minimisée et le Loaded de la page peut ne
+            // pas se déclencher tant qu'elle n'est pas affichée → l'historique restait vide.
+            // try/catch (RÈGLE 3 anti-casse) : ça s'exécute dans le flux de démarrage.
+            try { LoadAndRender(); } catch { }
         }
 
-        private void UserControl_Loaded(object sender, RoutedEventArgs e)
+        private void UserControl_Loaded(object sender, RoutedEventArgs e) => LoadAndRender();
+
+        // Charge l'historique stocké + (re)dessine tout. Idempotent (RefreshHistory vide le
+        // panneau avant de le repeupler), donc appelable au ctor ET au Loaded sans doublon.
+        private void LoadAndRender()
         {
             _history = BenchmarkStore.Load().OrderByDescending(x => x.Timestamp).ToList();
             if (_history.Count >= 2) { _selA = _history[1]; _selB = _history[0]; }
