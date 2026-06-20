@@ -252,6 +252,7 @@ namespace Optimisation_Tool.Pages
             ChartTile.Visibility = r.Chart.Count > 5 ? Visibility.Visible : Visibility.Collapsed;
             RecoTile.Visibility = r.Recommendations.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             DropsTile.Visibility = r.Drops.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            BuildDlssTile(r);
             // Chips de télémétrie : seulement si la session porte des samples (pas le vieil
             // historique, dont les samples ne sont pas persistés).
             TeleChips.Visibility = (r.Samples != null && r.Samples.Count >= 2)
@@ -402,7 +403,7 @@ namespace Optimisation_Tool.Pages
                 else if (target.StartsWith("openurl:", StringComparison.Ordinal))
                 {
                     string url = target.Substring("openurl:".Length);
-                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                    using var _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
                 }
             }
             catch (Exception ex)
@@ -579,12 +580,108 @@ namespace Optimisation_Tool.Pages
                 ChartTile.Visibility = Visibility.Collapsed;
                 RecoTile.Visibility = Visibility.Collapsed;
                 DropsTile.Visibility = Visibility.Collapsed;
+                DlssTile.Visibility = Visibility.Collapsed;
                 TeleChips.Visibility = Visibility.Collapsed;
                 ChartCanvas.Children.Clear();
                 ScrubCanvas.Children.Clear();
                 _chReady = false;
                 _chDrops.Clear();
             }
+        }
+
+        // ───────────────────────── tuile DLSS ─────────────────────────────
+        // Affiche les DLL DLSS détectées dans le dossier du jeu (Helpers/DlssDetector).
+        // Affichée seulement quand il y a vraiment quelque chose à dire OU une raison honnête
+        // pour laquelle on ne sait pas (jeu non identifié, dossier introuvable) — JAMAIS de
+        // tuile vide. Pas de conseil bien/pas bien (les seuils statiques deviennent vite faux).
+        private void BuildDlssTile(SessionAnalyzer.Report r)
+        {
+            DlssPanel.Children.Clear();
+            string status = r.DlssStatus ?? "";
+            int detected = (r.Dlss != null) ? r.Dlss.Count : 0;
+
+            // Cas où on n'a pas de tuile à afficher du tout :
+            //  - DlssStatus vide = ancien rapport persisté avant cette feature → on cache
+            //  - NotPresent + jeu non identifié → autant ne rien afficher (zéro info utile)
+            if (string.IsNullOrEmpty(status))
+            {
+                DlssTile.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            TxtDlssNote.Text = "";
+            if (detected > 0)
+            {
+                // Une ligne par DLL DLSS détectée. « Version du jeu » = la sauvegarde de
+                // l'originale posée par DLSS Swapper au moment du swap (sinon = la version
+                // utilisée, pas de swap fait). « Version utilisée » = la DLL active.
+                bool anySwap = false;
+                foreach (var d in r.Dlss!)
+                {
+                    var line = new TextBlock
+                    {
+                        FontFamily = (FontFamily)FindResource("AppFont"),
+                        FontSize = 12.5, TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 0, 0, 4),
+                    };
+                    line.SetResourceReference(TextBlock.ForegroundProperty, "ThTextBody");
+
+                    string vActive = string.IsNullOrEmpty(d.ActiveVersion) ? "version illisible" : d.ActiveVersion;
+                    string vGame   = string.IsNullOrEmpty(d.OriginalVersion) ? vActive : d.OriginalVersion;
+
+                    line.Inlines.Add(new System.Windows.Documents.Run(d.Name + "  "));
+
+                    var labGame = new System.Windows.Documents.Run("Version du jeu : ");
+                    labGame.SetResourceReference(System.Windows.Documents.Run.ForegroundProperty, "ThTextDim");
+                    line.Inlines.Add(labGame);
+                    var valGame = new System.Windows.Documents.Run(vGame) { FontWeight = FontWeights.SemiBold };
+                    line.Inlines.Add(valGame);
+
+                    line.Inlines.Add(new System.Windows.Documents.Run("   ·   "));
+
+                    var labUsed = new System.Windows.Documents.Run("Version utilisée : ");
+                    labUsed.SetResourceReference(System.Windows.Documents.Run.ForegroundProperty, "ThTextDim");
+                    line.Inlines.Add(labUsed);
+                    var valUsed = new System.Windows.Documents.Run(vActive) { FontWeight = FontWeights.SemiBold };
+                    if (d.Swapped) valUsed.SetResourceReference(System.Windows.Documents.Run.ForegroundProperty, "ThOk");
+                    line.Inlines.Add(valUsed);
+
+                    if (d.Swapped)
+                    {
+                        anySwap = true;
+                        var swapTag = new System.Windows.Documents.Run("   ⮕ swap détecté");
+                        swapTag.SetResourceReference(System.Windows.Documents.Run.ForegroundProperty, "ThOk");
+                        line.Inlines.Add(swapTag);
+                    }
+
+                    DlssPanel.Children.Add(line);
+                }
+                TxtDlssNote.Text = anySwap
+                    ? "DLSS Swap détecté (sauvegarde de l'originale trouvée)"
+                    : "aucun swap détecté — le jeu utilise sa version d'origine";
+                DlssTile.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // Pas de DLSS détecté : on n'affiche la tuile QUE si on a une raison honnête.
+            string? msg = status switch
+            {
+                "UnknownPath"  => "Jeu non identifié — Tweakly n'a pas pu localiser son dossier (plusieurs jeux lancés en même temps ou chemin introuvable).",
+                "NotPresent"   => "Aucune DLL DLSS trouvée dans le dossier du jeu (ce jeu n'utilise pas DLSS, ou elle est packagée d'une manière non standard).",
+                "Error"        => "Tweakly n'a pas pu inspecter le dossier du jeu (accès refusé ou erreur de lecture).",
+                _              => null,
+            };
+            if (msg == null) { DlssTile.Visibility = Visibility.Collapsed; return; }
+
+            var note = new TextBlock
+            {
+                Text = msg,
+                FontFamily = (FontFamily)FindResource("AppFont"),
+                FontSize = 12, TextWrapping = TextWrapping.Wrap,
+            };
+            note.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            DlssPanel.Children.Add(note);
+            DlssTile.Visibility = Visibility.Visible;
         }
 
         // ───────────────────────── couleurs score ─────────────────────────
@@ -616,6 +713,39 @@ namespace Optimisation_Tool.Pages
         // plus besoin de cocher pour comparer des chiffres réels.
         private void ScrubCanvas_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
             => ScrubCanvas.Children.Clear();
+
+        // Wrappers : les events MouseMove/MouseLeave viennent maintenant du Grid HoverHost
+        // (ScrubCanvas et ChartCanvas sont IsHitTestVisible=False, pour que la souris passe
+        // à travers et que le scroll du ScrollViewer parent fonctionne naturellement).
+        // GetPosition(ScrubCanvas) renvoie toujours la position relative à ScrubCanvas, quelle
+        // que soit la source de l'event → les handlers existants continuent de marcher.
+        private void HoverHost_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+            => ScrubCanvas_MouseMove(sender, e);
+        private void HoverHost_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+            => ScrubCanvas_MouseLeave(sender, e);
+
+        // Handler PreviewMouseWheel posé sur LE USERCONTROL ENTIER (capture tous les events,
+        // peu importe où la souris est sur la page). Si l'event provient du ChartTile (ou de
+        // n'importe lequel de ses enfants), on appelle DIRECTEMENT LineUp/LineDown sur le
+        // ScrollViewer — la méthode native qui fait son scroll interne fluide, ligne par ligne.
+        // Plus de RaiseEvent ni de ScrollToVerticalOffset qui sautaient.
+        private void UserControl_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+        {
+            if (e.Handled) return;
+            if (!ChartTile.IsVisible) return;
+            var pos = e.GetPosition(ChartTile);
+            double w = ChartTile.ActualWidth, h = ChartTile.ActualHeight;
+            if (pos.X < 0 || pos.Y < 0 || pos.X > w || pos.Y > h) return;
+
+            // Scroll synchrone du ScrollViewer principal (référencé par x:Name pour éviter le piège
+            // d'un FindAncestor qui tombait sur un ScrollViewer interne — cf. historique).
+            var sv = PageScroll;
+            double target = sv.VerticalOffset - e.Delta;
+            if (target < 0) target = 0;
+            if (target > sv.ScrollableHeight) target = sv.ScrollableHeight;
+            sv.ScrollToVerticalOffset(target);
+            e.Handled = true;
+        }
 
         private void ScrubCanvas_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
@@ -733,11 +863,21 @@ namespace Optimisation_Tool.Pages
             // = le MIN fps = la pire dip de l'intervalle, donc les drops ressortent.
             double tEnd = r.Chart[^1].T;
             double medFps = r.FpsP50 > 0 ? r.FpsP50 : 60;
-            double fpsTop = medFps * 1.08;                 // un peu au-dessus du médian
+            // fpsTop calé sur le MAX RÉEL de la courbe (médiane par bucket), pas juste sur le
+            // médian global. Sinon des buckets au-dessus du médian (largement possibles)
+            // étaient clampés et la courbe s'écrasait en ligne droite contre le bord supérieur.
+            double curveMaxFps = r.Chart.Count > 0
+                ? r.Chart.Where(p => p.Ft > 0).Select(p => 1000.0 / p.Ft).DefaultIfEmpty(medFps).Max()
+                : medFps;
+            double fpsTop = Math.Max(medFps * 1.08, curveMaxFps * 1.05);
             double fpsFloor = 0;                            // 0 en bas = lecture directe
             double leftPad = 78;                            // marge gauche élargie pour la PILULE seuil
                                                             // (la pilule ne déborde plus jamais dans le plot)
-            double topPad = 10, botPad = 10;                // la courbe ne touche pas les bords
+            double topPad = 10, botPad = 32;                // botPad élargi : RÉSERVE une bande en
+                                                            // bas du Canvas pour que les chiffres
+                                                            // des drops profonds (genre « 6 ») aient
+                                                            // de la VRAIE place en dessous de la
+                                                            // pastille, plaqués au bord.
             double plotW = w - leftPad;
             double plotH = h - topPad - botPad;
 
@@ -863,7 +1003,8 @@ namespace Optimisation_Tool.Pages
             // au lieu de lire la médiane de la courbe (qui donnait 315 sur un point à 71).
             _chDrops.Clear();
             const double DotMergePx = 11;   // pastilles séparées d'au moins 11 px
-            const double LblMergePx = 28;   // libellés chiffrés séparés d'au moins 28 px
+            // L'ancien seuil LblMergePx en X a été remplacé par un test rectangulaire vrai
+            // (largeur réelle du chiffre + empilement vertical en cas de conflit) plus bas.
             var worstAll = r.Drops
                 .Where(d => d.Cause != SessionAnalyzer.DropCause.ShaderCompile)
                 .OrderByDescending(d => d.FrameTimeMs).Take(20)
@@ -879,6 +1020,10 @@ namespace Optimisation_Tool.Pages
                 kept.Add((z.x, z.ft, z.d.Cause));
                 if (kept.Count >= 8) break;
             }
+            // Décale les pastilles d'un poil vers le bas pour donner de l'air au chiffre centré
+            // qui passe juste dessous (cf. plus bas). 2 px sont imperceptibles sur la valeur lue
+            // mais détachent visuellement la pastille de son label.
+            const double DotYOffset = 2;
             foreach (var k in kept.OrderBy(k => k.x))
             {
                 double fps = 1000.0 / k.ft;
@@ -886,24 +1031,54 @@ namespace Optimisation_Tool.Pages
                 string markerRole = k.cause == SessionAnalyzer.DropCause.GpuBound ? "ThCrit" : "ThWarn";
                 var dot = new System.Windows.Shapes.Ellipse { Width = 9, Height = 9 };
                 dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, markerRole);
-                Canvas.SetLeft(dot, k.x - 4.5); Canvas.SetTop(dot, y - 4.5);
+                Canvas.SetLeft(dot, k.x - 4.5); Canvas.SetTop(dot, y - 4.5 + DotYOffset);
                 ChartCanvas.Children.Add(dot);
                 _chDrops.Add((k.x, fps, markerRole));
             }
-            // Libellés chiffrés : anti-chevauchement séparé (28 px), seulement si la pastille
-            // n'est pas trop proche du voisin déjà labellé. Le survol couvre les autres.
-            double lastLblX = double.MinValue;
-            foreach (var k in kept.OrderBy(k => k.x))
+            // Libellés chiffrés : anti-chevauchement (28 px) — on traite les PIRES drops EN
+            // PREMIER pour qu'ils s'imposent en cas de concurrence (bug vécu : un drop sévère
+            // proche d'un drop modéré perdait son chiffre parce que le modéré, traité avant
+            // dans l'ordre chronologique, mangeait sa zone d'exclusion).
+            // labelRects : rectangles (x, y, w, h) des labels DÉJÀ posés, pour éviter les
+            // chevauchements visuels exacts (et non juste un seuil X en dur). Si la pastille
+            // courante conflicte en X avec un label déjà placé, on EMPILE son chiffre sur une
+            // 2e ligne (sous le label conflictuel) au lieu de le SUPPRIMER : on garde toujours
+            // l'information à l'écran.
+            var labelRects = new List<(double x, double y, double w, double h)>();
+            const double LblH = 14;
+            foreach (var k in kept.OrderBy(k => k.ft).Reverse())   // PIRE → moins pire
             {
-                if (k.x - lastLblX < LblMergePx) continue;
-                lastLblX = k.x;
                 double fps = 1000.0 / k.ft;
                 double y = YfromFps(fps);
                 string markerRole = k.cause == SessionAnalyzer.DropCause.GpuBound ? "ThCrit" : "ThWarn";
                 var lbl = new TextBlock { Text = $"{fps:0}", FontFamily = font, FontSize = 10.5, FontWeight = FontWeights.SemiBold };
                 lbl.SetResourceReference(TextBlock.ForegroundProperty, markerRole);
-                Canvas.SetLeft(lbl, Math.Clamp(k.x - 8, leftPad, w - 24));
-                Canvas.SetTop(lbl, Math.Clamp(y + 7, 0, h - 14));
+                lbl.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                double lblW = lbl.DesiredSize.Width;
+                double lx = Math.Clamp(k.x - lblW / 2.0, leftPad, w - lblW - 2);
+
+                // Label TOUJOURS sous la pastille (ordre user, qui voit qu'il y a la place).
+                // Le clamp final en bas du canvas s'occupera des cas où ça déborderait.
+                double ly = y + 10 + DotYOffset;
+
+                // Anti-chevauchement : si le rectangle du label chevauche un déjà placé, on
+                // l'empile en dessous (incréments de LblH + 2 px) jusqu'à trouver une place
+                // libre. Garde-fou : 4 essais max (très improbable d'en avoir besoin de plus).
+                bool Overlap(double rx, double ry, double rw)
+                    => labelRects.Any(r => rx < r.x + r.w + 2 && rx + rw + 2 > r.x
+                                        && ry < r.y + r.h + 1 && ry + LblH + 1 > r.y);
+                int tries = 0;
+                while (Overlap(lx, ly, lblW) && tries < 4)
+                {
+                    ly += LblH + 2;   // toujours empiler vers le BAS
+                    tries++;
+                }
+                // Si même après 4 essais on chevauche, on saute (cas extrême — survol couvre).
+                if (Overlap(lx, ly, lblW)) continue;
+
+                labelRects.Add((lx, ly, lblW, LblH));
+                Canvas.SetLeft(lbl, lx);
+                Canvas.SetTop(lbl, Math.Clamp(ly, 0, h - LblH));
                 ChartCanvas.Children.Add(lbl);
             }
 

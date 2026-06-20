@@ -126,11 +126,17 @@ namespace Optimisation_Tool.Helpers
         }
 
         // Interface "primaire" = celle qui est Up, non-loopback, avec une passerelle IPv4 valide.
+        // Cachée 5 s (v1.4.3) : l'interface primaire ne change quasi jamais et GetAllNetworkInterfaces
+        // alloue + énumère à chaque appel (~5-20 ms) — sur un tick 1 Hz on payait ça pour rien.
+        private static NetworkInterface? _primaryCache;
+        private static DateTime _primaryCacheTime;
         private static NetworkInterface? GetPrimary()
         {
+            if (_primaryCacheTime != default &&
+                (DateTime.UtcNow - _primaryCacheTime).TotalMilliseconds < 5000) return _primaryCache;
             try
             {
-                return NetworkInterface.GetAllNetworkInterfaces()
+                _primaryCache = NetworkInterface.GetAllNetworkInterfaces()
                     .Where(n => n.OperationalStatus == OperationalStatus.Up
                              && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
                              && n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
@@ -140,7 +146,9 @@ namespace Optimisation_Tool.Helpers
                     .OrderByDescending(n => n.Speed)
                     .FirstOrDefault();
             }
-            catch { return null; }
+            catch { _primaryCache = null; }
+            _primaryCacheTime = DateTime.UtcNow;
+            return _primaryCache;
         }
 
         private static int ReadWifiSignal()

@@ -38,12 +38,17 @@ namespace Optimisation_Tool.Helpers
             catch { return new(); }
         }
 
+        // Écriture ATOMIQUE (v1.4.3) : .tmp + File.Move pour éviter la corruption en cas
+        // d'arrêt brutal pendant l'écriture (perdre la référence force une recalibration
+        // → toutes les comparaisons « toi vs toi » deviennent fausses).
         private static void Save(List<Entry> list)
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt));
+                var tmp = FilePath + ".tmp";
+                File.WriteAllText(tmp, JsonSerializer.Serialize(list, _opt));
+                File.Move(tmp, FilePath, overwrite: true);
             }
             catch { }
         }

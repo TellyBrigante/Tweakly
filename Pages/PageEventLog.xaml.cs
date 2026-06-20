@@ -45,8 +45,11 @@ namespace Optimisation_Tool.Pages
             if (_scanning) return;
             _scanning         = true;
             BtnScan.IsEnabled = false;
-            TxtStatus.Text    = $"Lecture des journaux Windows ({_days} derniers jours)…";
-            _main.Log($"Erreurs Windows : analyse des journaux ({_days} j)…");
+            // Statut informatif : on dit ce qu'on FAIT pendant le scan (lecture XML enrichi,
+            // recoupement des marqueurs, détection des récurrences) — l'utilisateur voit que
+            // l'app travaille en profondeur plutôt que de cracher des résultats au hasard.
+            TxtStatus.Text    = $"Lecture des journaux Windows + recoupement des preuves ({_days} derniers jours)…";
+            _main.Log($"Erreurs Windows : analyse en profondeur ({_days} j) — extraction XML, tâches planifiées, récurrences…");
 
             try
             {
@@ -258,7 +261,7 @@ namespace Optimisation_Tool.Pages
                 string q = it.Provider + " " + it.Id + " event windows";
                 btn.Click += (_, _) =>
                 {
-                    try { Process.Start(new ProcessStartInfo("https://www.google.com/search?q=" + Uri.EscapeDataString(q)) { UseShellExecute = true }); }
+                    try { using var _ = Process.Start(new ProcessStartInfo("https://www.google.com/search?q=" + Uri.EscapeDataString(q)) { UseShellExecute = true }); }
                     catch { }
                 };
                 stack.Children.Add(btn);
@@ -568,19 +571,19 @@ namespace Optimisation_Tool.Pages
                         break;
 
                     case LogActionKind.Url:
-                        Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true });
+                        using (var _ = Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true })) { }
                         break;
 
                     case LogActionKind.Diag:
                         // Outils Windows standards (services.msc, devmgmt.msc, appwiz.cpl…)
-                        Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true });
+                        using (var _ = Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true })) { }
                         break;
 
                     case LogActionKind.Command:
                         // Commande système — on lance via cmd.exe (target est attendu type
                         // "cmd /k ..." ou "cmd /c ..."). Pas de redirection, fenêtre visible.
                         var (file, args) = SplitCmd(act.Target);
-                        Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true });
+                        using (var _ = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true })) { }
                         break;
                 }
                 _main.Log($"Erreurs Windows : action exécutée — {act.Label}");

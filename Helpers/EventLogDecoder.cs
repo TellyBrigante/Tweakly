@@ -4,6 +4,7 @@ using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace Optimisation_Tool.Helpers
 {
@@ -64,6 +65,11 @@ namespace Optimisation_Tool.Helpers
         public string   RawFull = "";   // message COMPLET (analyse : chemin du fautif, etc.)
                                         // ⚠️ piège vécu : n'analyser QUE Raw = rater tout ce qui
                                         // est après la 1re ligne (le chemin de l'exe est ligne ~7)
+        // EventData XML extrait (v1.4.3) : indispensable pour désigner LE composant
+        // physique fautif (\Device\Harddisk1\DR1, BugcheckCode, ErrorSource WHEA…) au lieu de
+        // se contenter de Provider+Id. Clé = nom de l'attribut « Name= » du <Data>, ou « #N »
+        // (position) si l'event n'a pas nommé ses Data. Casse-insensible.
+        public Dictionary<string, string> Data = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>Un incident = plusieurs événements survenus ensemble, avec cause racine + conseil.</summary>
@@ -120,14 +126,35 @@ namespace Optimisation_Tool.Helpers
                                 }
                             }
                             catch { }
-                            list.Add(new RawEvent
+                            var re = new RawEvent
                             {
                                 Time = rec.TimeCreated ?? DateTime.Now,
                                 Provider = rec.ProviderName ?? "?",
                                 Id = rec.Id,
                                 Raw = raw,
                                 RawFull = rawFull,
-                            });
+                            };
+                            // v1.4.3 : extraire l'EventData XML. C'est la source des PREUVES
+                            // précises (DeviceName d'un Disk 51, BugcheckCode d'un BSOD,
+                            // FaultingModule d'un App Error, ErrorSource d'un WHEA…). Coût ~0,5-2 ms
+                            // par event → acceptable pour un scan utilisateur, jamais en tick.
+                            try
+                            {
+                                var xml = rec.ToXml();
+                                XNamespace ns = "http://schemas.microsoft.com/win/2004/08/events/event";
+                                var doc = XDocument.Parse(xml);
+                                int positional = 0;
+                                foreach (var d in doc.Descendants(ns + "Data"))
+                                {
+                                    var name = d.Attribute("Name")?.Value;
+                                    var val  = (d.Value ?? "").Trim();
+                                    if (!string.IsNullOrEmpty(name)) re.Data[name] = val;
+                                    else                              re.Data["#" + positional] = val;
+                                    positional++;
+                                }
+                            }
+                            catch { /* event sans EventData XML → on garde RawFull, parsing best-effort */ }
+                            list.Add(re);
                         }
                     }
                 }
@@ -187,7 +214,41 @@ namespace Optimisation_Tool.Helpers
             var last = Analyze(cluster, recurrenceDays);
             if (last != null) incidents.Add(last);
 
-            return incidents.OrderByDescending(i => i.Start).ToList();
+            // ─── PASSE 2 : récurrence horaire = événement programmé ────────────
+            // Un BSOD ou un arrêt brutal RÉEL ne se reproduit JAMAIS à ±15 min de la même
+            // heure du jour sur plusieurs jours. Si on observe ce pattern (≥3 jours distincts),
+            // c'est statistiquement une action PROGRAMMÉE (tâche planifiée d'arrêt, batterie
+            // de portable qui décharge à heure fixe, redémarrage manuel rituel, etc.). On
+            // filtre ces faux positifs même si on n'a pas su prouver l'arrêt clean autrement.
+            return FilterRecurringScheduled(incidents).OrderByDescending(i => i.Start).ToList();
+        }
+
+        // Retire les incidents qui ressemblent à une exécution programmée à heure fixe.
+        // Critères STRICTS pour éviter les faux négatifs sur de vraies pannes :
+        //   • même titre approximatif (les premiers mots significatifs)
+        //   • même heure du jour ±15 min
+        //   • ≥3 jours distincts (1 occurrence ou 2 ne suffit pas — vraie panne possible)
+        private static List<Incident> FilterRecurringScheduled(List<Incident> all)
+        {
+            if (all.Count < 3) return all;
+
+            // Clé de regroupement : « heure du jour arrondie à 15 min » + premier mot du titre
+            string KeyOf(Incident i)
+            {
+                int slot = (int)Math.Round(i.Start.TimeOfDay.TotalMinutes / 15.0);
+                string firstWord = (i.Title ?? "").Split(' ').FirstOrDefault() ?? "";
+                return $"{slot}|{firstWord}";
+            }
+
+            var groups = all.GroupBy(KeyOf).ToList();
+            var toRemove = new HashSet<Incident>();
+            foreach (var g in groups)
+            {
+                int distinctDays = g.Select(i => i.Start.Date).Distinct().Count();
+                if (distinctDays < 3) continue;
+                foreach (var inc in g) toRemove.Add(inc);
+            }
+            return all.Where(i => !toRemove.Contains(i)).ToList();
         }
 
         // ── Analyse d'un cluster → incident (cause racine + conseil) ───────────
@@ -240,6 +301,27 @@ namespace Optimisation_Tool.Helpers
             };
             int recDays  = recurrenceDays != null && recurrenceDays.TryGetValue(root.Kind, out var rd) ? rd : 1;
             double daysAgo = Math.Max(0, (DateTime.Now - inc.End).TotalDays);
+
+            // v1.4.3 — NARRATEUR PAR LES PREUVES : on essaie d'abord d'écrire la carte
+            // d'incident à partir des EventData enrichis (DeviceName, BugCheckCode,
+            // FaultingModule, ErrorSource WHEA…). Si une narration matche les FAITS
+            // observés chez ce client → on l'utilise. Sinon → fallback sur Recommend
+            // (logique générique pré-existante). Le narrateur ne dit que ce qu'il VOIT.
+            var narration = IncidentNarrator.Narrate(cluster);
+            // Suppress = le narrateur a la PREUVE FORMELLE que ce n'est pas un vrai incident
+            // (ex. arrêt programmé pris à tort pour un BSOD parce qu'on voyait juste un
+            // Kernel-Power 41). On jette le cluster → aucune carte affichée.
+            if (narration != null && narration.Suppress) return null;
+            if (narration != null)
+            {
+                inc.Title   = narration.Title;
+                inc.Icon    = narration.Icon;
+                inc.Chain   = narration.Chain.Length > 0 ? narration.Chain : inc.Chain;
+                inc.Advice  = narration.Advice;
+                inc.Steps   = narration.Steps;
+                inc.Actions = narration.Actions;
+                return inc;
+            }
             Recommend(root.Kind, root.Info, rootCount, span, app, decoded.Count, inc, recDays, daysAgo, appPath);
             return inc;
         }

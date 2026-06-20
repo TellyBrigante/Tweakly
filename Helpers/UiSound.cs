@@ -74,28 +74,31 @@ namespace Optimisation_Tool.Helpers
         private static SoundPlayer ToPlayer(short[] samples)
         {
             int dataLen = samples.Length * 2;
-            var ms = new MemoryStream();
-            var bw = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true);
-
-            bw.Write(Encoding.ASCII.GetBytes("RIFF"));
-            bw.Write(36 + dataLen);
-            bw.Write(Encoding.ASCII.GetBytes("WAVE"));
-            bw.Write(Encoding.ASCII.GetBytes("fmt "));
-            bw.Write(16);
-            bw.Write((short)1);          // PCM
-            bw.Write((short)1);          // mono
-            bw.Write(SR);
-            bw.Write(SR * 2);            // byteRate
-            bw.Write((short)2);          // blockAlign
-            bw.Write((short)16);         // bits/sample
-            bw.Write(Encoding.ASCII.GetBytes("data"));
-            bw.Write(dataLen);
-            foreach (var s in samples) bw.Write(s);
-
-            bw.Flush();
+            // Construire le WAV dans un MemoryStream temporaire, le passer à SoundPlayer qui en
+            // copie le contenu via Load(), puis tout disposer. Sinon ms + bw restaient en vie à
+            // jamais (référencés par le SoundPlayer statique).
+            using var ms = new MemoryStream();
+            using (var bw = new BinaryWriter(ms, Encoding.ASCII, leaveOpen: true))
+            {
+                bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+                bw.Write(36 + dataLen);
+                bw.Write(Encoding.ASCII.GetBytes("WAVE"));
+                bw.Write(Encoding.ASCII.GetBytes("fmt "));
+                bw.Write(16);
+                bw.Write((short)1);          // PCM
+                bw.Write((short)1);          // mono
+                bw.Write(SR);
+                bw.Write(SR * 2);            // byteRate
+                bw.Write((short)2);          // blockAlign
+                bw.Write((short)16);         // bits/sample
+                bw.Write(Encoding.ASCII.GetBytes("data"));
+                bw.Write(dataLen);
+                foreach (var s in samples) bw.Write(s);
+                bw.Flush();
+            }
             ms.Position = 0;
             var sp = new SoundPlayer(ms);
-            sp.Load();
+            sp.Load();   // SoundPlayer copie les octets en interne ; on peut disposer ms après.
             return sp;
         }
     }

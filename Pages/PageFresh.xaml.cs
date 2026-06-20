@@ -756,9 +756,9 @@ namespace Optimisation_Tool.Pages
         {
             var target = _zipPath;
             if (File.Exists(target))
-                Process.Start("explorer.exe", $"/select,\"{target}\"");
+                { using var _ = Process.Start("explorer.exe", $"/select,\"{target}\""); }
             else if (Directory.Exists(target))
-                Process.Start("explorer.exe", target);
+                { using var _ = Process.Start("explorer.exe", target); }
         }
 
         private void BtnSaveAgain_Click(object sender, RoutedEventArgs e)

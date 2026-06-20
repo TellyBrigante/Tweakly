@@ -99,7 +99,7 @@
                         <TextBlock TextWrapping="Wrap"
                                    Foreground="{DynamicResource ThTextDim}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11">
-                            <Run Text="100"/><Run Text=" = la performance nominale de TON matériel (réf. publiques). Au-dessus : tu surperformes. En-dessous : quelque chose te ralentit."/>
+                            <Run Text="100"/><Run Text=" = ce que ton matériel devrait sortir d'après les références publiques. Au-dessus, il fait mieux. En-dessous, quelque chose le freine."/>
                         </TextBlock>
                         <!-- Boucle mesurer → corriger → prouver (v1.3.5) : visible quand des
                              tweaks ont été appliqués depuis le dernier bench -->

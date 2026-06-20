@@ -53,6 +53,7 @@ namespace Optimisation_Tool
 
             _pages = new Dictionary<string, Lazy<UserControl>>
             {
+                ["Accueil"]   = new Lazy<UserControl>(() => new PageAccueil(this)),
                 ["Nettoyage"] = new Lazy<UserControl>(() => new PageNettoyage(this)),
                 ["Nvidia"]    = new Lazy<UserControl>(() => new PageNvidia(this)),
                 ["CPU"]       = new Lazy<UserControl>(() => new PageCPU(this)),
@@ -73,10 +74,15 @@ namespace Optimisation_Tool
 
             _groups = new List<NavGroup>
             {
+                // Groupe Benchmark replié par défaut depuis v1.4.3 (la page d'arrivée n'est
+                // plus Tweakly Score mais le Dashboard). XAML : BenchGroupPanel Visibility=Collapsed,
+                // triangle ▸ (et non ▾) sur BtnNavBenchGroup.
+                new NavGroup { Header = BtnNavBenchGroup, Panel = BenchGroupPanel, Label = "Benchmark",
+                               Tags = new HashSet<string> { "Benchmark", "GameSession" } },
                 new NavGroup { Header = BtnNavOptGroup,  Panel = OptGroupPanel,  Label = "Optimisations",
                                Tags = new HashSet<string> { "Nettoyage", "Nvidia", "CPU", "Windows", "Reseau", "Privacy" } },
                 new NavGroup { Header = BtnNavDiagGroup, Panel = DiagGroupPanel, Label = "Diagnostic",
-                               Tags = new HashSet<string> { "Diagnostic", "EventLog", "GameSession" } },
+                               Tags = new HashSet<string> { "Diagnostic", "EventLog" } },
                 new NavGroup { Header = BtnNavToolsGroup, Panel = ToolsGroupPanel, Label = "Boîte à outils",
                                Tags = new HashSet<string> { "Apps", "Fresh" } },
                 new NavGroup { Header = BtnNavMonGroup,   Panel = MonGroupPanel,   Label = "Surveillance",
@@ -132,8 +138,8 @@ namespace Optimisation_Tool
                 }
                 catch { }
 
-                // Démarrage : page d'accueil = Tweakly Score (Benchmark)
-                NavigateTo(BtnNavBenchmark);
+                // Démarrage : page d'accueil = Dashboard (v1.4.3)
+                NavigateTo(BtnNavAccueil);
 
                 // PRÉCHAUFFAGE du monitoring (v1.3.5) : un Collect() en arrière-plan paie
                 // les démarrages à froid (WMI, LibreHardwareMonitor, nvidia-smi, stockage)
@@ -436,6 +442,7 @@ namespace Optimisation_Tool
             => NavigateTo((Button)sender);
 
         // Groupes repliables (Optimisations, Diagnostic) — même mécanisme pour les deux
+        private void BtnNavBenchGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
         private void BtnNavOptGroup_Click(object sender, RoutedEventArgs e)   => ToggleGroup((Button)sender);
         private void BtnNavDiagGroup_Click(object sender, RoutedEventArgs e)  => ToggleGroup((Button)sender);
         private void BtnNavToolsGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
@@ -470,6 +477,36 @@ namespace Optimisation_Tool
             // Surligner le groupe si un sous-item est actif ET que le groupe est replié
             bool subActive = _selectedNav != null && g.Tags.Contains(_selectedNav.Tag as string ?? "");
             ApplyNavStyle(g.Header, selected: subActive && !g.Expanded);
+        }
+
+        /// <summary>
+        /// Navigation par TAG : helper utilisé par les tuiles cliquables du dashboard
+        /// (PageAccueil) pour pointer vers une page sans avoir à récupérer la référence du
+        /// bouton dans le visual tree. Cherche le bouton Nav portant ce Tag dans la sidebar
+        /// et délègue à NavigateTo.
+        /// </summary>
+        public void NavigateToTag(string tag)
+        {
+            var btn = FindNavButtonByTag(tag);
+            if (btn != null) NavigateTo(btn);
+        }
+
+        private Button? FindNavButtonByTag(string tag)
+        {
+            return FindNavButtonRecursive(this, tag);
+        }
+
+        private static Button? FindNavButtonRecursive(DependencyObject root, string tag)
+        {
+            int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is Button b && b.Tag is string s && s == tag) return b;
+                var found = FindNavButtonRecursive(child, tag);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         public void NavigateTo(Button btn)

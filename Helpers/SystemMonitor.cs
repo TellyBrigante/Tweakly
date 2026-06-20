@@ -107,9 +107,11 @@ namespace Optimisation_Tool.Helpers
 
         private static void CollectProcesses(MonSnapshot s)
         {
-            // Réutiliser le cache si le dernier balayage date de moins de 1,8 s
+            // Cache court (< 1 tick à 1 Hz) : on rebalaye à chaque tick pour que le top
+            // process suive le réel. La valeur sert juste à éviter un double scan si deux
+            // appels arrivent à < 900 ms d'écart (rarissime mais possible).
             if (_procCacheTime != default &&
-                (DateTime.UtcNow - _procCacheTime).TotalMilliseconds < 1800)
+                (DateTime.UtcNow - _procCacheTime).TotalMilliseconds < 900)
             {
                 s.Processes  = _procCache.procs;
                 s.TopCpuName = _procCache.topCpu;
@@ -203,6 +205,16 @@ namespace Optimisation_Tool.Helpers
             if (at > 0) _cpuName = _cpuName.Substring(0, at).Trim();
         }
 
+        // ManagementObjectSearcher RÉUTILISÉS (v1.4.3) : l'init WMI coûte plus que la requête
+        // elle-même. Avant on en créait 2 neufs à chaque tick CPU → ~30-80 ms de cadeau au CPU
+        // pour rien. Ces searchers sont appelés en série dans CollectCpu (qui tourne sur UNE
+        // section parallèle de Collect, jamais simultanément avec lui-même grâce au _busy de
+        // PageMonitoring/MiniMonitor) → safe sans lock.
+        private static readonly ManagementObjectSearcher _cpuUsageQuery = new(
+            "SELECT PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor WHERE Name='_Total'");
+        private static readonly ManagementObjectSearcher _cpuFreqQuery = new(
+            "SELECT PercentProcessorPerformance, ProcessorFrequency FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'");
+
         private static void CollectCpu(MonSnapshot s)
         {
             EnsureCpuStatic();
@@ -213,9 +225,8 @@ namespace Optimisation_Tool.Helpers
             // Utilisation %
             try
             {
-                using var q = new ManagementObjectSearcher(
-                    "SELECT PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor WHERE Name='_Total'");
-                foreach (ManagementObject o in q.Get())
+                using var coll = _cpuUsageQuery.Get();
+                foreach (ManagementObject o in coll)
                 {
                     s.CpuUsage = Convert.ToDouble(o["PercentProcessorTime"]);
                     o.Dispose();
@@ -227,9 +238,8 @@ namespace Optimisation_Tool.Helpers
             // Fréquence live = base × (% performance / 100) → capture le turbo
             try
             {
-                using var q = new ManagementObjectSearcher(
-                    "SELECT PercentProcessorPerformance, ProcessorFrequency FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'");
-                foreach (ManagementObject o in q.Get())
+                using var coll = _cpuFreqQuery.Get();
+                foreach (ManagementObject o in coll)
                 {
                     var baseMhz = Convert.ToDouble(o["ProcessorFrequency"]);
                     var perf    = Convert.ToDouble(o["PercentProcessorPerformance"]);
@@ -307,8 +317,11 @@ namespace Optimisation_Tool.Helpers
 
         private static void CollectNvme(MonSnapshot s)
         {
+            // Cache 1,5 s : la température disque évolue lentement mais l'utilisateur veut
+            // voir la courbe d'utilisation NVMe bouger seconde par seconde (sinon = escalier
+            // de 4 s, courbe inerte). 1,5 s reste assez pour amortir le coût WMI sans figer.
             if (_nvmeCacheTime != default &&
-                (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds < 4000)
+                (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds < 1500)
             {
                 s.Nvmes = _nvmeCache;
                 return;
@@ -386,36 +399,34 @@ namespace Optimisation_Tool.Helpers
             s.Nvmes        = list;
         }
 
-        // ── GPU : carte DÉDIÉE prioritaire (Nvidia via nvidia-smi = données riches), sinon
+        // ── GPU : carte DÉDIÉE prioritaire (Nvidia via NvAPI = données riches), sinon
         //    AMD dédiée / IGP intégré via WMI (nom + VRAM registre) + compteurs « GPU Engine » (usage).
-        //    Spawn nvidia-smi / requêtes WMI → on met en cache ~2 s entre deux ticks.
+        //    NvAPI in-process = ~2,5 ms → ZÉRO cache (valeur fraîche chaque tick, courbe vivante).
+        //    nvidia-smi (fallback) + WMI GPU Engine sont lents → cache 1,5 s.
         private static DateTime _gpuCacheTime;
         private static (bool ok, string name, double usage, double vu, double vt,
                         double temp, double watts, double mhz, bool igp) _gpuCache;
 
         private static void CollectGpu(MonSnapshot s)
         {
-            if (_gpuCacheTime != default &&
-                (DateTime.UtcNow - _gpuCacheTime).TotalMilliseconds < 1800)
-            {
-                s.GpuOk = _gpuCache.ok; s.GpuName = _gpuCache.name; s.GpuUsage = _gpuCache.usage;
-                s.GpuVramUsedMB = _gpuCache.vu; s.GpuVramTotalMB = _gpuCache.vt;
-                s.GpuTemp = _gpuCache.temp; s.GpuWatts = _gpuCache.watts; s.GpuMHz = _gpuCache.mhz;
-                s.GpuIsIntegrated = _gpuCache.igp;
-                return;
-            }
-
             try
             {
-                var gpu = SelectDisplayGpu();   // dédiée d'abord, IGP en dernier recours
-                if (gpu == null) { s.GpuOk = false; CacheGpu(s); return; }
+                var gpu = SelectDisplayGpu();   // dédiée d'abord, IGP en dernier recours ; cache interne
+                if (gpu == null) { s.GpuOk = false; return; }
 
-                // Carte Nvidia → NvAPI IN-PROCESS (~2,5 ms : usage/temp/horloge/VRAM) au lieu de
-                // spawner nvidia-smi (jusqu'à 4 s → bloquait Collect et saccadait le monitoring).
-                // Les watts (que NvAPI ne donne pas de façon fiable) arrivent par un refresh
-                // nvidia-smi LENT et NON BLOQUANT en arrière-plan (cf. EnsureWattsFetch). Si NvAPI
-                // est indisponible (pilote KO), on retombe sur nvidia-smi, puis WMI.
-                if (gpu.Vendor == GpuVendor.Nvidia && (TryNvapiGpu(s, gpu) || TryNvidiaSmi(s)))
+                // Carte Nvidia → NvAPI IN-PROCESS (~2,5 ms : usage/temp/horloge/VRAM).
+                // PAS de cache : c'est assez rapide pour lire à chaque tick → la valeur GPU et
+                // sa courbe bougent seconde par seconde (le cache 1,8 s d'avant figeait 1 tick sur 2).
+                // Watts via EnsureWattsFetch (nvidia-smi lent, refresh non bloquant 5 s en arrière-plan).
+                if (gpu.Vendor == GpuVendor.Nvidia && TryNvapiGpu(s, gpu))
+                {
+                    s.GpuIsIntegrated = false;
+                    return;
+                }
+
+                // Fallback Nvidia : nvidia-smi (spawn lent, jusqu'à 4 s) → on cache 1,5 s.
+                if (gpu.Vendor == GpuVendor.Nvidia && TryReuseGpuCache(s)) return;
+                if (gpu.Vendor == GpuVendor.Nvidia && TryNvidiaSmi(s))
                 {
                     s.GpuIsIntegrated = false;
                     CacheGpu(s);
@@ -423,6 +434,8 @@ namespace Optimisation_Tool.Helpers
                 }
 
                 // AMD dédiée ou IGP : nom (WMI) + VRAM totale (registre, 0 pour un IGP) + usage (compteurs).
+                // WMI GpuEngine reste lent → cache 1,5 s aussi.
+                if (TryReuseGpuCache(s)) return;
                 s.GpuName         = gpu.Name;
                 s.GpuIsIntegrated = gpu.IsIntegrated;
                 s.GpuUsage        = GpuEngineBusiestUsage();   // best-effort, source invariante
@@ -433,6 +446,17 @@ namespace Optimisation_Tool.Helpers
                 CacheGpu(s);
             }
             catch { s.GpuOk = false; }
+        }
+
+        private static bool TryReuseGpuCache(MonSnapshot s)
+        {
+            if (_gpuCacheTime == default ||
+                (DateTime.UtcNow - _gpuCacheTime).TotalMilliseconds >= 1500) return false;
+            s.GpuOk = _gpuCache.ok; s.GpuName = _gpuCache.name; s.GpuUsage = _gpuCache.usage;
+            s.GpuVramUsedMB = _gpuCache.vu; s.GpuVramTotalMB = _gpuCache.vt;
+            s.GpuTemp = _gpuCache.temp; s.GpuWatts = _gpuCache.watts; s.GpuMHz = _gpuCache.mhz;
+            s.GpuIsIntegrated = _gpuCache.igp;
+            return true;
         }
 
         private static void CacheGpu(MonSnapshot s)
@@ -664,16 +688,18 @@ namespace Optimisation_Tool.Helpers
 
         // Usage % de l'adaptateur le plus sollicité, via la classe WMI INVARIANTE (pas de piège de
         // localisation §5). On groupe par luid puis on prend le moteur le plus chargé (façon
-        // Gestionnaire des tâches). Best-effort : 0 si indispo.
+        // Gestionnaire des tâches). Best-effort : 0 si indispo. Searcher RÉUTILISÉ (v1.4.3).
+        private static readonly ManagementObjectSearcher _gpuEngineQuery = new("root\\CIMV2",
+            "SELECT Name, UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine");
+
         private static double GpuEngineBusiestUsage()
         {
             try
             {
                 // luid -> (engtype -> somme d'utilisation)
                 var perLuid = new Dictionary<string, Dictionary<string, double>>();
-                using var q = new ManagementObjectSearcher("root\\CIMV2",
-                    "SELECT Name, UtilizationPercentage FROM Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine");
-                foreach (ManagementObject o in q.Get())
+                using var coll = _gpuEngineQuery.Get();
+                foreach (ManagementObject o in coll)
                 {
                     var name = o["Name"] as string;
                     double u  = o["UtilizationPercentage"] != null ? Convert.ToDouble(o["UtilizationPercentage"]) : 0;

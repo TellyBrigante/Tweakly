@@ -227,7 +227,7 @@ namespace Optimisation_Tool.Pages
             try
             {
                 // Lister les journaux via wevtutil el
-                var listProc = Process.Start(new ProcessStartInfo("wevtutil", "el")
+                using var listProc = Process.Start(new ProcessStartInfo("wevtutil", "el")
                 {
                     UseShellExecute        = false,
                     CreateNoWindow         = true,

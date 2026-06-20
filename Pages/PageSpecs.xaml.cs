@@ -281,7 +281,7 @@ namespace Optimisation_Tool.Pages
         private void BtnBios_Click(object sender, RoutedEventArgs e)
         {
             var url = Helpers.BiosUrl.Build(_biosMfr, _biosModel);
-            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            try { using var _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
             catch (Exception ex) { _main.Log($"BIOS URL : erreur — {ex.Message}"); }
         }
 

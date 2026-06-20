@@ -216,7 +216,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.4.2"
+                            <TextBlock x:Name="TxtVersion" Text="v1.4.3"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -228,14 +228,39 @@
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="0,6,0,12">
 
-                            <!-- ── Tweakly Score (page d'accueil, top-level) ── -->
-                            <Button x:Name="BtnNavBenchmark"
-                                    Content="Tweakly Score"
-                                    Tag="Benchmark"
+                            <!-- ── Accueil (page d'arrivée par défaut, v1.4.3) ── -->
+                            <Button x:Name="BtnNavAccueil"
+                                    Content="Accueil"
+                                    Tag="Accueil"
                                     FontWeight="SemiBold"
-                                    HorizontalContentAlignment="Center"
                                     Style="{StaticResource NavBtnStyle}"
                                     Click="NavBtn_Click"/>
+
+                            <!-- ── Groupe Benchmark (repliable, REPLIÉ par défaut depuis v1.4.3 — la
+                                 page d'arrivée est désormais Accueil, plus besoin de Benchmark ouvert) ── -->
+                            <Button x:Name="BtnNavBenchGroup"
+                                    Content="&#x25B8;  Benchmark"
+                                    FontWeight="SemiBold"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="BtnNavBenchGroup_Click"/>
+                            <Border x:Name="BenchGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button x:Name="BtnNavBenchmark"
+                                            Content="Tweakly Score"
+                                            Tag="Benchmark"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavGameSession"
+                                            Content="Suivi en jeu"
+                                            Tag="GameSession"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
 
                             <!-- ── Groupe Optimisations (repliable) ── -->
                             <Button x:Name="BtnNavOptGroup"
@@ -298,10 +323,6 @@
                                             Click="NavBtn_Click"/>
                                     <Button Content="Erreurs Windows"
                                             Tag="EventLog"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button Content="Suivi en jeu"
-                                            Tag="GameSession"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
                                 </StackPanel>

@@ -37,12 +37,17 @@ namespace Optimisation_Tool.Helpers
             catch { return new(); }
         }
 
+        // Écriture ATOMIQUE (v1.4.3) : on écrit d'abord dans <fichier>.tmp puis on remplace
+        // l'original via File.Move (atomique côté NTFS). Crash/kill pendant l'écriture =
+        // l'ancien historique reste intact, jamais d'état à moitié écrit.
         public static void Save(List<BenchmarkResult> list)
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt));
+                var tmp = FilePath + ".tmp";
+                File.WriteAllText(tmp, JsonSerializer.Serialize(list, _opt));
+                File.Move(tmp, FilePath, overwrite: true);
             }
             catch { }
         }

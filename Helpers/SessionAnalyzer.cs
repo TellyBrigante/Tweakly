@@ -73,6 +73,16 @@ namespace Optimisation_Tool.Helpers
             public double FtFloor;   // PIRE frametime du paquet → la variance réelle ; 0 = absent (vieilles sessions)
         }
 
+        /// <summary>Une ligne « DLSS X » de la tuile : version DU JEU (originale, si une sauvegarde
+        /// de swap est présente) vs version UTILISÉE (la DLL active dans le dossier du jeu).</summary>
+        public sealed class DlssLine
+        {
+            public string Name = "";            // ex. « DLSS Super Resolution »
+            public string ActiveVersion = "";   // VERSION UTILISÉE (DLL active)
+            public string OriginalVersion = ""; // VERSION DU JEU (sauvegarde de swap ; vide si pas de swap)
+            public bool Swapped;                // true si swap détecté (versions ≠)
+        }
+
         public sealed class Report
         {
             public DateTime CapturedAtUtc;
@@ -114,6 +124,12 @@ namespace Optimisation_Tool.Helpers
             public bool VbsRunning;              // hyperviseur/VBS réellement actif (taxe virtu)
             public bool HvciEnabled;             // Intégrité de la mémoire (HVCI) ON ? (≠ VBS running)
             public int CompetitiveFps = 144;     // seuil « bon » pour ce jeu
+            // DLSS détecté dans le dossier du jeu (Helpers/DlssDetector). Status décrit pourquoi
+            // on ne sait rien si Detected ne marche pas (NotPresent/UnknownPath/Error).
+            // Composants = une ligne par DLL DLSS trouvée (SR / FG / RR), avec sa FileVersion.
+            // Persistés tels quels dans l'historique.
+            public string DlssStatus = "";       // "Detected" / "NotPresent" / "UnknownPath" / "Error"
+            public List<DlssLine> Dlss = new();
             // Télémétrie 1 Hz (GPU temp/clock/VRAM, CPU%…) pour superposer au graphe FPS.
             // ChartStartMs = décalage MURAL (ms) entre le début de capture et t=0 du graphe
             // → permet d'aligner les SysSample (ElapsedMs depuis le début de capture) sur l'axe.
@@ -161,6 +177,24 @@ namespace Optimisation_Tool.Helpers
                 r.VbsRunning = cap.SystemContext.VbsRunning;
                 r.HvciEnabled = cap.SystemContext.HvciEnabled;
             }
+
+            // Détection des DLL DLSS livrées par le jeu (cf. Helpers/DlssDetector). Borné en
+            // profondeur, sûr (try/catch interne), best-effort. Si le chemin est inconnu, on
+            // marque le statut → l'UI affiche un message honnête plutôt que vide.
+            try
+            {
+                var di = DlssDetector.Detect(r.GamePath);
+                r.DlssStatus = di.Status.ToString();
+                foreach (var c in di.Components)
+                    r.Dlss.Add(new DlssLine
+                    {
+                        Name = c.Name,
+                        ActiveVersion = c.ActiveVersion,
+                        OriginalVersion = c.OriginalVersion,
+                        Swapped = c.Swapped,
+                    });
+            }
+            catch { r.DlssStatus = "Error"; }
 
             // Trim bordures. Validé en réel 2026-06-13 : les freezes catastrophiques
             // (402 ms, 1059 ms) étaient l'alt-tab d'entrée + l'arrêt du record, jamais

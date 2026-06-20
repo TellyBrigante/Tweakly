@@ -41,14 +41,20 @@ namespace Optimisation_Tool.Helpers
             catch { return new AppSettings(); }
         }
 
-        // ── Sauvegarde ─────────────────────────────────────────────────────────
+        // ── Sauvegarde (écriture ATOMIQUE : tmp + Move) ────────────────────────
+        // Un crash entre l'open et le write laissait l'ancienne version intacte avec WriteAllText
+        // direct mais pouvait quand même tronquer le fichier si le process était tué à mi-flush
+        // → l'app repartait sur les défauts à la prochaine session. tmp + Move règle ça (le
+        // remplacement de fichier est atomique côté NTFS).
         public void Save()
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
                 var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(FilePath, json);
+                var tmp  = FilePath + ".tmp";
+                File.WriteAllText(tmp, json);
+                File.Move(tmp, FilePath, overwrite: true);
             }
             catch { }
         }

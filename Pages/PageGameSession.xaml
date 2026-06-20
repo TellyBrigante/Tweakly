@@ -162,9 +162,10 @@
     </UserControl.Resources>
 
     <Grid>
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <Grid Margin="18,16,18,18">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -360,10 +361,27 @@
                 </Grid>
 
                 <!-- ═══════════════════════════════════════════════════════
+                     BLOC 3.2 — DLSS détecté dans le dossier du jeu
+                ═══════════════════════════════════════════════════════ -->
+                <Border x:Name="DlssTile" Grid.Row="3" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="DLSS" Style="{StaticResource SgCat}"/>
+                            <TextBlock x:Name="TxtDlssNote" HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                       Text=""/>
+                        </Grid>
+                        <StackPanel x:Name="DlssPanel"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- ═══════════════════════════════════════════════════════
                      BLOC 3.5 — GRAPHE FRAMETIME (le voir = le comprendre)
                 ═══════════════════════════════════════════════════════ -->
-                <Border x:Name="ChartTile" Grid.Row="3" Style="{StaticResource SgTile}"
-                        Margin="0,12,0,0" Visibility="Collapsed" Height="262">
+                <Border x:Name="ChartTile" Grid.Row="4" Style="{StaticResource SgTile}"
+                        Margin="0,12,0,0" Visibility="Collapsed" Height="352">
                     <StackPanel>
                         <Grid Margin="0,0,0,6">
                             <TextBlock Text="FPS DANS LE TEMPS" Style="{StaticResource SgCat}"/>
@@ -392,15 +410,26 @@
 
                         <!-- ChartCanvas dessine la courbe ; ScrubCanvas (overlay transparent)
                              capte la souris et trace la règle + le panneau de valeurs au survol,
-                             sans jamais redessiner la courbe. -->
-                        <Grid Height="150">
+                             sans jamais redessiner la courbe.
+                             ⚠️ Hauteur élargie (150 → 240 px) : quand la session contient des
+                             drops profonds (ex. 6 fps sur un médian à 175), l'axe Y va de 0 à
+                             ~fpsTop = 1,08 × médian → tout le contenu utile est compressé sur
+                             les 150 px d'origine. À 240 px on respire, drops et courbe restent
+                             distincts sans changer la lecture (échelle linéaire, même calcul). -->
+                        <!-- IsHitTestVisible=False sur les deux Canvas → la souris passe à travers
+                             et atteint le ScrollViewer parent qui scrolle naturellement. Le hover
+                             (règle + valeurs) est désormais capté par le Grid PARENT (HoverHost)
+                             qui calcule la position relative au ScrubCanvas pour dessiner dedans. -->
+                        <Grid x:Name="HoverHost" Height="240" Background="Transparent"
+                              MouseMove="HoverHost_MouseMove"
+                              MouseLeave="HoverHost_MouseLeave">
                             <Canvas x:Name="ChartCanvas" Background="Transparent"
                                     ClipToBounds="True"
+                                    IsHitTestVisible="False"
                                     SizeChanged="ChartCanvas_SizeChanged"/>
                             <Canvas x:Name="ScrubCanvas" Background="Transparent"
                                     ClipToBounds="True"
-                                    MouseMove="ScrubCanvas_MouseMove"
-                                    MouseLeave="ScrubCanvas_MouseLeave"/>
+                                    IsHitTestVisible="False"/>
                         </Grid>
                         <Grid Margin="0,4,0,0">
                             <TextBlock x:Name="TxtChartStart" Style="{StaticResource SgLbl}"
@@ -414,7 +443,7 @@
                 <!-- ═══════════════════════════════════════════════════════
                      BLOC 4 — RECOMMANDATIONS personnalisées (cœur du soft)
                 ═══════════════════════════════════════════════════════ -->
-                <Border x:Name="RecoTile" Grid.Row="4" Style="{StaticResource SgTile}"
+                <Border x:Name="RecoTile" Grid.Row="5" Style="{StaticResource SgTile}"
                         Margin="0,12,0,0" Visibility="Collapsed">
                     <StackPanel>
                         <TextBlock Text="DIAGNOSTIC" Style="{StaticResource SgCat}" Margin="0,0,0,8"/>
@@ -425,7 +454,7 @@
                 <!-- ═══════════════════════════════════════════════════════
                      BLOC 5 — DROPS détaillés (table avec preuves chiffrées)
                 ═══════════════════════════════════════════════════════ -->
-                <Border x:Name="DropsTile" Grid.Row="5" Style="{StaticResource SgTile}"
+                <Border x:Name="DropsTile" Grid.Row="6" Style="{StaticResource SgTile}"
                         Margin="0,12,0,0" Visibility="Collapsed">
                     <StackPanel>
                         <Grid Margin="0,0,0,8">
@@ -441,7 +470,7 @@
                 <!-- ═══════════════════════════════════════════════════════
                      BLOC 6 — HISTORIQUE des sessions
                 ═══════════════════════════════════════════════════════ -->
-                <Border x:Name="HistoryTile" Grid.Row="6" Style="{StaticResource SgTile}"
+                <Border x:Name="HistoryTile" Grid.Row="7" Style="{StaticResource SgTile}"
                         Margin="0,12,0,0" Visibility="Collapsed">
                     <StackPanel>
                         <Grid Margin="0,0,0,8">

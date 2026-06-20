@@ -252,11 +252,11 @@ namespace Optimisation_Tool.Pages
 
         private static string ScoreVerdict(int s) => s switch
         {
-            >= 110 => "au-dessus du nominal",
+            >= 110 => "au-dessus de la moyenne",
             >= 95  => "dans la norme",
-            >= 80  => "légèrement en dessous du nominal",
-            >= 60  => "en dessous du nominal — un facteur te ralentit",
-            _      => "très en dessous — mesure parasitée ou système anormal"
+            >= 80  => "un peu en dessous de la moyenne",
+            >= 60  => "en dessous de la moyenne — quelque chose le freine",
+            _      => "très en dessous — mesure parasitée, ou problème système réel"
         };
 
         /// <summary>
@@ -269,9 +269,9 @@ namespace Optimisation_Tool.Pages
         // la machine juste en dessous (BenchAdvisor) avec un bouton par correction.
         private static string Verdict(int score, string axis) => (score, axis) switch
         {
-            ( >= 105, _      ) => "Au-dessus du nominal pour ce modèle.\nRien à corriger côté performance.",
+            ( >= 105, _      ) => "Au-dessus de la moyenne pour ce modèle.\nRien à corriger côté performance.",
             ( >=  90, _      ) => "Dans la norme du modèle.\nRien à corriger.",
-            ( >=  75, "CPU"      ) => "Légèrement en dessous de ce que ce processeur sait faire.\nCause la plus fréquente : il chauffe trop et se bride, ou le plan d'alimentation le freine.",
+            ( >=  75, "CPU"      ) => "Un peu en dessous de ce que ce processeur sait faire.\nCause la plus fréquente : il chauffe trop et se bride, ou le plan d'alimentation le freine.",
             ( >=  75, "Système"  ) => "Windows répond avec un léger retard.\nConcrètement : en jeu, ça peut se sentir comme des micro-saccades. Les causes trouvées sur TA machine sont listées ci-dessous.",
             ( >=  75, _          ) => "Légèrement en dessous.\nCompare avec ton historique pour voir si c'est nouveau.",
             ( >=  60, "CPU"      ) => "Nettement en dessous de sa performance attendue.\nRegarde sa température dans Monitoring : au-delà de ~90 °C il se bride tout seul.",
@@ -358,7 +358,7 @@ namespace Optimisation_Tool.Pages
             {
                 if (f.Uri.Length > 0)
                 {
-                    System.Diagnostics.Process.Start(
+                    using var _ = System.Diagnostics.Process.Start(
                         new System.Diagnostics.ProcessStartInfo(f.Uri) { UseShellExecute = true });
                     return;
                 }
@@ -817,7 +817,7 @@ namespace Optimisation_Tool.Pages
             if (_history.Count == 1)
             {
                 ComparePanel.Children.Add(MakeText(
-                    "Une seule mesure pour l'instant. Applique tes tweaks, relance un benchmark, et tu verras l'évolution chiffrée ici.",
+                    "Il faut un 2e benchmark pour comparer. La différence s'affichera ici.",
                     "ThTextDim", 12.5, wrap: true));
                 return;
             }

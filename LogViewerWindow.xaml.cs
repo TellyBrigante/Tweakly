@@ -71,7 +71,7 @@ namespace Optimisation_Tool
         {
             try
             {
-                System.Diagnostics.Process.Start("explorer.exe",
+                using var _ = System.Diagnostics.Process.Start("explorer.exe",
                     $"/select,\"{Helpers.AppLog.LogFile}\"");
             }
             catch { }

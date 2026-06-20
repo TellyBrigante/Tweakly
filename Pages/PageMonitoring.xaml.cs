@@ -390,6 +390,17 @@ namespace Optimisation_Tool.Pages
         {
             pct = Math.Max(0, Math.Min(100, pct));
             double cur = bar.ColumnDefinitions[0].Width.Value;
+            // Skip de l'animation 300 ms si la barre n'a quasi pas bougé (delta < 1 %) : sinon
+            // on cumule 4-8 anims actives à chaque tick 1 s pour rien et l'UI thread bouge en
+            // continu sans bénéfice visuel (v1.4.3).
+            if (Math.Abs(cur - pct) < 1.0)
+            {
+                bar.ColumnDefinitions[0].BeginAnimation(ColumnDefinition.WidthProperty, null);
+                bar.ColumnDefinitions[1].BeginAnimation(ColumnDefinition.WidthProperty, null);
+                bar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
+                bar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
+                return;
+            }
             var dur = new Duration(TimeSpan.FromMilliseconds(300));
             bar.ColumnDefinitions[0].BeginAnimation(ColumnDefinition.WidthProperty,
                 new GridLengthAnimation { From = cur, To = pct, Duration = dur });

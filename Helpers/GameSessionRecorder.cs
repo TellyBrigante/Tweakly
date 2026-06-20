@@ -32,6 +32,10 @@ namespace Optimisation_Tool.Helpers
         // ───────────────────────── état ─────────────────────────
         private Process? _pm;
         private readonly List<SysSample> _samples = new();
+        // Lock dédié : TakeSample (Timer thread) ajoute, StopAsync lit. Timer.Dispose ne garantit
+        // pas la fin du callback en cours → sans lock, Add concurrent avec ToList lèverait
+        // « Collection was modified ». Lock séparé de _accLock pour ne pas bloquer ReadLoop.
+        private readonly object _samplesLock = new();
         private System.Threading.Timer? _sampler;
         private DateTime _startedUtc;
         private SystemContextSnap? _sysContext;
@@ -97,7 +101,7 @@ namespace Optimisation_Tool.Helpers
                 lock (_accLock) { _byExe.Clear(); _modeCount.Clear(); }
                 _hdrOk = false; _ciApp = -1;
                 _appCounts.Clear(); _leadApp = ""; _leadFt.Clear(); LiveFps = double.NaN;
-                _samples.Clear();
+                lock (_samplesLock) _samples.Clear();
                 LastSample = null;
 
                 _pm = Process.Start(psi);
@@ -154,6 +158,8 @@ namespace Optimisation_Tool.Helpers
             _reader = null;
 
             SessionCapture cap;
+            List<SysSample> samplesCopy;
+            lock (_samplesLock) samplesCopy = _samples.ToList();
             lock (_accLock)
             {
                 foreach (var (exe, pf) in _byExe)
@@ -163,7 +169,7 @@ namespace Optimisation_Tool.Helpers
                 {
                     StartedUtc = _startedUtc,
                     Processes = _byExe.Values.Where(p => p.Frames.Count >= 30).ToList(),
-                    Samples = _samples.ToList(),
+                    Samples = samplesCopy,
                     SystemContext = _sysContext,
                 };
             }
@@ -203,7 +209,7 @@ namespace Optimisation_Tool.Helpers
                     GpuVramUsedMB = g?.VramUsedMB ?? double.NaN,
                     Fps = LiveFps,
                 };
-                _samples.Add(s);
+                lock (_samplesLock) _samples.Add(s);
                 LastSample = s;
             }
             catch { }

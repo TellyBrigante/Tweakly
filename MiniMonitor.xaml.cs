@@ -54,9 +54,11 @@ namespace Optimisation_Tool
             {
                 var sysTask = Task.Run(SystemMonitor.Collect);
                 var netTask = NetworkMonitor.Instance.CollectAsync("1.1.1.1");
-                await Task.WhenAll(sysTask, netTask);
-                UpdateSystem(sysTask.Result);
-                UpdateNetwork(netTask.Result);
+                // await sur chaque task : équivalent perf au WhenAll (les 2 tournent déjà en
+                // parallèle), mais re-throw l'exception directement au lieu de l'envelopper en
+                // AggregateException comme le ferait .Result.
+                UpdateSystem(await sysTask);
+                UpdateNetwork(await netTask);
             }
             catch { }
             finally { _busy = false; }
@@ -137,8 +139,6 @@ namespace Optimisation_Tool
         }
 
         // ── Fenêtre ────────────────────────────────────────────────────────────
-
-        private void Window_Loaded(object sender, RoutedEventArgs e) { }
 
         private void Root_MouseDown(object sender, MouseButtonEventArgs e)
         {

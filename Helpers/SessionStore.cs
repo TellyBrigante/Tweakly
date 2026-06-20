@@ -40,12 +40,16 @@ namespace Optimisation_Tool.Helpers
             }
         }
 
+        // Écriture ATOMIQUE (v1.4.3) : .tmp + File.Move. C'est LE store qui fait le plus mal
+        // à perdre — une capture de 3 min peut représenter beaucoup d'attente utilisateur.
         public static void Save(List<SessionAnalyzer.Report> list)
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
-                File.WriteAllText(FilePath, JsonSerializer.Serialize(list, _opt));
+                var tmp = FilePath + ".tmp";
+                File.WriteAllText(tmp, JsonSerializer.Serialize(list, _opt));
+                File.Move(tmp, FilePath, overwrite: true);
                 AppLog.Write($"SessionStore.Save : {list.Count} sessions ecrites -> {FilePath}");
             }
             catch (Exception ex)

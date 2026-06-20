@@ -421,7 +421,7 @@ namespace Optimisation_Tool.Pages
                 _main.Log(ok
                     ? "ms-gamingoverlay : réinstallation impossible → contournement GameDVR appliqué. La Game Bar reste à réinstaller via le Store."
                     : "ms-gamingoverlay : réinstallation impossible ET échec d'écriture GameDVR.");
-                try { Process.Start(new ProcessStartInfo("ms-windows-store://pdp/?ProductId=9NZKPSTSNW4P") { UseShellExecute = true }); } catch { }
+                try { using var _ = Process.Start(new ProcessStartInfo("ms-windows-store://pdp/?ProductId=9NZKPSTSNW4P") { UseShellExecute = true }); } catch { }
                 Helpers.TweakFeedback.ShowSimple(StatusBanner, StatusDot, StatusText, ok,
                     "Popup stoppé (contournement) — le Store s'ouvre pour réinstaller la Game Bar",
                     "Réparation impossible — voir le journal d'activité.");

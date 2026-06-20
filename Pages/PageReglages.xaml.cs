@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.4.2";
+        public const string AppVersion = "1.4.3";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -489,7 +489,7 @@ namespace Optimisation_Tool.Pages
 
         private void BtnOpenFolder_Click(object sender, RoutedEventArgs e)
         {
-            try { Process.Start("explorer.exe", AppDomain.CurrentDomain.BaseDirectory); }
+            try { using var _ = Process.Start("explorer.exe", AppDomain.CurrentDomain.BaseDirectory); }
             catch (Exception ex) { _main.Log($"Réglages : erreur ouverture dossier — {ex.Message}"); }
         }
 
@@ -503,7 +503,7 @@ namespace Optimisation_Tool.Pages
 
         private void OpenUrl(string url)
         {
-            try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
+            try { using var _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
             catch (Exception ex) { _main.Log($"Réglages : erreur ouverture lien — {ex.Message}"); }
         }
     }
