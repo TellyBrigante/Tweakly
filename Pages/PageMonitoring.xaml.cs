@@ -97,11 +97,12 @@ namespace Optimisation_Tool.Pages
 
         private async Task TickAsync()
         {
+            if (!_main.IsLiveSamplingAllowed()) return;
             if (_busy) return;
             _busy = true;
             try
             {
-                var s = await Task.Run(SystemMonitor.Collect);
+                var s = await Task.Run(() => SystemMonitor.Collect(MonCollectParts.All));
                 UpdateUI(s);
             }
             catch { }

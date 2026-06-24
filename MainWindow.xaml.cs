@@ -141,11 +141,12 @@ namespace Optimisation_Tool
                 // Démarrage : page d'accueil = Dashboard (v1.4.3)
                 NavigateTo(BtnNavAccueil);
 
-                // PRÉCHAUFFAGE du monitoring (v1.3.5) : un Collect() en arrière-plan paie
-                // les démarrages à froid (WMI, LibreHardwareMonitor, nvidia-smi, stockage)
+                // PRÉCHAUFFAGE du monitoring (v1.3.5) : un Collect() léger en arrière-plan paie
+                // les démarrages à froid utiles à l'accueil (WMI CPU, LibreHardwareMonitor, NvAPI)
                 // pendant que l'utilisateur est sur la page d'accueil → quand il ouvre
                 // Monitoring Système / le mode mini, les valeurs tombent dès le 1er tick.
-                _ = Task.Run(() => { try { Helpers.SystemMonitor.Collect(); } catch { } });
+                if (!App.ShouldStartMinimized(Settings.StartMinimized))
+                    _ = Task.Run(() => { try { Helpers.SystemMonitor.Collect(Helpers.MonCollectParts.Light); } catch { } });
 
                 // Forcer la fenêtre au PREMIER PLAN (pas seulement Topmost flicker, qui ne
                 // suffit pas si une autre app détient le foreground). On utilise
@@ -923,6 +924,17 @@ namespace Optimisation_Tool
         /// <summary>True si l'overlay mini est actuellement affiché (utilisé par le tray
         /// pour décider entre Show() main vs ExitMiniMode()).</summary>
         public bool IsMiniActive() => _mini != null && _mini.IsVisible;
+
+        /// <summary>
+        /// Autorise le monitoring live uniquement quand l'utilisateur regarde vraiment Tweakly.
+        /// Si la fenêtre est minimisée, cachée ou passée derrière un jeu, on ne sonde pas WMI/NvAPI.
+        /// Le mode mini garde son propre sampler léger, donc il est exclu ici.
+        /// </summary>
+        public bool IsLiveSamplingAllowed()
+        {
+            try { return IsVisible && WindowState != WindowState.Minimized && IsActive && !IsMiniActive(); }
+            catch { return false; }
+        }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {

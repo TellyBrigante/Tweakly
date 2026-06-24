@@ -19,7 +19,7 @@ namespace Optimisation_Tool.Pages
     /// Chargement INTELLIGENT :
     ///   • Score / Stockage / Dernière session : lecture instantanée locale (JSON / WMI).
     ///   • Santé système : scan EventLog en arrière-plan, la tuile se remplit quand prêt.
-    ///   • Matériel : SystemMonitor.Collect sur un timer 1 Hz.
+    ///   • Matériel : SystemMonitor.Collect léger sur un timer 5 s.
     ///   • Réseau : NetworkMonitor.CollectAsync en arrière-plan.
     ///
     /// Cohérence visuelle : UNIQUEMENT les rôles thémés (DynamicResource ThBg / ThPanel /
@@ -32,6 +32,7 @@ namespace Optimisation_Tool.Pages
         private readonly DispatcherTimer _hwTimer;
         private bool _hwBusy;
         private bool _loaded;
+        private bool _heavyLoaded;
 
         // ── Timeline « Activité récente » (bench, sessions jeu, incidents) ─────
         // Agrégée à partir de plusieurs sources, triée chronologiquement, re-rendue à
@@ -51,7 +52,7 @@ namespace Optimisation_Tool.Pages
         {
             _main = main;
             InitializeComponent();
-            _hwTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _hwTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
             _hwTimer.Tick += async (_, _) => await TickHardwareAsync();
         }
 
@@ -65,14 +66,21 @@ namespace Optimisation_Tool.Pages
                 LoadStorage();
                 LoadActivity();   // benchmarks + sessions jeu (lecture instantanée locale)
                 UpdateHeader();
-                _ = LoadHealthAsync();   // remplit aussi les incidents dans l'activité
-                _ = LoadNetworkAsync();
             }
+            StartDeferredLoads();
             await TickHardwareAsync();
             _hwTimer.Start();
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e) => _hwTimer.Stop();
+
+        private void StartDeferredLoads()
+        {
+            if (_heavyLoaded || !_main.IsLiveSamplingAllowed()) return;
+            _heavyLoaded = true;
+            _ = LoadHealthAsync();   // scan EventLog : uniquement quand le dashboard est vraiment consulté
+            _ = LoadNetworkAsync();
+        }
 
         // ═══════════════════════════════════════════════════════════════════════
         //  En-tête : date + indicateur d'état plat (LED carrée + texte, pas de pilule)
@@ -283,11 +291,13 @@ namespace Optimisation_Tool.Pages
 
         private async Task TickHardwareAsync()
         {
+            if (!_main.IsLiveSamplingAllowed()) return;
+            StartDeferredLoads();
             if (_hwBusy) return;
             _hwBusy = true;
             try
             {
-                var s = await Task.Run(SystemMonitor.Collect);
+                var s = await Task.Run(() => SystemMonitor.Collect(MonCollectParts.Light));
                 TxtHwCpu.Text = $"{s.CpuUsage:F0} %";
                 SetHwBar(HwCpuBar, s.CpuUsage);
                 TxtHwGpu.Text = s.GpuOk ? $"{s.GpuUsage:F0} %" : "—";

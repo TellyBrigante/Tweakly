@@ -9,7 +9,7 @@ namespace Optimisation_Tool.Helpers
 {
     /// <summary>
     /// Collecte des métriques système en temps réel (sans driver kernel).
-    /// CPU : usage + fréquence live (estimée). RAM : usage. GPU NVIDIA : via nvidia-smi.
+    /// CPU : usage + fréquence live (estimée). RAM : usage. GPU NVIDIA : via NvAPI en priorité.
     /// </summary>
     public sealed class MonSnapshot
     {
@@ -55,6 +55,20 @@ namespace Optimisation_Tool.Helpers
         public double UsagePct;   // % d'activité disque
     }
 
+    [Flags]
+    public enum MonCollectParts
+    {
+        Cpu      = 1,
+        Processes= 2,
+        Ram      = 4,
+        Gpu      = 8,
+        GpuWatts = 16,
+        Nvme     = 32,
+
+        Light = Cpu | Ram | Gpu,
+        All   = Cpu | Processes | Ram | Gpu | GpuWatts | Nvme,
+    }
+
     public static class SystemMonitor
     {
         // ── RAM (GlobalMemoryStatusEx) ────────────────────────────────────────
@@ -77,7 +91,9 @@ namespace Optimisation_Tool.Helpers
         private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
         // ── Collecte complète (à appeler sur un thread de fond) ──────────────
-        public static MonSnapshot Collect()
+        private static readonly object _collectLock = new();
+
+        public static MonSnapshot Collect(MonCollectParts parts = MonCollectParts.All)
         {
             // v1.3.5 (retour utilisateur : « les valeurs mettent longtemps à arriver ») :
             // les 5 sections tournent en PARALLÈLE. Au premier appel, chacune paie son
@@ -86,14 +102,27 @@ namespace Optimisation_Tool.Helpers
             // plusieurs secondes, en parallèle on ne paie que la plus lente.
             // Sans risque : chaque section écrit des champs DISTINCTS du snapshot et
             // ne touche qu'à SES caches statiques.
-            var s = new MonSnapshot();
-            System.Threading.Tasks.Task.WaitAll(
-                System.Threading.Tasks.Task.Run(() => CollectCpu(s)),
-                System.Threading.Tasks.Task.Run(() => CollectProcesses(s)),
-                System.Threading.Tasks.Task.Run(() => CollectRam(s)),
-                System.Threading.Tasks.Task.Run(() => CollectGpu(s)),
-                System.Threading.Tasks.Task.Run(() => CollectNvme(s)));
-            return s;
+            lock (_collectLock)
+            {
+                var s = new MonSnapshot();
+                var tasks = new List<System.Threading.Tasks.Task>(6);
+
+                bool Has(MonCollectParts p) => (parts & p) != 0;
+
+                if (Has(MonCollectParts.Cpu))
+                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectCpu(s)));
+                if (Has(MonCollectParts.Processes))
+                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectProcesses(s)));
+                if (Has(MonCollectParts.Ram))
+                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectRam(s)));
+                if (Has(MonCollectParts.Gpu))
+                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectGpu(s, Has(MonCollectParts.GpuWatts))));
+                if (Has(MonCollectParts.Nvme))
+                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectNvme(s)));
+
+                System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
+                return s;
+            }
         }
 
         // ── Processus : compte + plus gros consommateurs CPU & RAM ────────────
@@ -407,7 +436,7 @@ namespace Optimisation_Tool.Helpers
         private static (bool ok, string name, double usage, double vu, double vt,
                         double temp, double watts, double mhz, bool igp) _gpuCache;
 
-        private static void CollectGpu(MonSnapshot s)
+        private static void CollectGpu(MonSnapshot s, bool includeWatts)
         {
             try
             {
@@ -418,13 +447,29 @@ namespace Optimisation_Tool.Helpers
                 // PAS de cache : c'est assez rapide pour lire à chaque tick → la valeur GPU et
                 // sa courbe bougent seconde par seconde (le cache 1,8 s d'avant figeait 1 tick sur 2).
                 // Watts via EnsureWattsFetch (nvidia-smi lent, refresh non bloquant 5 s en arrière-plan).
-                if (gpu.Vendor == GpuVendor.Nvidia && TryNvapiGpu(s, gpu))
+                if (gpu.Vendor == GpuVendor.Nvidia && TryNvapiGpu(s, gpu, includeWatts))
                 {
                     s.GpuIsIntegrated = false;
                     return;
                 }
 
-                // Fallback Nvidia : nvidia-smi (spawn lent, jusqu'à 4 s) → on cache 1,5 s.
+                // Collecte légère : si NvAPI ne répond pas, ne jamais lancer nvidia-smi.
+                // On se rabat sur le compteur GPU Engine, moins riche mais sans process externe.
+                if (gpu.Vendor == GpuVendor.Nvidia && !includeWatts)
+                {
+                    if (TryReuseGpuCache(s)) return;
+                    s.GpuName         = gpu.Name;
+                    s.GpuIsIntegrated = false;
+                    s.GpuUsage        = GpuEngineBusiestUsage();
+                    s.GpuVramTotalMB  = gpu.DedicatedVramMB;
+                    s.GpuVramUsedMB   = 0;
+                    s.GpuTemp = 0; s.GpuWatts = 0; s.GpuMHz = 0;
+                    s.GpuOk           = true;
+                    CacheGpu(s);
+                    return;
+                }
+
+                // Fallback Nvidia complet : nvidia-smi (spawn lent, jusqu'à 4 s) → on cache 1,5 s.
                 if (gpu.Vendor == GpuVendor.Nvidia && TryReuseGpuCache(s)) return;
                 if (gpu.Vendor == GpuVendor.Nvidia && TryNvidiaSmi(s))
                 {
@@ -476,7 +521,7 @@ namespace Optimisation_Tool.Helpers
         // Remplit s via NvAPI (usage/temp/horloge/VRAM en process, ~2,5 ms). Watts = valeur
         // mise en cache par EnsureWattsFetch (refresh nvidia-smi lent, non bloquant). Renvoie
         // false si NvAPI indisponible → l'appelant retombe sur nvidia-smi.
-        private static bool TryNvapiGpu(MonSnapshot s, GpuInfo gpu)
+        private static bool TryNvapiGpu(MonSnapshot s, GpuInfo gpu, bool includeWatts)
         {
             try
             {
@@ -493,9 +538,9 @@ namespace Optimisation_Tool.Helpers
                 s.GpuMHz         = double.IsNaN(r.CoreMhz)     ? 0 : r.CoreMhz;
                 s.GpuVramUsedMB  = double.IsNaN(r.VramUsedMB)  ? 0 : r.VramUsedMB;
                 s.GpuVramTotalMB = double.IsNaN(r.VramTotalMB) ? gpu.DedicatedVramMB : r.VramTotalMB;
-                s.GpuWatts       = _gpuWattsCached;            // rempli en arrière-plan
+                s.GpuWatts       = includeWatts ? _gpuWattsCached : 0;   // watts = nvidia-smi, évité en mode léger
                 s.GpuOk          = true;
-                EnsureWattsFetch();                           // refresh watts lent si nécessaire
+                if (includeWatts) EnsureWattsFetch();          // refresh watts lent si nécessaire
                 return true;
             }
             catch { return false; }

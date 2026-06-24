@@ -52,7 +52,7 @@ namespace Optimisation_Tool
             _busy = true;
             try
             {
-                var sysTask = Task.Run(SystemMonitor.Collect);
+                var sysTask = Task.Run(() => SystemMonitor.Collect(MonCollectParts.Light));
                 var netTask = NetworkMonitor.Instance.CollectAsync("1.1.1.1");
                 // await sur chaque task : équivalent perf au WhenAll (les 2 tournent déjà en
                 // parallèle), mais re-throw l'exception directement au lieu de l'envelopper en

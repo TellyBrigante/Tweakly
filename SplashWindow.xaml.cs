@@ -7,8 +7,8 @@ namespace Optimisation_Tool
 {
     /// <summary>
     /// Écran de démarrage (v1.3.5) : affiche le logo + les étapes pendant que l'essentiel
-    /// se précharge (préférences déjà lues par App, préchauffage du monitoring : WMI,
-    /// LibreHardwareMonitor, nvidia-smi, stockage). Le préchauffage est BORNÉ à 3 s —
+    /// se précharge (préférences déjà lues par App, préchauffage léger du monitoring :
+    /// WMI CPU, LibreHardwareMonitor, NvAPI). Le préchauffage est BORNÉ à 3 s —
     /// s'il n'a pas fini, il continue en arrière-plan et on ouvre l'app quand même.
     ///
     /// ⚠️ ANTI-CASSE MAJ (règle 3 : rien ne doit empêcher le démarrage) : tout est en
@@ -97,10 +97,10 @@ namespace Optimisation_Tool
                 await Task.Delay(120);  // (déjà lues par App — étape visuelle)
 
                 SetStep(60, "Préchauffage du monitoring…");
-                // Paie les démarrages à froid (WMI, LHM, nvidia-smi, stockage) ICI plutôt
-                // qu'à la première visite du Monitoring. Borné : au-delà de 3 s on ouvre
+                // Paie les démarrages à froid utiles à l'accueil (WMI CPU, LHM, NvAPI) ICI plutôt
+                // qu'à la première visite. Borné : au-delà de 3 s on ouvre
                 // l'app, le préchauffage finit tout seul en arrière-plan.
-                var warm = Task.Run(() => { try { Helpers.SystemMonitor.Collect(); } catch { } });
+                var warm = Task.Run(() => { try { Helpers.SystemMonitor.Collect(Helpers.MonCollectParts.Light); } catch { } });
                 await Task.WhenAny(warm, Task.Delay(3000));
 
                 SetStep(95, "Lancement de l'interface…");
