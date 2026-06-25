@@ -17,6 +17,7 @@ namespace Optimisation_Tool.Pages
         private readonly DispatcherTimer _timer;
         private bool _busy;
         private bool _ramNameSet;
+        private int  _tickIndex;
 
         private const int MaxPoints = 60;
         private readonly List<double> _cpuHist = new();
@@ -102,7 +103,11 @@ namespace Optimisation_Tool.Pages
             _busy = true;
             try
             {
-                var s = await Task.Run(() => SystemMonitor.Collect(MonCollectParts.All));
+                var parts = MonCollectParts.All;
+                if (_tickIndex++ % 3 != 0)
+                    parts &= ~MonCollectParts.Nvme;
+
+                var s = await Task.Run(() => SystemMonitor.Collect(parts));
                 UpdateUI(s);
             }
             catch { }

@@ -76,7 +76,8 @@ namespace Optimisation_Tool.Helpers
 
             // On essaie les scénarios par ordre de FORCE de preuve : plus la preuve est
             // directe, plus on essaie tôt. Le premier qui matche gagne.
-            return TryDiskInpageBsod(cluster)
+            return TryIntelIpfDynamicTuning(cluster)
+                ?? TryDiskInpageBsod(cluster)
                 ?? TryWheaUncorrected(cluster)
                 ?? TryWheaCorrectedRepeated(cluster)
                 ?? TryDiskRepeated(cluster)
@@ -99,6 +100,53 @@ namespace Optimisation_Tool.Helpers
         //    PREUVE FORTE : on voit le disque échouer, puis Windows planter sur
         //    une lecture de page. Le coupable est désigné PAR SON NOM.
         // ──────────────────────────────────────────────────────────────────────
+        private static Narration? TryIntelIpfDynamicTuning(List<RawEvent> cluster)
+        {
+            var ipf = cluster
+                .Where(e => e.Id == 17
+                    && (e.Provider.Equals("IPFUMDF", StringComparison.OrdinalIgnoreCase)
+                     || e.Provider.Equals("IPFSVCHOST", StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(e => e.Time)
+                .ToList();
+            if (ipf.Count == 0) return null;
+
+            var pipes = ipf.Select(e => ExtractFirst(e.RawFull, @"<pipe://([^>]+)>"))
+                           .Where(s => s.Length > 0)
+                           .Distinct(StringComparer.OrdinalIgnoreCase)
+                           .ToList();
+            var errors = ipf.Select(e => ExtractFirst(e.RawFull, @"\[(ESIF_[^\]]+)\]"))
+                            .Where(s => s.Length > 0)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+            bool fiveMinRetry = ipf.Any(e => (e.RawFull + "\n" + e.Raw).Contains("300000ms", StringComparison.OrdinalIgnoreCase));
+
+            string pipeText = pipes.Count > 0 ? string.Join(", ", pipes) : "module IPF/DPTF non nommé";
+            string errText  = errors.Count > 0 ? string.Join(", ", errors) : "erreur Intel non nommée";
+            string retry    = fiveMinRetry ? " Le message indique aussi un nouvel essai toutes les 5 min." : "";
+
+            return new Narration
+            {
+                Title = "Intel Dynamic Tuning / IPF incomplet",
+                Icon  = "",
+                Chain = BuildChainPlain(ipf),
+                Advice = $"Windows ne parle pas d'un crash applicatif : le service Intel IPF essaie de charger {pipeText}, mais Intel renvoie {errText}. " +
+                         $"Ça pointe un package Intel Dynamic Tuning / Innovation Platform Framework incomplet ou dépareillé avec les pilotes constructeur.{retry}",
+                Steps = new List<string>
+                {
+                    "Réinstalle le pilote Intel Dynamic Tuning Technology / Innovation Platform Framework depuis la page support exacte du PC ou de la carte mère.",
+                    "Redémarre Windows, puis vérifie si IPFUMDF/IPFSVCHOST revient encore toutes les 5 min.",
+                    "Si ça revient : Gestionnaire de périphériques > Périphériques système, désinstalle les entrées Intel Dynamic Tuning / Innovation Platform Framework en cochant la suppression du pilote, puis réinstalle le package constructeur.",
+                    "Ne désactive pas ipfsvc/dptftcs au hasard sur portable : ces services peuvent gérer la chauffe, les limites de puissance et le turbo CPU.",
+                },
+                Actions = new List<LogAction>
+                {
+                    new() { Label = "Gestionnaire périph.", Tooltip = "Chercher les entrées Intel Dynamic Tuning / Innovation Platform Framework.", Kind = LogActionKind.Diag, Target = "devmgmt.msc" },
+                    new() { Label = "Services Windows",     Tooltip = "Vérifier ipfsvc et dptftcs.", Kind = LogActionKind.Diag, Target = "services.msc" },
+                    new() { Label = "Intel DSA",            Tooltip = "Assistant Intel, utile en complément du package constructeur.", Kind = LogActionKind.Url, Target = "https://www.intel.fr/content/www/fr/fr/support/detect.html" },
+                },
+            };
+        }
+
         private static Narration? TryDiskInpageBsod(List<RawEvent> cluster)
         {
             var bsod = FindBsod(cluster);
@@ -307,25 +355,94 @@ namespace Optimisation_Tool.Helpers
                 : (tdr.Any(e => e.Provider.IndexOf("amdkmdag", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                 e.RawFull.IndexOf("amdkmdag", StringComparison.OrdinalIgnoreCase) >= 0)
                     ? "AMD" : "GPU");
+            var localContext = GameCrashContextAnalyzer.Analyze(
+                cluster.Min(e => e.Time),
+                cluster.Max(e => e.Time));
+
+            var live141 = cluster
+                .Where(e => e.Provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase)
+                         && e.Id == 1001
+                         && IsLiveKernel141(e.RawFull))
+                .OrderBy(e => e.Time)
+                .ToList();
+            var dumps = live141.Select(e => ExtractFirst(e.RawFull, @"(C:\\WINDOWS\\LiveKernelReports\\WATCHDOG\\WATCHDOG-[^\s\r\n]+\.dmp)"))
+                               .Where(s => s.Length > 0)
+                               .Distinct(StringComparer.OrdinalIgnoreCase)
+                               .ToList();
+            var gpuid = tdr.Select(e => ExtractFirst(e.RawFull, @"GPUID:\s*([0-9]+)"))
+                           .Where(s => s.Length > 0)
+                           .FirstOrDefault() ?? "";
+            string windowsProof = $"{tdr.Count} signal(aux) TDR/WATCHDOG dans la fenêtre.";
+            if (live141.Count > 0)
+                windowsProof += $" {live141.Count} rapport(s) LiveKernelEvent 141.";
+            if (dumps.Count > 0)
+                windowsProof += $" Dump : {System.IO.Path.GetFileName(dumps[0])}.";
+            if (gpuid.Length > 0)
+                windowsProof += $" GPU signalé : GPUID {gpuid}.";
+
+            var suspects = DetectTdrRuntimeSuspects(vendor);
+            string runtimeLine = suspects.Count > 0
+                ? "Outil GPU/overlay lancé pendant l'analyse : " + string.Join(", ", suspects) + "."
+                : "";
+            var steps = new List<string>();
+
+            var why = new List<string>
+            {
+                $"Résumé : le pilote {vendor} a mis trop de temps à répondre. Windows l'a réinitialisé pour récupérer l'affichage.",
+                "Preuves Windows : " + windowsProof
+            };
+
+            if (localContext.HasEvidence)
+            {
+                why.Add($"Contexte local : {localContext.AppName} détecté avec une confiance {localContext.Confidence}.");
+                foreach (var ev in localContext.Evidence.Take(2))
+                    why.Add("Preuve locale : " + ev + ".");
+                if (localContext.Facts.Count > 0)
+                    why.Add("Réglages lus : " + string.Join(", ", localContext.Facts.Take(6)) + ".");
+
+                steps.Add($"Contexte local : {localContext.AppName}. Les traces de cette app/ce jeu bougent dans la même fenêtre que le TDR.");
+                foreach (var ev in localContext.Evidence.Take(3))
+                    steps.Add("Preuve : " + ev + ".");
+                if (localContext.Facts.Count > 0)
+                    steps.Add("Réglages/traces lus : " + string.Join(", ", localContext.Facts.Take(6)) + ".");
+            }
+
+            if (runtimeLine.Length > 0)
+                why.Add(runtimeLine);
+
+            why.Add(localContext.HasEvidence
+                ? "Conclusion : le reset GPU est corrélé à une activité app/jeu mesurable. Tweakly ne conclut donc pas à un pilote mort sans cette vérification."
+                : $"Conclusion : aucune trace app/jeu exploitable trouvée. On revient aux causes GPU classiques : pilote {vendor}, profil OC/undervolt, surchauffe ou adaptateur d'affichage virtuel.");
+
+            if (localContext.HasEvidence)
+            {
+                if (suspects.Any(s => s.Contains("MSI Afterburner", StringComparison.OrdinalIgnoreCase)))
+                    steps.Add("MSI Afterburner est lancé en même temps : à garder comme facteur aggravant possible, pas comme cause principale sans autre preuve.");
+                if (suspects.Any(s => s.Contains("RTSS", StringComparison.OrdinalIgnoreCase)))
+                    steps.Add("RTSS/RivaTuner est lancé en même temps : à garder comme facteur aggravant possible si le crash arrive en jeu.");
+                steps.Add("Priorité : vérifier cette app/ce jeu et ses réglages récents, parce que ses traces bougent dans la même fenêtre que le reset GPU.");
+            }
+            else
+            {
+                if (suspects.Any(s => s.Contains("MSI Afterburner", StringComparison.OrdinalIgnoreCase)))
+                    steps.Add("MSI Afterburner est lancé : repasse le GPU stock, désactive le profil OC/undervolt, ferme Afterburner/RTSS, puis reteste.");
+                if (suspects.Any(s => s.Contains("RTSS", StringComparison.OrdinalIgnoreCase)))
+                    steps.Add("RTSS/RivaTuner est lancé : coupe l'overlay/framerate limiter le temps du test, surtout si le crash arrive en jeu.");
+                steps.Add("Vérifie la TEMPÉRATURE GPU sous charge dans Monitoring : au-delà de ~83 °C, ça peut déclencher un TDR.");
+                if (!suspects.Any(s => s.Contains("MSI Afterburner", StringComparison.OrdinalIgnoreCase)))
+                    steps.Add("Si MSI Afterburner / undervolt actif : reviens aux paramètres d'usine et reteste — un undervolt « stable » peut devenir limite avec un nouveau pilote.");
+                steps.Add("Adaptateur d'affichage VIRTUEL installé (Parsec/Moonlight) ? Désactive-le temporairement (Gestionnaire de périphériques) — cause documentée de TDR.");
+                steps.Add("Réinstalle un pilote stable sans DDU d'abord : NVIDIA App > Pilotes > Installation personnalisée > « Effectuer une installation propre ».");
+                steps.Add("Seulement si tout le reste échoue : DDU en mode sans échec puis réinstallation. C'est le dernier recours.");
+            }
 
             return new Narration
             {
                 Title  = $"Pilote {vendor} a cessé de répondre (TDR)",
                 Icon   = "",
                 Chain  = BuildChainPlain(tdr) + (apptag.Length > 0 ? $" → crash {apptag}" : ""),
-                Advice = $"Le pilote {vendor} a mis trop de temps à répondre, Windows l'a réinitialisé (TDR, EventID 4101)" +
-                         (apptag.Length > 0 ? $" — c'est ce qui a fait crasher {apptag}." : ".") +
-                         $" {tdr.Count} TDR dans la fenêtre. Causes mécaniques fréquentes : pilote {vendor} instable, " +
-                         "overclock GPU (Afterburner), surchauffe, ou adaptateur d'affichage virtuel (Parsec/Moonlight/Sunshine). " +
-                         "Pour un épisode isolé : pas d'artillerie (pas DDU d'emblée).",
-                Steps = new List<string>
-                {
-                    "Vérifie la TEMPÉRATURE GPU sous charge dans Monitoring : au-delà de ~83 °C, ça déclenche un TDR.",
-                    "Si MSI Afterburner / undervolt actif : reviens aux paramètres d'usine et reteste — un undervolt « stable » peut devenir limite avec un nouveau pilote.",
-                    "Adaptateur d'affichage VIRTUEL installé (Parsec/Moonlight) ? Désactive-le temporairement (Gestionnaire de périphériques) — cause documentée de TDR.",
-                    "Réinstalle un pilote stable sans DDU d'abord : NVIDIA App > Pilotes > Installation personnalisée > « Effectuer une installation propre ».",
-                    "Seulement si tout le reste échoue : DDU en mode sans échec puis réinstallation. C'est le dernier recours.",
-                },
+                Advice = string.Join("\n", why),
+                Steps = steps,
                 Actions = new List<LogAction>
                 {
                     new() { Label = "Voir Monitoring",        Tooltip = "Températures GPU en temps réel.",                Kind = LogActionKind.Navigate, Target = "Monitoring" },
@@ -384,7 +501,7 @@ namespace Optimisation_Tool.Helpers
             }
             else
             {
-                steps.Add("Lance SFC /scannow (CMD admin) puis DISM /Online /Cleanup-Image /RestoreHealth si SFC ne suffit pas.");
+                steps.Add("Ouvre Réparation Windows pour lancer DISM puis SFC dans le bon ordre.");
                 steps.Add("Teste la RAM avec MemTest86 — un module système qui plante TRÈS souvent = barrette qui se trompe sur 1 bit de temps en temps.");
                 steps.Add("Force les dernières mises à jour Windows.");
             }
@@ -399,8 +516,8 @@ namespace Optimisation_Tool.Helpers
             }
             else if (isSysModule)
             {
-                actions.Add(new() { Label = "Lancer SFC /scannow", Tooltip = "Vérifie les fichiers système (5-10 min).",
-                                    Kind = LogActionKind.Command, Target = "cmd /k sfc /scannow", Confirm = true });
+                actions.Add(new() { Label = "Réparation Windows", Tooltip = "Lance DISM puis SFC dans le bon ordre.",
+                                    Kind = LogActionKind.Navigate, Target = "WinRepair" });
                 actions.Add(new() { Label = "MemTest86", Tooltip = "Test de RAM bootable.",
                                     Kind = LogActionKind.Url, Target = "https://www.memtest86.com/" });
             }
@@ -615,7 +732,36 @@ namespace Optimisation_Tool.Helpers
             if (p.Contains("nvlddmkm") || p.Contains("amdkmdag") || p.Contains("amdwddmg")) return true;
             // « Display » Event 4101 = TDR loggé sous une source générique
             if (p == "display" && e.Id == 4101) return true;
+            if (p == "windows error reporting" && e.Id == 1001 && IsLiveKernel141(e.RawFull)) return true;
             return false;
+        }
+
+        private static bool IsLiveKernel141(string rawFull)
+            => rawFull.IndexOf("LiveKernelEvent", StringComparison.OrdinalIgnoreCase) >= 0
+            && Regex.IsMatch(rawFull, @"P1\s*:\s*141", RegexOptions.IgnoreCase);
+
+        private static List<string> DetectTdrRuntimeSuspects(string vendor)
+        {
+            var suspects = new List<string>();
+            try
+            {
+                bool Has(string name)
+                {
+                    try { return System.Diagnostics.Process.GetProcessesByName(name).Length > 0; }
+                    catch { return false; }
+                }
+
+                if (vendor == "NVIDIA" && Has("MSIAfterburner"))
+                    suspects.Add("MSI Afterburner lancé");
+                if (Has("RTSS") || Has("RTSSHooksLoader64") || Has("RTSSHooksLoader"))
+                    suspects.Add("RTSS/RivaTuner lancé");
+                if (Has("Sunshine"))
+                    suspects.Add("Sunshine lancé");
+                if (Has("parsecd") || Has("Parsec"))
+                    suspects.Add("Parsec lancé");
+            }
+            catch { }
+            return suspects;
         }
 
         private sealed class BsodHit { public RawEvent ev = null!; public uint bugcheck; }
@@ -709,6 +855,13 @@ namespace Optimisation_Tool.Helpers
         //  → on supprime le faux incident. Un crash n'a JAMAIS le temps d'écrire un
         //  6006, et un BSOD ne génère JAMAIS un 1074 (le système crashe avant).
         // ──────────────────────────────────────────────────────────────────────
+        private static string ExtractFirst(string text, string pattern)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+            var m = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
+            return m.Success && m.Groups.Count > 1 ? m.Groups[1].Value.Trim() : "";
+        }
+
         private static (bool clean, string initiator, string reason) LookupCleanShutdownMarkers(DateTime around)
         {
             try

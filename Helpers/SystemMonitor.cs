@@ -136,11 +136,10 @@ namespace Optimisation_Tool.Helpers
 
         private static void CollectProcesses(MonSnapshot s)
         {
-            // Cache court (< 1 tick à 1 Hz) : on rebalaye à chaque tick pour que le top
-            // process suive le réel. La valeur sert juste à éviter un double scan si deux
-            // appels arrivent à < 900 ms d'écart (rarissime mais possible).
+            // Cache 2 s : le balayage de tous les process coûte plus cher que CPU/GPU/RAM.
+            // Le graphe principal reste à 1 Hz ; seuls "top CPU/top RAM" bougent moins vite.
             if (_procCacheTime != default &&
-                (DateTime.UtcNow - _procCacheTime).TotalMilliseconds < 900)
+                (DateTime.UtcNow - _procCacheTime).TotalMilliseconds < 2000)
             {
                 s.Processes  = _procCache.procs;
                 s.TopCpuName = _procCache.topCpu;
@@ -346,11 +345,10 @@ namespace Optimisation_Tool.Helpers
 
         private static void CollectNvme(MonSnapshot s)
         {
-            // Cache 1,5 s : la température disque évolue lentement mais l'utilisateur veut
-            // voir la courbe d'utilisation NVMe bouger seconde par seconde (sinon = escalier
-            // de 4 s, courbe inerte). 1,5 s reste assez pour amortir le coût WMI sans figer.
+            // Cache 3 s : WMI stockage est coûteux et la température NVMe évolue lentement.
+            // La page Monitoring ne demande déjà cette section qu'un tick sur 3.
             if (_nvmeCacheTime != default &&
-                (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds < 1500)
+                (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds < 3000)
             {
                 s.Nvmes = _nvmeCache;
                 return;

@@ -216,7 +216,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.4.4"
+                            <TextBlock x:Name="TxtVersion" Text="v1.4.5"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -236,78 +236,9 @@
                                     Style="{StaticResource NavBtnStyle}"
                                     Click="NavBtn_Click"/>
 
-                            <!-- ── Groupe Benchmark (repliable, REPLIÉ par défaut depuis v1.4.3 — la
-                                 page d'arrivée est désormais Accueil, plus besoin de Benchmark ouvert) ── -->
-                            <Button x:Name="BtnNavBenchGroup"
-                                    Content="&#x25B8;  Benchmark"
-                                    FontWeight="SemiBold"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="BtnNavBenchGroup_Click"/>
-                            <Border x:Name="BenchGroupPanel"
-                                    Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThAccentIcon}"
-                                    BorderThickness="2,0,0,0"
-                                    Margin="20,0,8,4">
-                                <StackPanel>
-                                    <Button x:Name="BtnNavBenchmark"
-                                            Content="Tweakly Score"
-                                            Tag="Benchmark"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button x:Name="BtnNavGameSession"
-                                            Content="Suivi en jeu"
-                                            Tag="GameSession"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- ── Groupe Optimisations (repliable) ── -->
-                            <Button x:Name="BtnNavOptGroup"
-                                    Content="&#x25B8;  Optimisations"
-                                    FontWeight="SemiBold"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="BtnNavOptGroup_Click"/>
-
-                            <!-- Sous-items Optimisations -->
-                            <Border x:Name="OptGroupPanel"
-                                    Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThAccentIcon}"
-                                    BorderThickness="2,0,0,0"
-                                    Margin="20,0,8,4">
-                                <StackPanel>
-                                    <Button x:Name="BtnNavNettoyage"
-                                            Content="Nettoyage"
-                                            Tag="Nettoyage"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button x:Name="BtnNavNvidia"
-                                            Content="Nvidia"
-                                            Tag="Nvidia"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button Content="CPU"
-                                            Tag="CPU"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button Content="Windows"
-                                            Tag="Windows"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button Content="R&#233;seau"
-                                            Tag="Reseau"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                    <Button Content="Confidentialit&#233;"
-                                            Tag="Privacy"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- ── Groupe Diagnostic (repliable) ── -->
+                            <!-- ── Diagnostiquer : comprendre pourquoi le PC va mal ── -->
                             <Button x:Name="BtnNavDiagGroup"
-                                    Content="&#x25B8;  Diagnostic"
+                                    Content="&#x25B8;  Diagnostiquer"
                                     FontWeight="SemiBold"
                                     Style="{StaticResource NavBtnStyle}"
                                     Click="BtnNavDiagGroup_Click"/>
@@ -317,47 +248,34 @@
                                     BorderThickness="2,0,0,0"
                                     Margin="20,0,8,4">
                                 <StackPanel>
-                                    <Button Content="Bilan de sant&#233;"
-                                            Tag="Diagnostic"
-                                            Style="{StaticResource NavSubBtnStyle}"
-                                            Click="NavBtn_Click"/>
                                     <Button Content="Erreurs Windows"
                                             Tag="EventLog"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                </StackPanel>
-                            </Border>
-
-                            <!-- ── Groupe Boîte à outils (repliable) ── -->
-                            <Button x:Name="BtnNavToolsGroup"
-                                    Content="&#x25B8;  Bo&#238;te &#224; outils"
-                                    FontWeight="SemiBold"
-                                    Style="{StaticResource NavBtnStyle}"
-                                    Click="BtnNavToolsGroup_Click"/>
-                            <Border x:Name="ToolsGroupPanel"
-                                    Visibility="Collapsed"
-                                    BorderBrush="{DynamicResource ThAccentIcon}"
-                                    BorderThickness="2,0,0,0"
-                                    Margin="20,0,8,4">
-                                <StackPanel>
-                                    <Button Content="Applications"
-                                            Tag="Apps"
+                                    <Button Content="Bilan de sant&#233;"
+                                            Tag="Diagnostic"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
-                                    <Button Content="Pack R&#233;installation"
-                                            Tag="Fresh"
+                                    <Button x:Name="BtnNavInfo"
+                                            Content="Informations Syst&#232;me"
+                                            Tag="Info"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavBenchmark"
+                                            Content="Tweakly Score"
+                                            Tag="Benchmark"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
                                 </StackPanel>
                             </Border>
 
-                            <!-- ── Groupe Surveillance (repliable) ── -->
-                            <Button x:Name="BtnNavMonGroup"
-                                    Content="&#x25B8;  Surveillance"
+                            <!-- ── Surveiller : valeurs live et sessions jeu ── -->
+                            <Button x:Name="BtnNavMonitorGroup"
+                                    Content="&#x25B8;  Surveiller"
                                     FontWeight="SemiBold"
                                     Style="{StaticResource NavBtnStyle}"
-                                    Click="BtnNavMonGroup_Click"/>
-                            <Border x:Name="MonGroupPanel"
+                                    Click="BtnNavMonitorGroup_Click"/>
+                            <Border x:Name="MonitorGroupPanel"
                                     Visibility="Collapsed"
                                     BorderBrush="{DynamicResource ThAccentIcon}"
                                     BorderThickness="2,0,0,0"
@@ -372,13 +290,96 @@
                                             Tag="ReseauMon"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavGameSession"
+                                            Content="Suivi en jeu"
+                                            Tag="GameSession"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
                                 </StackPanel>
                             </Border>
-                            <Button x:Name="BtnNavInfo"
-                                    Content="Informations Syst&#232;me"
-                                    Tag="Info"
+
+                            <!-- ── Optimiser : appliquer les réglages de perf/confort ── -->
+                            <Button x:Name="BtnNavOptimizeGroup"
+                                    Content="&#x25B8;  Optimiser"
+                                    FontWeight="SemiBold"
                                     Style="{StaticResource NavBtnStyle}"
-                                    Click="NavBtn_Click"/>
+                                    Click="BtnNavOptimizeGroup_Click"/>
+                            <Border x:Name="OptimizeGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button Content="Windows"
+                                            Tag="Windows"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="CPU"
+                                            Tag="CPU"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavNvidia"
+                                            Content="Nvidia"
+                                            Tag="Nvidia"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="R&#233;seau"
+                                            Tag="Reseau"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="Confidentialit&#233;"
+                                            Tag="Privacy"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── Réparer : nettoyer ou remettre Windows d'aplomb ── -->
+                            <Button x:Name="BtnNavRepairGroup"
+                                    Content="&#x25B8;  R&#233;parer"
+                                    FontWeight="SemiBold"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="BtnNavRepairGroup_Click"/>
+                            <Border x:Name="RepairGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button Content="R&#233;paration Windows"
+                                            Tag="WinRepair"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavNettoyage"
+                                            Content="Nettoyage"
+                                            Tag="Nettoyage"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                    <Button Content="Applications"
+                                            Tag="Apps"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ── Réinstaller : pack post-installation pour repartir vite ── -->
+                            <Button x:Name="BtnNavPrepareGroup"
+                                    Content="&#x25B8;  R&#233;installer"
+                                    FontWeight="SemiBold"
+                                    Style="{StaticResource NavBtnStyle}"
+                                    Click="BtnNavPrepareGroup_Click"/>
+                            <Border x:Name="PrepareGroupPanel"
+                                    Visibility="Collapsed"
+                                    BorderBrush="{DynamicResource ThAccentIcon}"
+                                    BorderThickness="2,0,0,0"
+                                    Margin="20,0,8,4">
+                                <StackPanel>
+                                    <Button Content="Pack R&#233;installation"
+                                            Tag="Fresh"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
+                                </StackPanel>
+                            </Border>
                             <Button x:Name="BtnNavReglages"
                                     Content="R&#233;glages"
                                     Tag="Reglages"

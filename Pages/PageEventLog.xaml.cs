@@ -106,8 +106,11 @@ namespace Optimisation_Tool.Pages
             var stack = new StackPanel();
 
             // ── En-tête : grosse icône + titre 16 + badge sévérité + meta ──
-            stack.Children.Add(BuildHeader(inc.Icon, inc.Title, inc.Sev,
-                $"{inc.Start:dd/MM HH:mm}  ·  {inc.Count} évts  ·  {(int)(inc.End - inc.Start).TotalSeconds}s"));
+            int spanSeconds = Math.Max(0, (int)(inc.End - inc.Start).TotalSeconds);
+            string meta = inc.Episodes > 1
+                ? $"{inc.Start:dd/MM HH:mm}  ·  {inc.Episodes} séquences  ·  {inc.Count} évts  ·  {spanSeconds} s"
+                : $"{inc.Start:dd/MM HH:mm}  ·  {inc.Count} évts  ·  {spanSeconds} s";
+            stack.Children.Add(BuildHeader(inc.Icon, inc.Title, inc.Sev, meta));
 
             // Enchaînement (sous-titre discret)
             if (!string.IsNullOrWhiteSpace(inc.Chain))
@@ -118,8 +121,7 @@ namespace Optimisation_Tool.Pages
             if (!string.IsNullOrWhiteSpace(inc.Advice))
             {
                 stack.Children.Add(BuildSectionHeader("", "Pourquoi"));  // Info glyph
-                stack.Children.Add(Tb(inc.Advice, "ThTextBody", 12.5, wrap: true,
-                                      margin: new Thickness(58, 2, 0, 0)));
+                stack.Children.Add(BuildAdviceBlock(inc.Advice));
             }
 
             // ── Que faire (étapes numérotées) ──
@@ -286,6 +288,24 @@ namespace Optimisation_Tool.Pages
             else        lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
             sp.Children.Add(lbl);
             sp.Children.Add(Tb(value, "ThTextBody", 12.5, wrap: true, maxWidth: 720));
+            return sp;
+        }
+
+        private StackPanel BuildAdviceBlock(string text)
+        {
+            var sp = new StackPanel { Margin = new Thickness(58, 2, 0, 0) };
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            foreach (var raw in lines)
+            {
+                string line = raw.Trim();
+                if (line.Length == 0) continue;
+
+                var tb = Tb(line, "ThTextBody", 12.5, wrap: true,
+                            bold: line.EndsWith(":", StringComparison.Ordinal),
+                            margin: new Thickness(0, sp.Children.Count == 0 ? 0 : 5, 0, 0));
+                tb.LineHeight = 17;
+                sp.Children.Add(tb);
+            }
             return sp;
         }
 

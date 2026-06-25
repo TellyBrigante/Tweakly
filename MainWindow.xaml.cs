@@ -27,7 +27,7 @@ namespace Optimisation_Tool
         // comportement standard (WindowState.Minimized vers la barre des tâches).
         private TrayIconManager? _tray;
 
-        // Groupes de navigation repliables (Optimisations, Diagnostic)
+        // Groupes de navigation repliables.
         private sealed class NavGroup
         {
             public Button Header = null!;
@@ -62,6 +62,7 @@ namespace Optimisation_Tool
                 ["Privacy"]   = new Lazy<UserControl>(() => new PagePrivacy(this)),
                 ["Apps"]      = new Lazy<UserControl>(() => new PageApps(this)),
                 ["Fresh"]     = new Lazy<UserControl>(() => new PageFresh(this)),
+                ["WinRepair"] = new Lazy<UserControl>(() => new PageWindowsRepair(this)),
                 ["Info"]      = new Lazy<UserControl>(() => new PageSpecs(this)),
                 ["Monitoring"]= new Lazy<UserControl>(() => new PageMonitoring(this)),
                 ["ReseauMon"] = new Lazy<UserControl>(() => new PageReseauMonitoring(this)),
@@ -74,19 +75,16 @@ namespace Optimisation_Tool
 
             _groups = new List<NavGroup>
             {
-                // Groupe Benchmark replié par défaut depuis v1.4.3 (la page d'arrivée n'est
-                // plus Tweakly Score mais le Dashboard). XAML : BenchGroupPanel Visibility=Collapsed,
-                // triangle ▸ (et non ▾) sur BtnNavBenchGroup.
-                new NavGroup { Header = BtnNavBenchGroup, Panel = BenchGroupPanel, Label = "Benchmark",
-                               Tags = new HashSet<string> { "Benchmark", "GameSession" } },
-                new NavGroup { Header = BtnNavOptGroup,  Panel = OptGroupPanel,  Label = "Optimisations",
-                               Tags = new HashSet<string> { "Nettoyage", "Nvidia", "CPU", "Windows", "Reseau", "Privacy" } },
-                new NavGroup { Header = BtnNavDiagGroup, Panel = DiagGroupPanel, Label = "Diagnostic",
-                               Tags = new HashSet<string> { "Diagnostic", "EventLog" } },
-                new NavGroup { Header = BtnNavToolsGroup, Panel = ToolsGroupPanel, Label = "Boîte à outils",
-                               Tags = new HashSet<string> { "Apps", "Fresh" } },
-                new NavGroup { Header = BtnNavMonGroup,   Panel = MonGroupPanel,   Label = "Surveillance",
-                               Tags = new HashSet<string> { "Monitoring", "ReseauMon" } },
+                new NavGroup { Header = BtnNavDiagGroup, Panel = DiagGroupPanel, Label = "Diagnostiquer",
+                               Tags = new HashSet<string> { "EventLog", "Diagnostic", "Info", "Benchmark" } },
+                new NavGroup { Header = BtnNavMonitorGroup, Panel = MonitorGroupPanel, Label = "Surveiller",
+                               Tags = new HashSet<string> { "Monitoring", "ReseauMon", "GameSession" } },
+                new NavGroup { Header = BtnNavOptimizeGroup, Panel = OptimizeGroupPanel, Label = "Optimiser",
+                               Tags = new HashSet<string> { "Windows", "CPU", "Nvidia", "Reseau", "Privacy" } },
+                new NavGroup { Header = BtnNavRepairGroup, Panel = RepairGroupPanel, Label = "Réparer",
+                               Tags = new HashSet<string> { "WinRepair", "Nettoyage", "Apps" } },
+                new NavGroup { Header = BtnNavPrepareGroup, Panel = PrepareGroupPanel, Label = "Réinstaller",
+                               Tags = new HashSet<string> { "Fresh" } },
             };
 
             Loaded += (_, _) =>
@@ -442,12 +440,12 @@ namespace Optimisation_Tool
         private void NavBtn_Click(object sender, RoutedEventArgs e)
             => NavigateTo((Button)sender);
 
-        // Groupes repliables (Optimisations, Diagnostic) — même mécanisme pour les deux
-        private void BtnNavBenchGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
-        private void BtnNavOptGroup_Click(object sender, RoutedEventArgs e)   => ToggleGroup((Button)sender);
+        // Groupes repliables — même mécanisme pour tous.
         private void BtnNavDiagGroup_Click(object sender, RoutedEventArgs e)  => ToggleGroup((Button)sender);
-        private void BtnNavToolsGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
-        private void BtnNavMonGroup_Click(object sender, RoutedEventArgs e)   => ToggleGroup((Button)sender);
+        private void BtnNavMonitorGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
+        private void BtnNavOptimizeGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
+        private void BtnNavRepairGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
+        private void BtnNavPrepareGroup_Click(object sender, RoutedEventArgs e) => ToggleGroup((Button)sender);
 
         private NavGroup? GroupOf(string tag)     => _groups.FirstOrDefault(g => g.Tags.Contains(tag));
         private NavGroup? GroupByHeader(Button h)  => _groups.FirstOrDefault(g => g.Header == h);

@@ -77,6 +77,7 @@ namespace Optimisation_Tool.Helpers
     {
         public DateTime Start, End;
         public int      Count;
+        public int      Episodes = 1;
         public LogSev   Sev = LogSev.Warning;
         public string   Title = "";     // cause racine en clair
         public string   Chain = "";     // enchaînement des events
@@ -101,13 +102,18 @@ namespace Optimisation_Tool.Helpers
         private static List<RawEvent> ReadRaw(int days)
         {
             long ms = (long)days * 24 * 60 * 60 * 1000;
-            string xpath = $"*[System[(Level=1 or Level=2) and TimeCreated[timediff(@SystemTime) <= {ms}]]]";
             var list = new List<RawEvent>();
 
             foreach (var log in new[] { "System", "Application" })
             {
                 try
                 {
+                    // Les rapports WATCHDOG GPU (LiveKernelEvent 141) sont loggés par
+                    // Windows Error Reporting en niveau Information. On les lit en plus
+                    // des erreurs/critiques, sinon la carte TDR perd une preuve majeure.
+                    string xpath = log == "Application"
+                        ? $"*[System[((Level=1 or Level=2) or (Provider[@Name='Windows Error Reporting'] and EventID=1001)) and TimeCreated[timediff(@SystemTime) <= {ms}]]]"
+                        : $"*[System[(Level=1 or Level=2) and TimeCreated[timediff(@SystemTime) <= {ms}]]]";
                     var query = new EventLogQuery(log, PathType.LogName, xpath);
                     using var reader = new EventLogReader(query);
                     EventRecord? rec; int guard = 0;
@@ -220,7 +226,8 @@ namespace Optimisation_Tool.Helpers
             // c'est statistiquement une action PROGRAMMÉE (tâche planifiée d'arrêt, batterie
             // de portable qui décharge à heure fixe, redémarrage manuel rituel, etc.). On
             // filtre ces faux positifs même si on n'a pas su prouver l'arrêt clean autrement.
-            return FilterRecurringScheduled(incidents).OrderByDescending(i => i.Start).ToList();
+            var filtered = FilterRecurringScheduled(incidents);
+            return MergeNearbyRepeatedIncidents(filtered).OrderByDescending(i => i.Start).ToList();
         }
 
         // Retire les incidents qui ressemblent à une exécution programmée à heure fixe.
@@ -249,6 +256,85 @@ namespace Optimisation_Tool.Helpers
                 foreach (var inc in g) toRemove.Add(inc);
             }
             return all.Where(i => !toRemove.Contains(i)).ToList();
+        }
+
+        // Regroupe les rafales identiques proches dans le temps.
+        // Exemple réel : plusieurs TDR nvlddmkm + LiveKernelEvent 141 à 2 min d'écart
+        // doivent former une seule carte "2 séquences", pas deux pavés quasi identiques.
+        private static List<Incident> MergeNearbyRepeatedIncidents(List<Incident> all)
+        {
+            if (all.Count < 2) return all;
+
+            const int mergeWindowSeconds = 10 * 60;
+            var merged = new List<Incident>();
+            foreach (var inc in all.OrderBy(i => i.Start))
+            {
+                var prev = merged.LastOrDefault();
+                if (prev != null
+                    && SameIncidentSignature(prev, inc)
+                    && (inc.Start - prev.End).TotalSeconds <= mergeWindowSeconds)
+                {
+                    MergeInto(prev, inc);
+                    continue;
+                }
+
+                merged.Add(inc);
+            }
+            return merged;
+        }
+
+        private static bool SameIncidentSignature(Incident a, Incident b)
+        {
+            if (a.Sev != b.Sev) return false;
+            if (!string.Equals(NormalizeKey(a.Title), NormalizeKey(b.Title), StringComparison.OrdinalIgnoreCase))
+                return false;
+            return string.Equals(EventSignature(a), EventSignature(b), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string EventSignature(Incident i)
+        {
+            return string.Join("|", i.Events
+                .Select(e => NormalizeKey(e.title))
+                .Where(s => s.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s)
+                .Take(6));
+        }
+
+        private static string NormalizeKey(string value)
+            => Regex.Replace(value ?? "", @"\s+", " ").Trim();
+
+        private static void MergeInto(Incident target, Incident next)
+        {
+            int previousEpisodes = Math.Max(1, target.Episodes);
+            target.Episodes = previousEpisodes + Math.Max(1, next.Episodes);
+            target.Count += next.Count;
+            target.Start = target.Start <= next.Start ? target.Start : next.Start;
+            target.End   = target.End   >= next.End   ? target.End   : next.End;
+            target.Sev   = (LogSev)Math.Min((int)target.Sev, (int)next.Sev);
+
+            target.Events.AddRange(next.Events);
+            target.Events = target.Events.OrderBy(e => e.time).ToList();
+
+            // On garde la narration la plus récente, puis on ajoute une ligne claire de regroupement.
+            // Cela évite une carte énorme tout en signalant que le problème s'est répété.
+            string prefix = $"Regroupement : {target.Episodes} séquences similaires entre {target.Start:HH:mm:ss} et {target.End:HH:mm:ss}.";
+            target.Title   = next.Title;
+            target.Icon    = next.Icon;
+            target.Chain   = next.Chain.Length > 0 ? next.Chain : target.Chain;
+            target.Advice  = PrefixOnce(next.Advice.Length > 0 ? next.Advice : target.Advice, prefix);
+            target.Steps   = next.Steps.Count > 0 ? next.Steps : target.Steps;
+            target.Actions = next.Actions.Count > 0 ? next.Actions : target.Actions;
+        }
+
+        private static string PrefixOnce(string text, string prefix)
+        {
+            if (text.StartsWith("Regroupement :", StringComparison.OrdinalIgnoreCase))
+            {
+                int nl = text.IndexOf('\n');
+                return nl >= 0 ? prefix + text.Substring(nl) : prefix;
+            }
+            return string.IsNullOrWhiteSpace(text) ? prefix : prefix + "\n" + text;
         }
 
         // ── Analyse d'un cluster → incident (cause racine + conseil) ───────────
@@ -657,12 +743,12 @@ namespace Optimisation_Tool.Helpers
                     {
                         "Identifier le service dans services.msc (Win+R > services.msc).",
                         "Si service tiers (jeu, antivirus, agent constructeur, RGB software) : mettre à jour ou désactiver.",
-                        "Si service Windows critique : lancer SFC /scannow puis DISM /RestoreHealth.",
+                        "Si service Windows critique : ouvrir Réparation Windows pour lancer DISM puis SFC dans le bon ordre.",
                     };
                     inc.Actions = new List<LogAction>
                     {
                         new LogAction { Label = "Ouvrir services.msc", Tooltip = "Console des services Windows.",          Kind = LogActionKind.Diag,    Target = "services.msc" },
-                        new LogAction { Label = "Lancer SFC /scannow", Tooltip = "Vérifie les fichiers système (5-10 min).", Kind = LogActionKind.Command, Target = "cmd /k sfc /scannow", Confirm = true },
+                        new LogAction { Label = "Réparation Windows", Tooltip = "Lance DISM puis SFC dans le bon ordre.", Kind = LogActionKind.Navigate, Target = "WinRepair" },
                     };
                     return;
 
@@ -697,6 +783,60 @@ namespace Optimisation_Tool.Helpers
             // -- GPU NVIDIA (TDR Timeout Detection & Recovery) --------------
             // On reconnaît aussi un TDR loggé sous la source « Display » (EventID 4101) dont le
             // module fautif « nvlddmkm » est dans le message brut → fini le verdict générique.
+            if ((p == "ipfumdf" || p == "ipfsvchost") && id == 17)
+            {
+                string msg  = rawFull.Length > 0 ? rawFull : raw;
+                string pipe = Extract(msg, @"<pipe://([^>]+)>");
+                string err  = Extract(msg, @"\[(ESIF_[^\]]+)\]");
+                string pipeLine = pipe.Length > 0 ? $" Composant demandé : {pipe}." : "";
+                string errLine  = err.Length  > 0 ? $" Erreur retournée : {err}." : "";
+
+                e.Sev   = LogSev.Warning;
+                e.Icon  = "";
+                e.Title = "Intel Dynamic Tuning / IPF incomplet";
+                e.What  = "Le service Intel Innovation Platform Framework essaie de charger un module Dynamic Tuning, mais Windows ne trouve pas la bibliothèque demandée." + pipeLine + errLine;
+                e.Cause = "Le paquet Intel Dynamic Tuning / Innovation Platform Framework est probablement incomplet, mal mis à jour, ou dépareillé avec le pilote chipset/MEI du constructeur.";
+                e.Fix   = "Réinstaller le package Intel Dynamic Tuning / Innovation Platform Framework depuis la page support du constructeur du PC ou de la carte mère.";
+                e.Steps = new List<string>
+                {
+                    "Télécharge le pilote Intel Dynamic Tuning Technology / Innovation Platform Framework sur la page support exacte du PC ou de la carte mère.",
+                    "Installe-le, puis redémarre Windows. Ne te contente pas d'un scan automatique si le package constructeur existe.",
+                    "Si l'erreur revient : Gestionnaire de périphériques > Périphériques système, désinstalle les entrées Intel Dynamic Tuning / Innovation Platform Framework en cochant la suppression du pilote, puis réinstalle le package constructeur.",
+                    "Ne désactive pas ipfsvc/dptftcs au hasard sur portable : ça peut gérer les limites de puissance, la chauffe et le comportement turbo.",
+                };
+                e.Actions = new List<LogAction>
+                {
+                    new LogAction { Label = "Gestionnaire périph.", Tooltip = "Chercher les entrées Intel Dynamic Tuning / Innovation Platform Framework.", Kind = LogActionKind.Diag, Target = "devmgmt.msc" },
+                    new LogAction { Label = "Services Windows",     Tooltip = "Vérifier ipfsvc et dptftcs.", Kind = LogActionKind.Diag, Target = "services.msc" },
+                    new LogAction { Label = "Intel DSA",            Tooltip = "Assistant Intel, utile en complément du package constructeur.", Kind = LogActionKind.Url, Target = "https://www.intel.fr/content/www/fr/fr/support/detect.html" },
+                };
+                return e;
+            }
+
+            if (p == "windows error reporting" && id == 1001 && rl.Contains("livekernelevent") && Regex.IsMatch(rl, @"p1\s*:\s*141", RegexOptions.IgnoreCase))
+            {
+                string dump = Extract(rawFull, @"(C:\\WINDOWS\\LiveKernelReports\\WATCHDOG\\WATCHDOG-[^\s\r\n]+\.dmp)");
+                e.Sev   = LogSev.Serious;
+                e.Icon  = "";
+                e.Title = "WATCHDOG GPU — LiveKernelEvent 141";
+                e.What  = dump.Length > 0
+                    ? $"Windows a généré un rapport WATCHDOG GPU après un TDR. Dump : {dump}."
+                    : "Windows a généré un rapport WATCHDOG GPU après un TDR.";
+                e.Cause = "LiveKernelEvent 141 = le pilote graphique n'a pas répondu assez vite et Windows a récupéré le GPU sans forcément afficher un BSOD.";
+                e.Steps = new List<string>
+                {
+                    "Traite cet événement avec les erreurs GPU proches dans le temps : c'est souvent le même incident.",
+                    "Ouvre la vue par incident : elle cherche aussi les traces app/jeu autour du crash avant de conclure.",
+                    "Si aucune trace app/jeu n'est trouvée : vérifier ensuite température, profil OC/undervolt, overlay, adaptateur virtuel et pilote GPU.",
+                };
+                e.Actions = new List<LogAction>
+                {
+                    new LogAction { Label = "Voir Monitoring", Tooltip = "Températures GPU en temps réel.", Kind = LogActionKind.Navigate, Target = "Monitoring" },
+                    new LogAction { Label = "Pilotes GPU",  Tooltip = "Page NVIDIA officielle. Pour AMD/Intel, utiliser la page constructeur adaptée.", Kind = LogActionKind.Url, Target = "https://www.nvidia.fr/Download/index.aspx?lang=fr" },
+                };
+                return e;
+            }
+
             if (p.Contains("nvlddmkm") || rl.Contains("nvlddmkm"))
             {
                 e.Sev   = LogSev.Serious;
@@ -768,14 +908,12 @@ namespace Optimisation_Tool.Helpers
                         e.Steps = new List<string>
                         {
                             "Tester la RAM avec MemTest86 (clé USB, plusieurs passes) — si erreurs : barrette défectueuse ou XMP trop agressif.",
-                            "Lancer SFC /scannow dans une CMD admin pour réparer les fichiers système Windows.",
-                            "Lancer DISM /Online /Cleanup-Image /RestoreHealth si SFC ne suffit pas.",
+                            "Ouvrir Réparation Windows pour lancer DISM puis SFC dans le bon ordre.",
                             "Forcer Windows Update à jour (Réglages > Windows Update).",
                         };
                         e.Actions = new List<LogAction>
                         {
-                            new LogAction { Label = "Lancer SFC /scannow",  Tooltip = "Vérifie et répare les fichiers système Windows (5-10 min, fenêtre admin).",                Kind = LogActionKind.Command, Target = "cmd /k sfc /scannow",                                    Confirm = true },
-                            new LogAction { Label = "Lancer DISM",          Tooltip = "Répare l'image Windows (10-20 min, nécessite Internet).",                                  Kind = LogActionKind.Command, Target = "cmd /k DISM /Online /Cleanup-Image /RestoreHealth",       Confirm = true },
+                            new LogAction { Label = "Réparation Windows",   Tooltip = "Lance DISM puis SFC dans le bon ordre.",                                                     Kind = LogActionKind.Navigate, Target = "WinRepair" },
                             new LogAction { Label = "MemTest86",            Tooltip = "Page officielle MemTest86 (PassMark) pour tester la RAM.",                                 Kind = LogActionKind.Url,     Target = "https://www.memtest86.com/" },
                         };
                     }
@@ -842,12 +980,12 @@ namespace Optimisation_Tool.Helpers
                             ? $"Identifier le service « {svc} » dans services.msc (Win+R > services.msc) et regarder son éditeur."
                             : "Identifier le service fautif dans services.msc (Win+R > services.msc).",
                         "Si c'est un service tiers (jeu, antivirus, agent constructeur type AsusOptimization, RGB software…) : mettre à jour le logiciel associé, ou le désactiver s'il est inutile.",
-                        "Si c'est un service Windows critique : lancer SFC /scannow puis DISM /RestoreHealth pour réparer.",
+                        "Si c'est un service Windows critique : ouvrir Réparation Windows pour lancer DISM puis SFC dans le bon ordre.",
                     };
                     e.Actions = new List<LogAction>
                     {
                         new LogAction { Label = "Ouvrir services.msc", Tooltip = "Console des services Windows.",                                          Kind = LogActionKind.Diag,    Target = "services.msc" },
-                        new LogAction { Label = "Lancer SFC /scannow", Tooltip = "Vérifie les fichiers système (5-10 min).",                              Kind = LogActionKind.Command, Target = "cmd /k sfc /scannow", Confirm = true },
+                        new LogAction { Label = "Réparation Windows", Tooltip = "Lance DISM puis SFC dans le bon ordre.",                                  Kind = LogActionKind.Navigate, Target = "WinRepair" },
                     };
                     return e;
                 }
