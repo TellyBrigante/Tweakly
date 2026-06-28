@@ -258,7 +258,7 @@
                     HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse x:Name="StatusDot" Width="10" Height="10"
-                             VerticalAlignment="Center" Margin="0,0,10,0" Fill="#2EC46A"/>
+                             VerticalAlignment="Center" Margin="0,0,10,0" Fill="{DynamicResource ThOk}"/>
                     <TextBlock x:Name="StatusText" Text=""
                                VerticalAlignment="Center"
                                FontFamily="{StaticResource AppFont}" FontSize="12.5"/>

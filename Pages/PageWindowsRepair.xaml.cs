@@ -462,7 +462,7 @@ namespace Optimisation_Tool.Pages
             if (t.TotalSeconds < 120)
                 return $"{Math.Max(1, (int)Math.Round(t.TotalSeconds))} s";
             if (t.TotalMinutes >= 1)
-                return $"{(int)t.TotalMinutes} min {t.Seconds:00} s";
+                return $"{(int)t.TotalMinutes} min {t.Seconds:00}s";
             return "1 s";
         }
 

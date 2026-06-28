@@ -62,7 +62,7 @@ namespace Optimisation_Tool.Helpers
             ["ThTextSub"]   = ("#B4BBE0", "#45484E"),   // dérivé
             ["ThTextNav"]   = ("#B6BEE4", "#383B41"),   // dérivé (nav sur sidebar)
             ["ThTextDim"]   = ("#9CA3CC", "#4A4C50"),   // dim (réglage user)
-            ["ThLogText"]   = ("#5FD98C", "#1E6E38"),  // vert journal : clair sur sombre, foncé sur clair
+            ["ThLogText"]   = ("#5FD98C", "#0D6334"),  // vert journal : clair sur sombre, foncé sur clair
             ["ThAccentIcon"]= ("#8FC0FF", "#2A62C4"),  // glyphes/initiales sur fond bleu alpha : clairs en sombre, PROFONDS en clair (sinon illisibles — retour utilisateur v1.3.5)
             ["ThChartLine"] = ("#3F88C5", "#1F4E94"),  // courbe FPS du Suivi en jeu : bleu MAT en sombre, sensiblement plus foncé/sobre que le #8FC0FF historique (qui pétait) ; bleu profond en clair
 
@@ -75,7 +75,12 @@ namespace Optimisation_Tool.Helpers
             ["ThInfoTint"]    = ("#22315FA0", "#1A1F4E94"),   // bleu très léger
             ["ThNeutralTint"] = ("#22A0A0A0", "#1A4A4D52"),   // gris très léger
             // Couleurs de statut — vives en sombre, ASSOMBRIES en clair pour rester lisibles
-            ["ThOk"]        = ("#2EC46A", "#1E9E55"),
+            ["ThOk"]        = ("#2EC46A", "#0D6334"),
+            ["ThOkTint"]    = ("#225FD98C", "#220D6334"),
+            ["ThOkBorderTint"] = ("#555FD98C", "#550D6334"),
+            ["ThOkButton"]  = ("#1E7A3C", "#0D6334"),
+            ["ThOkButtonHover"] = ("#28A050", "#0D6334"),
+            ["ThOkButtonPressed"] = ("#16602E", "#0D6334"),
             ["ThWarn"]      = ("#F5C24A", "#A87900"),   // amber foncé en clair (le jaune vif était illisible)
             ["ThCrit"]      = ("#E05555", "#C0392B"),
             ["ThViolet"]    = ("#C08CF0", "#7A3FB8"),   // RAM / accent violet — assombri en clair (le mauve clair était illisible sur fond clair)

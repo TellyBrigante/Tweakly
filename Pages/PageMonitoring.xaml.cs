@@ -40,7 +40,7 @@ namespace Optimisation_Tool.Pages
         }
         private readonly Dictionary<string, NvmeVisual> _nvme = new();
 
-        // Couleurs NVMe — distinctes du CPU (#3B82E0), GPU (#2EC46A) et RAM (#C08CF0)
+        // Couleurs NVMe — distinctes du CPU, du GPU et de la RAM, qui passent par les rôles de thème.
         private static readonly string[] NvmePalette =
         {
             "#F5A623",  // orange ambre
@@ -103,9 +103,13 @@ namespace Optimisation_Tool.Pages
             _busy = true;
             try
             {
-                var parts = MonCollectParts.All;
-                if (_tickIndex++ % 3 != 0)
-                    parts &= ~MonCollectParts.Nvme;
+                int tick = _tickIndex++;
+                var parts = tick == 0 ? MonCollectParts.All : MonCollectParts.Light;
+
+                // Valeurs visibles rapides à 1 Hz. Les sondes plus lourdes restent espacées
+                // pour éviter de ralentir l'UI tout en gardant la page vivante.
+                if (tick > 0 && tick % 2 == 1) parts |= MonCollectParts.Processes | MonCollectParts.GpuWatts;
+                if (tick > 0 && tick % 4 == 2) parts |= MonCollectParts.Nvme;
 
                 var s = await Task.Run(() => SystemMonitor.Collect(parts));
                 UpdateUI(s);
@@ -118,6 +122,8 @@ namespace Optimisation_Tool.Pages
 
         private void UpdateUI(MonSnapshot s)
         {
+            bool Has(MonCollectParts p) => (s.Parts & p) != 0;
+
             // CPU
             if (!_cpuNameSet && s.CpuName.Length > 0)
             {
@@ -139,15 +145,21 @@ namespace Optimisation_Tool.Pages
                 TxtCpuBaseLbl.Text = "Fréq. de base";
                 TxtCpuBase.Text    = s.CpuBaseMHz > 0 ? $"{s.CpuBaseMHz / 1000.0:F2} GHz" : "—";
             }
-            TxtCpuProc.Text  = s.Processes > 0 ? s.Processes.ToString() : "—";
-            TxtCpuTop.Text   = s.TopCpuName.Length > 0 ? $"{s.TopCpuName} · {s.TopCpuPct:F0} %" : "—";
+            if (Has(MonCollectParts.Processes))
+            {
+                TxtCpuProc.Text = s.Processes > 0 ? s.Processes.ToString() : "—";
+                TxtCpuTop.Text = s.TopCpuName.Length > 0 ? $"{s.TopCpuName} · {s.TopCpuPct:F0} %" : "—";
+            }
             SetBar(BarCpu, s.CpuUsage);
 
             // RAM
             TxtRamUsage.Text  = $"{s.RamPct:F0}";
             TxtRamFree.Text   = s.RamTotalGB > 0 ? $"{s.RamFreeGB:F1} Go" : "—";
-            var ramTopPct = s.RamTotalGB > 0 ? s.TopRamMB / (s.RamTotalGB * 1024.0) * 100.0 : 0;
-            TxtRamTop.Text    = s.TopRamName.Length > 0 ? $"{s.TopRamName} · {ramTopPct:F0} %" : "—";
+            if (Has(MonCollectParts.Processes))
+            {
+                var ramTopPct = s.RamTotalGB > 0 ? s.TopRamMB / (s.RamTotalGB * 1024.0) * 100.0 : 0;
+                TxtRamTop.Text = s.TopRamName.Length > 0 ? $"{s.TopRamName} · {ramTopPct:F0} %" : "—";
+            }
             if (!_ramNameSet && s.RamInstalledGB > 0)
             {
                 TxtRamName.Text   = $"{Math.Round(s.RamInstalledGB)} Go installés";
@@ -170,7 +182,8 @@ namespace Optimisation_Tool.Pages
                 else
                     TxtGpuVram.Text = "—";
                 TxtGpuTemp.Text  = s.GpuTemp  > 0 ? $"{s.GpuTemp:F0} °C"  : "—";
-                TxtGpuWatts.Text = s.GpuWatts > 0 ? $"{s.GpuWatts:F0} W"  : "—";
+                if (Has(MonCollectParts.GpuWatts))
+                    TxtGpuWatts.Text = s.GpuWatts > 0 ? $"{s.GpuWatts:F0} W" : "—";
                 TxtGpuFreq.Text  = s.GpuMHz   > 0 ? $"{s.GpuMHz:F0} MHz"  : "—";
                 SetBar(BarGpu, s.GpuUsage);
             }
@@ -182,7 +195,8 @@ namespace Optimisation_Tool.Pages
             }
 
             // NVMe
-            UpdateNvme(s.Nvmes);
+            if (Has(MonCollectParts.Nvme))
+                UpdateNvme(s.Nvmes);
 
             // Historique + tracé
             Push(_cpuHist, s.CpuUsage);

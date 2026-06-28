@@ -216,7 +216,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.4.5"
+                            <TextBlock x:Name="TxtVersion" Text="v1.4.6"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -448,7 +448,8 @@
                 </Grid><!-- fin ZONE DE CONTENU -->
 
                 <!-- ══ JOURNAL D'ACTIVIT&#201; (repliable) ══════════════════════ -->
-                <Border Grid.Row="1"
+                <Border x:Name="ActivityLogPanel"
+                        Grid.Row="1"
                         Background="{DynamicResource ThLogBg}"
                         BorderBrush="{DynamicResource ThBorder}"
                         BorderThickness="0,1,0,0">

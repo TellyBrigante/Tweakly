@@ -535,7 +535,16 @@ namespace Optimisation_Tool
 
             // Charger et afficher la page (lazy) + transition d'entrée (fondu + glissement)
             MainContent.Content = _pages[tag].Value;
+            SetActivityLogVisibilityForPage(tag);
             Helpers.Anim.PageIn(MainContent);
+        }
+
+        private void SetActivityLogVisibilityForPage(string tag)
+        {
+            bool hideBottomLog = string.Equals(tag, "Nettoyage", StringComparison.Ordinal);
+            ActivityLogPanel.Visibility = hideBottomLog ? Visibility.Collapsed : Visibility.Visible;
+            if (!hideBottomLog)
+                LogScroll.Visibility = _logVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private static void ApplyNavStyle(Button btn, bool selected)

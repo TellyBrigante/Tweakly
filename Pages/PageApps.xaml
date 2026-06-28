@@ -185,7 +185,7 @@
                 </Grid>
             </Border>
             <!-- À jour -->
-            <Border CornerRadius="12" Background="#0F5FD98C" BorderBrush="#2E5FD98C"
+            <Border CornerRadius="12" Background="{DynamicResource ThOkTint}" BorderBrush="{DynamicResource ThOkBorderTint}"
                     BorderThickness="1" Padding="0" Margin="0,0,10,0">
                 <Grid>
                     <Border Width="3" CornerRadius="2" Background="{DynamicResource ThOk}"
@@ -477,8 +477,8 @@
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="UpToDate">
-                                                    <Setter Property="Background"  Value="#225FD98C"/>
-                                                    <Setter Property="BorderBrush" Value="#555FD98C"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThOkTint}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource ThOkBorderTint}"/>
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="UpdateAvailable">
@@ -492,8 +492,8 @@
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Updated">
-                                                    <Setter Property="Background"  Value="#225FD98C"/>
-                                                    <Setter Property="BorderBrush" Value="#555FD98C"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThOkTint}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource ThOkBorderTint}"/>
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Failed">

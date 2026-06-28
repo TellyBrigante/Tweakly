@@ -389,7 +389,10 @@ namespace Optimisation_Tool.Helpers
             var why = new List<string>
             {
                 $"Résumé : le pilote {vendor} a mis trop de temps à répondre. Windows l'a réinitialisé pour récupérer l'affichage.",
-                "Preuves Windows : " + windowsProof
+                "Preuves Windows : " + windowsProof,
+                localContext.HasEvidence
+                    ? "Confiance : élevée pour le reset GPU, moyenne pour la cause locale exacte."
+                    : "Confiance : élevée pour le reset GPU, faible pour la cause exacte."
             };
 
             if (localContext.HasEvidence)

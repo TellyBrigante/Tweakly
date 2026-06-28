@@ -114,9 +114,18 @@
                 <ColumnDefinition Width="0.92*"/>
             </Grid.ColumnDefinitions>
 
-            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <Border x:Name="CardCheck" Style="{StaticResource StepCardStyle}">
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="10"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                    <Border x:Name="CardCheck" Grid.Row="0" Style="{StaticResource StepCardStyle}" Margin="0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="34"/>
@@ -171,7 +180,7 @@
                         </Grid>
                     </Border>
 
-                    <Border x:Name="CardScan" Style="{StaticResource StepCardStyle}">
+                    <Border x:Name="CardScan" Grid.Row="2" Style="{StaticResource StepCardStyle}" Margin="0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="34"/>
@@ -226,7 +235,7 @@
                         </Grid>
                     </Border>
 
-                    <Border x:Name="CardRestore" Style="{StaticResource StepCardStyle}">
+                    <Border x:Name="CardRestore" Grid.Row="4" Style="{StaticResource StepCardStyle}" Margin="0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="34"/>
@@ -281,7 +290,7 @@
                         </Grid>
                     </Border>
 
-                    <Border x:Name="CardSfc" Style="{StaticResource StepCardStyle}">
+                    <Border x:Name="CardSfc" Grid.Row="6" Style="{StaticResource StepCardStyle}" Margin="0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="34"/>
@@ -335,8 +344,7 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                </StackPanel>
-            </ScrollViewer>
+            </Grid>
 
             <Border Grid.Column="2"
                     Background="{DynamicResource ThPanel}"

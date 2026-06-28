@@ -158,15 +158,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" CornerRadius="3">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Color="#1F9650" Offset="0"/>
-                                        <GradientStop Color="#2EC46A" Offset="0.6"/>
-                                        <GradientStop Color="#6FE3A0" Offset="1"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                            </Border>
+                            <Border Grid.Column="0" CornerRadius="3" Background="{DynamicResource ThOk}"/>
                         </Grid>
                     </Grid>
                     <Grid Margin="0,0,0,3">
@@ -275,7 +267,7 @@
                         <Ellipse Width="8" Height="8" Fill="#3B82E0" VerticalAlignment="Center"/>
                         <TextBlock Text="CPU" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
-                        <Ellipse Width="8" Height="8" Fill="#2EC46A" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource ThOk}" VerticalAlignment="Center"/>
                         <TextBlock Text="GPU" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
                         <Ellipse Width="8" Height="8" Fill="#C08CF0" VerticalAlignment="Center"/>
@@ -298,7 +290,7 @@
                              + grille pointillée. Ne pas re-proposer.) -->
                         <Polyline x:Name="RamLine" Stroke="#C08CF0" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                        <Polyline x:Name="GpuLine" Stroke="#2EC46A" StrokeThickness="2.2"
+                        <Polyline x:Name="GpuLine" Stroke="{DynamicResource ThOk}" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <Polyline x:Name="CpuLine" Stroke="#3B82E0" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>

@@ -567,7 +567,7 @@
                             <Border Style="{StaticResource SchemaNode}" MouseLeftButtonUp="NodeOs_Click" Margin="0,0,0,0">
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                                        <Ellipse Width="7" Height="7" Fill="#2EC46A" VerticalAlignment="Center" Margin="0,1,7,0"/>
+                                        <Ellipse Width="7" Height="7" Fill="{DynamicResource ThOk}" VerticalAlignment="Center" Margin="0,1,7,0"/>
                                         <TextBlock Text="SYSTÈME" Style="{StaticResource SchemaCat}"/>
                                     </StackPanel>
                                     <TextBlock x:Name="TxtOsHead" Text="Chargement…"
@@ -747,7 +747,7 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="0*"/><ColumnDefinition Width="100*"/>
                                 </Grid.ColumnDefinitions>
-                                <Border x:Name="CompatGpuFill" Grid.Column="0" Background="#2EC46A" CornerRadius="4"/>
+                                <Border x:Name="CompatGpuFill" Grid.Column="0" Background="{DynamicResource ThOk}" CornerRadius="4"/>
                             </Grid>
                         </Grid>
                         <TextBlock x:Name="TxtCompatGpuStatus" Text=""

@@ -13,6 +13,8 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     public sealed class MonSnapshot
     {
+        public MonCollectParts Parts;
+
         public double CpuUsage;     // %
         public double CpuMHz;       // fréquence live
         public int    CpuBaseMHz;   // fréquence de base
@@ -104,7 +106,7 @@ namespace Optimisation_Tool.Helpers
             // ne touche qu'à SES caches statiques.
             lock (_collectLock)
             {
-                var s = new MonSnapshot();
+                var s = new MonSnapshot { Parts = parts };
                 var tasks = new List<System.Threading.Tasks.Task>(6);
 
                 bool Has(MonCollectParts p) => (parts & p) != 0;

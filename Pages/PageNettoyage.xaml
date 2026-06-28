@@ -1,41 +1,101 @@
-<UserControl x:Class="Optimisation_Tool.Pages.PageNettoyage"
+﻿<UserControl x:Class="Optimisation_Tool.Pages.PageNettoyage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="Transparent"
              Loaded="UserControl_Loaded">
-    <!-- Styles de la DA optim (CleanRow*/CleanSwitch/CleanRunBtn) : déplacés dans App.xaml (v1.3.5, partagés par les 5 pages d'optimisation) -->
+    <UserControl.Resources>
+        <Style x:Key="CleanStepText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="10.8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="TextAlignment" Value="Right"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="TextTrimming" Value="None"/>
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+            <Setter Property="LineHeight" Value="13"/>
+            <Setter Property="MinHeight" Value="26"/>
+        </Style>
+
+        <Style x:Key="CleanStepProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="11"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Value" Value="0"/>
+            <Setter Property="Background" Value="{DynamicResource ThTrack}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThAccentIcon}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid ClipToBounds="True">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{DynamicResource ThBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="5"/>
+                            <Border x:Name="PART_Track" Background="Transparent" CornerRadius="5"/>
+                            <Decorator x:Name="PART_Indicator" HorizontalAlignment="Left">
+                                <Border Background="{TemplateBinding Foreground}" CornerRadius="5"/>
+                            </Decorator>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <!-- Carte « cibles » : rangées riches (icône dégradé + titre + description)
-                 avec les switchs ON/OFF D'ORIGINE à droite (l'utilisateur y tient).
-                 Cliquer n'importe où sur la rangée actionne le switch (Row_Click). -->
-            <TextBlock Text="CIBLES DU NETTOYAGE"
-                       Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
-                       FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
-            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
-                    BorderThickness="1" CornerRadius="12" Padding="8,7">
+            <Grid Margin="2,0,0,7">
+                <TextBlock Text="CIBLES DU NETTOYAGE"
+                           Foreground="{DynamicResource ThTextDim}"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="10.5"
+                           FontWeight="SemiBold"/>
+                <TextBlock x:Name="TxtGlobalProgress"
+                           Text="Aucune cible sélectionnée"
+                           Foreground="{DynamicResource ThTextDim}"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="10.5"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Right"/>
+            </Grid>
+
+            <Border Background="{DynamicResource ThPanel}"
+                    BorderBrush="#1A808080"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="8,7">
                 <StackPanel>
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTemp}"
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkTemp" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
                             <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
                                 <TextBlock Text="&#xE8B7;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
                                 <TextBlock Text="Dossier %temp%" Style="{StaticResource CleanRowTitle}"/>
                                 <TextBlock Text="Fichiers temporaires de ta session utilisateur."
                                            Style="{StaticResource CleanRowDesc}"/>
                             </StackPanel>
-                            <CheckBox x:Name="ChkTemp" Grid.Column="0" VerticalAlignment="Center"
-                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
-                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtTempStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbTempStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -43,19 +103,26 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE770;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Dossier Windows Temp" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Fichiers temporaires du syst&#232;me."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
                             <CheckBox x:Name="ChkSystemTemp" Grid.Column="0" VerticalAlignment="Center"
                                       Style="{StaticResource CleanSwitch}" IsChecked="False"
                                       Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE770;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
+                                <TextBlock Text="Dossier Windows Temp" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Fichiers temporaires du système."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtSystemTempStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbSystemTempStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -63,19 +130,26 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Dossier Windows Prefetch" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Donn&#233;es de pr&#233;chargement accumul&#233;es par Windows."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
                             <CheckBox x:Name="ChkPrefetch" Grid.Column="0" VerticalAlignment="Center"
                                       Style="{StaticResource CleanSwitch}" IsChecked="False"
                                       Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
+                                <TextBlock Text="Dossier Windows Prefetch" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Données de préchargement accumulées par Windows."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtPrefetchStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbPrefetchStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -83,19 +157,26 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE714;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Cache de shaders DirectX" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Shaders compil&#233;s — r&#233;g&#233;n&#233;r&#233;s automatiquement au besoin."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
                             <CheckBox x:Name="ChkDXCache" Grid.Column="0" VerticalAlignment="Center"
                                       Style="{StaticResource CleanSwitch}" IsChecked="False"
                                       Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE714;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
+                                <TextBlock Text="Cache de shaders DirectX" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Shaders compilés, régénérés automatiquement au besoin."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtDXStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbDXStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -103,19 +184,26 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
+                            <CheckBox x:Name="ChkNvCache" Grid.Column="0" VerticalAlignment="Center"
+                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
+                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
                             <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
                                 <TextBlock Text="&#xE790;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
                                 <TextBlock Text="Cache GL &amp; shaders NVIDIA" Style="{StaticResource CleanRowTitle}"/>
                                 <TextBlock Text="Caches OpenGL et shaders du pilote NVIDIA."
                                            Style="{StaticResource CleanRowDesc}"/>
                             </StackPanel>
-                            <CheckBox x:Name="ChkNvCache" Grid.Column="0" VerticalAlignment="Center"
-                                      Style="{StaticResource CleanSwitch}" IsChecked="False"
-                                      Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtNvStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbNvStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -123,19 +211,26 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Trim SSD" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Signale aux SSD les blocs inutilis&#233;s &#224; recycler."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
                             <CheckBox x:Name="ChkTrimSSD" Grid.Column="0" VerticalAlignment="Center"
                                       Style="{StaticResource CleanSwitch}" IsChecked="False"
                                       Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
+                                <TextBlock Text="Trim SSD" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Signale aux SSD les blocs inutilisés à recycler."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtTrimStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbTrimStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -143,19 +238,26 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE7C3;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Journaux d'&#233;v&#233;nements Windows" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Peuvent atteindre plusieurs Go avec le temps."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
                             <CheckBox x:Name="ChkEventLogs" Grid.Column="0" VerticalAlignment="Center"
                                       Style="{StaticResource CleanSwitch}" IsChecked="False"
                                       Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE7C3;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
+                                <TextBlock Text="Journaux d'événements Windows" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Peuvent atteindre plusieurs Go avec le temps."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtEventLogsStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbEventLogsStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
@@ -163,34 +265,59 @@
                             MouseLeftButtonUp="Row_Click">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
-                                <TextBlock Text="&#xE74D;" Style="{StaticResource CleanIconGlyph}"/>
-                            </Border>
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="R&#233;sidus de logiciels d&#233;sinstall&#233;s" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Raccourcis cass&#233;s et entr&#233;es de registre orphelines."
-                                           Style="{StaticResource CleanRowDesc}"/>
-                            </StackPanel>
                             <CheckBox x:Name="ChkResidues" Grid.Column="0" VerticalAlignment="Center"
                                       Style="{StaticResource CleanSwitch}" IsChecked="False"
                                       Checked="Chk_Changed" Unchecked="Chk_Changed"/>
+                            <Border Grid.Column="1" Style="{StaticResource CleanIconBox}" Margin="14,0,0,0">
+                                <TextBlock Text="&#xE74D;" Style="{StaticResource CleanIconGlyph}"/>
+                            </Border>
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,12,0">
+                                <TextBlock Text="Résidus de logiciels désinstallés" Style="{StaticResource CleanRowTitle}"/>
+                                <TextBlock Text="Raccourcis cassés et entrées de registre orphelines."
+                                           Style="{StaticResource CleanRowDesc}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtResiduesStep" Text="Désactivé" Style="{StaticResource CleanStepText}"/>
+                                <ProgressBar x:Name="PbResiduesStep" Style="{StaticResource CleanStepProgress}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
 
                 </StackPanel>
             </Border>
 
-            <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+            <Grid Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="18"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
                 <Button x:Name="BtnLancer"
-                        Content="EX&#201;CUTER LE NETTOYAGE"
+                        Content="EXÉCUTER LE NETTOYAGE"
                         Style="{StaticResource CleanRunBtn}"
                         Padding="30,12"
+                        HorizontalAlignment="Left"
                         Click="BtnLancer_Click"/>
-            </StackPanel>
 
-            <!-- Bandeau de retour animé (comme les pages d'optimisation) -->
+                <TextBlock x:Name="TxtLastSummary"
+                           Grid.Column="2"
+                           Text=""
+                           Foreground="{DynamicResource ThTextDim}"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           TextAlignment="Right"
+                           TextWrapping="Wrap"
+                           LineHeight="17"
+                           Margin="0,0,2,0"/>
+            </Grid>
+
             <Border x:Name="StatusBanner" Visibility="Collapsed"
                     Margin="0,16,0,0" Padding="14,10" CornerRadius="8"
                     Background="{DynamicResource ThPanel}"
@@ -198,7 +325,7 @@
                     HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal">
                     <Ellipse x:Name="StatusDot" Width="10" Height="10"
-                             VerticalAlignment="Center" Margin="0,0,10,0" Fill="#2EC46A"/>
+                             VerticalAlignment="Center" Margin="0,0,10,0" Fill="{DynamicResource ThAccentIcon}"/>
                     <TextBlock x:Name="StatusText" Text=""
                                VerticalAlignment="Center"
                                FontFamily="{StaticResource AppFont}" FontSize="12.5"/>

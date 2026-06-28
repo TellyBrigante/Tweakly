@@ -37,6 +37,11 @@
         <SolidColorBrush x:Key="ThNeutralTint" Color="#22A0A0A0"/>
         <SolidColorBrush x:Key="ThLogText"   Color="#5FD98C"/>
         <SolidColorBrush x:Key="ThOk"        Color="#2EC46A"/>
+        <SolidColorBrush x:Key="ThOkTint"    Color="#225FD98C"/>
+        <SolidColorBrush x:Key="ThOkBorderTint" Color="#555FD98C"/>
+        <SolidColorBrush x:Key="ThOkButton"  Color="#1E7A3C"/>
+        <SolidColorBrush x:Key="ThOkButtonHover" Color="#28A050"/>
+        <SolidColorBrush x:Key="ThOkButtonPressed" Color="#16602E"/>
         <SolidColorBrush x:Key="ThWarn"      Color="#F5C24A"/>
         <SolidColorBrush x:Key="ThCrit"      Color="#E05555"/>
 

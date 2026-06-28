@@ -167,10 +167,10 @@
                             Click="BtnApplyGlobal_Click" Margin="0,0,8,0">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
-                                <Setter Property="Background" Value="#1E7A3C"/>
+                                <Setter Property="Background" Value="{DynamicResource ThOkButton}"/>
                                 <Style.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#28A050"/>
+                                        <Setter Property="Background" Value="{DynamicResource ThOkButtonHover}"/>
                                     </Trigger>
                                     <Trigger Property="IsEnabled" Value="False">
                                         <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
@@ -255,13 +255,13 @@
                         Click="BtnAppliquer_Click">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
-                            <Setter Property="Background" Value="#1E7A3C"/>
+                            <Setter Property="Background" Value="{DynamicResource ThOkButton}"/>
                             <Style.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter Property="Background" Value="#28A050"/>
+                                    <Setter Property="Background" Value="{DynamicResource ThOkButtonHover}"/>
                                 </Trigger>
                                 <Trigger Property="IsPressed" Value="True">
-                                    <Setter Property="Background" Value="#16602E"/>
+                                    <Setter Property="Background" Value="{DynamicResource ThOkButtonPressed}"/>
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
