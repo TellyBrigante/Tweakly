@@ -489,7 +489,7 @@
         <!-- ═══════════════════════════════════════════════════════
              OVERLAY ENREGISTREMENT EN COURS (sorti du ScrollViewer)
         ═══════════════════════════════════════════════════════ -->
-        <Border x:Name="RecOverlay" Background="#CC1A1F36" CornerRadius="12" Visibility="Collapsed">
+        <Border x:Name="RecOverlay" Background="{DynamicResource ThOverlayStrong}" CornerRadius="12" Visibility="Collapsed">
             <Border Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThBorder}"
                     BorderThickness="1" CornerRadius="12" Padding="24,22"
                     MaxWidth="600" VerticalAlignment="Center" HorizontalAlignment="Center">

@@ -358,34 +358,34 @@ namespace Optimisation_Tool.Pages
             switch (visual)
             {
                 case StepVisual.Running:
-                    step.Dot.Background = Solid(0x18, 0x70, 0xCC);
-                    step.Dot.BorderBrush = Solid(0x25, 0x80, 0xE0);
+                    step.Dot.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
+                    step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                     step.Num.Text = number.ToString(CultureInfo.InvariantCulture);
                     step.Num.Foreground = Brushes.White;
                     break;
                 case StepVisual.Done:
-                    step.Dot.Background = Solid(0x1E, 0x7A, 0x3C);
-                    step.Dot.BorderBrush = Solid(0x28, 0xA0, 0x50);
+                    step.Dot.SetResourceReference(Border.BackgroundProperty, "ThOk");
+                    step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThOk");
                     step.Num.Text = "\u2713";
                     step.Num.Foreground = Brushes.White;
                     break;
                 case StepVisual.Skipped:
-                    step.Dot.Background = ThemeManager.Brush("ThTrack");
-                    step.Dot.BorderBrush = ThemeManager.Brush("ThAccentIcon");
+                    step.Dot.SetResourceReference(Border.BackgroundProperty, "ThTrack");
+                    step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                     step.Num.Text = "-";
-                    step.Num.Foreground = ThemeManager.Brush("ThAccentIcon");
+                    step.Num.SetResourceReference(TextBlock.ForegroundProperty, "ThAccentIcon");
                     break;
                 case StepVisual.Failed:
-                    step.Dot.Background = ThemeManager.Brush("ThCrit");
-                    step.Dot.BorderBrush = ThemeManager.Brush("ThCrit");
+                    step.Dot.SetResourceReference(Border.BackgroundProperty, "ThCrit");
+                    step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThCrit");
                     step.Num.Text = "!";
                     step.Num.Foreground = Brushes.White;
                     break;
                 default:
-                    step.Dot.Background = ThemeManager.Brush("ThTrack");
-                    step.Dot.BorderBrush = ThemeManager.Brush("ThBorder");
+                    step.Dot.SetResourceReference(Border.BackgroundProperty, "ThTrack");
+                    step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThBorder");
                     step.Num.Text = number.ToString(CultureInfo.InvariantCulture);
-                    step.Num.Foreground = ThemeManager.Brush("ThTextDim");
+                    step.Num.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
                     break;
             }
         }

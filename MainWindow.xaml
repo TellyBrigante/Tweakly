@@ -138,8 +138,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd"  Property="Background" Value="#C42B1C"/>
-                                <Setter TargetName="Lbl" Property="Foreground" Value="#FFFFFF"/>
+                                <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThCloseHover}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThWhite}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -216,7 +216,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.4.6"
+                            <TextBlock x:Name="TxtVersion" Text="v1.4.7"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -314,6 +314,11 @@
                                             Tag="Windows"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavBattery"
+                                            Content="Calibrage Batterie"
+                                            Tag="Battery"
+                                            Style="{StaticResource NavSubBtnStyle}"
+                                            Click="NavBtn_Click"/>
                                     <Button Content="CPU"
                                             Tag="CPU"
                                             Style="{StaticResource NavSubBtnStyle}"
@@ -389,46 +394,88 @@
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- Bas de sidebar : bascule thème (affiche le mode cible) -->
-                    <Button x:Name="BtnTheme" Grid.Row="2"
-                            ToolTip="Basculer le th&#232;me"
-                            HorizontalAlignment="Left"
-                            Height="30"
-                            Margin="12,0,0,12"
-                            Cursor="Hand"
-                            WindowChrome.IsHitTestVisibleInChrome="True"
-                            Click="BtnTheme_Click">
-                        <Button.Template>
-                            <ControlTemplate TargetType="Button">
-                                <Border x:Name="Bd" CornerRadius="9"
-                                        Background="{DynamicResource ThSecBtn}"
-                                        BorderBrush="{DynamicResource ThBorder}"
-                                        BorderThickness="1"
-                                        Padding="11,0">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock x:Name="ThemeIcon"
-                                                   Text="&#xE706;"
-                                                   FontFamily="Segoe MDL2 Assets"
-                                                   FontSize="13"
-                                                   Foreground="#F5C24A"
-                                                   VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <TextBlock x:Name="ThemeLbl"
-                                                   Text="Mode clair"
-                                                   Foreground="{DynamicResource ThTextNav}"
-                                                   FontFamily="{StaticResource AppFont}"
-                                                   FontSize="11" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThHover}"/>
-                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#1870CC"/>
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Button.Template>
-                    </Button>
+                    <!-- Bas de sidebar : bascules rapides (affichent le mode cible) -->
+                    <StackPanel Grid.Row="2" Margin="12,0,0,12" HorizontalAlignment="Left">
+                        <Button x:Name="BtnTheme"
+                                ToolTip="Basculer le th&#232;me"
+                                HorizontalAlignment="Left"
+                                Height="30"
+                                Margin="0,0,0,7"
+                                Cursor="Hand"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="BtnTheme_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bd" CornerRadius="9"
+                                            Background="{DynamicResource ThSecBtn}"
+                                            BorderBrush="{DynamicResource ThBorder}"
+                                            BorderThickness="1"
+                                            Padding="11,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock x:Name="ThemeIcon"
+                                                       Text="&#xE706;"
+                                                       FontFamily="Segoe MDL2 Assets"
+                                                       FontSize="13"
+                                                       Foreground="#F5C24A"
+                                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <TextBlock x:Name="ThemeLbl"
+                                                       Text="Mode clair"
+                                                       Foreground="{DynamicResource ThTextNav}"
+                                                       FontFamily="{StaticResource AppFont}"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThHover}"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThPrimary}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+
+                        <Button x:Name="BtnNavModeToggle"
+                                ToolTip="Basculer le mode d'utilisation"
+                                HorizontalAlignment="Left"
+                                Height="30"
+                                Margin="0"
+                                Cursor="Hand"
+                                WindowChrome.IsHitTestVisibleInChrome="True"
+                                Click="BtnNavModeToggle_Click">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Bd" CornerRadius="9"
+                                            Background="{DynamicResource ThSecBtn}"
+                                            BorderBrush="{DynamicResource ThBorder}"
+                                            BorderThickness="1"
+                                            Padding="11,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock x:Name="NavModeIcon"
+                                                       Text="&#xE7EF;"
+                                                       FontFamily="Segoe MDL2 Assets"
+                                                       FontSize="13"
+                                                       Foreground="{DynamicResource ThAccentIcon}"
+                                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <TextBlock x:Name="NavModeLbl"
+                                                       Text="Mode simple"
+                                                       Foreground="{DynamicResource ThTextNav}"
+                                                       FontFamily="{StaticResource AppFont}"
+                                                       FontSize="11" FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThHover}"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThPrimary}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -498,9 +545,9 @@
                 <!-- Accent de la barre : camaïeu 100 % BLEU (le violet a été rejeté par
                      l'utilisateur — rester dans l'identité bleue de Tweakly) -->
                 <LinearGradientBrush x:Key="UpdAccent" StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="#2F6FD8" Offset="0"/>
-                    <GradientStop Color="#5BA0FF" Offset="0.6"/>
-                    <GradientStop Color="#8AC0FF" Offset="1"/>
+                    <GradientStop Color="{DynamicResource ThBlueGradAColor}" Offset="0"/>
+                    <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="0.6"/>
+                    <GradientStop Color="{DynamicResource ThBlueGradCColor}" Offset="1"/>
                 </LinearGradientBrush>
                 <!-- Bouton principal : bleu PLEIN et plat (cohérent avec les boutons de
                      l'app — le dégradé bleu→violet a été REJETÉ par l'utilisateur ici,
@@ -515,7 +562,7 @@
                         <Setter.Value>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bg" CornerRadius="10" Padding="{TemplateBinding Padding}"
-                                        Background="#3B82E0">
+                                        Background="{DynamicResource ThBlueLine}">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>

@@ -276,7 +276,7 @@
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"
                                  Color="#1F5BA0FF"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"
-                                 Color="#5BA0FF"/>
+                                 Color="{DynamicResource ThBlueGradBColor}"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}"
                                  Color="#145BA0FF"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}"
@@ -352,7 +352,7 @@
                              gauche épaisse — la ligne sélectionnée saute aux yeux -->
                         <Trigger Property="IsSelected" Value="True">
                             <Setter Property="Background"      Value="#505BA0FF"/>
-                            <Setter Property="BorderBrush"     Value="#5BA0FF"/>
+                            <Setter Property="BorderBrush"     Value="{DynamicResource ThBlueGradB}"/>
                             <Setter Property="BorderThickness" Value="5,1,1,1"/>
                         </Trigger>
                     </Style.Triggers>

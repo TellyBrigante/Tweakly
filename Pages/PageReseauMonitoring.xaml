@@ -74,7 +74,7 @@
                                    FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
                         <Border x:Name="PillVerdict" CornerRadius="9" Padding="10,3" Margin="12,0,0,5"
                                 VerticalAlignment="Bottom" Background="#3B456E">
-                            <TextBlock x:Name="TxtVerdict" Text="&#8212;" Foreground="#FFFFFF"
+                            <TextBlock x:Name="TxtVerdict" Text="&#8212;" Foreground="{DynamicResource ThWhite}"
                                        FontFamily="{StaticResource AppFont}" FontSize="11" FontWeight="Bold"/>
                         </Border>
                     </StackPanel>
@@ -190,7 +190,7 @@
                 <Grid Grid.Row="0" Margin="0,0,0,10">
                     <TextBlock Text="PING  (60 s)" Style="{StaticResource MHdr}" VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <Ellipse Width="8" Height="8" Fill="#3B82E0" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource ThBlueLine}" VerticalAlignment="Center"/>
                         <TextBlock Text="Ping" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
                         <Ellipse Width="8" Height="8" Fill="#E05555" VerticalAlignment="Center"/>
@@ -206,7 +206,7 @@
                         ClipToBounds="True">
                     <Grid x:Name="GraphArea" SizeChanged="GraphArea_SizeChanged">
                         <Canvas x:Name="GridCanvas" IsHitTestVisible="False"/>
-                        <Polyline x:Name="PingLine" Stroke="#3B82E0" StrokeThickness="2.2"
+                        <Polyline x:Name="PingLine" Stroke="{DynamicResource ThBlueLine}" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <Canvas x:Name="LossCanvas" IsHitTestVisible="False"/>
                     </Grid>

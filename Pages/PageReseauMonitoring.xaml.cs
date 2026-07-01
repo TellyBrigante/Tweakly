@@ -98,19 +98,19 @@ namespace Optimisation_Tool.Pages
         {
             if (validCount == 0)
             {
-                SetVerdict("HORS LIGNE", 0xE0, 0x55, 0x55);
+                SetVerdict("HORS LIGNE", "ThCrit");
                 return;
             }
-            if (loss > 5)                       SetVerdict("INSTABLE",  0xE0, 0x55, 0x55);
-            else if (avg >= 150 || jitter >= 30) SetVerdict("MOYEN",     0xF5, 0xC2, 0x4A);
-            else if (avg >= 80  || jitter >= 15) SetVerdict("BON",       0x5B, 0xA0, 0xFF);
-            else                                 SetVerdict("EXCELLENT", 0x2E, 0xC4, 0x6A);
+            if (loss > 5)                       SetVerdict("INSTABLE",  "ThCrit");
+            else if (avg >= 150 || jitter >= 30) SetVerdict("MOYEN",     "ThWarn");
+            else if (avg >= 80  || jitter >= 15) SetVerdict("BON",       "ThAccentIcon");
+            else                                 SetVerdict("EXCELLENT", "ThOk");
         }
 
-        private void SetVerdict(string txt, byte r, byte g, byte b)
+        private void SetVerdict(string txt, string role)
         {
             TxtVerdict.Text        = txt;
-            PillVerdict.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
+            PillVerdict.SetResourceReference(Border.BackgroundProperty, role);
         }
 
         // ── Sélecteur de cible ─────────────────────────────────────────────────
@@ -258,11 +258,8 @@ namespace Optimisation_Tool.Pages
             {
                 if (_pingHist[i] >= 0) continue;
                 double x = w - (count - 1 - i) * step;
-                var dot = new Ellipse
-                {
-                    Width = 6, Height = 6,
-                    Fill = Optimisation_Tool.Helpers.ThemeManager.Brush("ThCrit"),
-                };
+                var dot = new Ellipse { Width = 6, Height = 6 };
+                dot.SetResourceReference(Shape.FillProperty, "ThCrit");
                 Canvas.SetLeft(dot, x - 3);
                 Canvas.SetTop(dot, 3);
                 LossCanvas.Children.Add(dot);

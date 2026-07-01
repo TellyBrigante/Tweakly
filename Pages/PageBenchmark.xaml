@@ -41,7 +41,7 @@
             <Setter Property="Cursor"          Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="BorderBrush" Value="#5BA0FF"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -351,7 +351,7 @@
              (sinon la modale descend quand l'historique allonge la page)
         ════════════════════════════════════════════════════════════ -->
         <Border x:Name="BenchOverlay"
-                    Background="#CC1A1F36" CornerRadius="12"
+                    Background="{DynamicResource ThOverlayStrong}" CornerRadius="12"
                     Visibility="Collapsed">
                 <Border Style="{StaticResource BTile}" MaxWidth="520"
                         VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -384,8 +384,8 @@
                                 <Border Grid.Column="0" CornerRadius="4">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#3B82E0" Offset="0"/>
-                                            <GradientStop Color="#5BA0FF" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource ThBlueLineColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                 </Border>
@@ -413,9 +413,9 @@
                                 <Border Grid.Column="0" CornerRadius="4">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#2F6FD8" Offset="0"/>
-                                            <GradientStop Color="#5BA0FF" Offset="0.6"/>
-                                            <GradientStop Color="#8AC0FF" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource ThBlueGradAColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="0.6"/>
+                                            <GradientStop Color="{DynamicResource ThBlueGradCColor}" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                 </Border>
@@ -439,7 +439,7 @@
                  MODAL CONFIRMATION AVANT BENCH
             ════════════════════════════════════════════════════════════ -->
             <Border x:Name="ConfirmOverlay"
-                    Background="#CC1A1F36" CornerRadius="12"
+                    Background="{DynamicResource ThOverlayStrong}" CornerRadius="12"
                     Visibility="Collapsed">
                 <Border Style="{StaticResource BTile}" MaxWidth="540"
                         VerticalAlignment="Center" HorizontalAlignment="Center">

@@ -114,9 +114,9 @@
                             <Border Grid.Column="0" CornerRadius="3">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Color="#2F6FD8" Offset="0"/>
-                                        <GradientStop Color="#5BA0FF" Offset="0.6"/>
-                                        <GradientStop Color="#8AC0FF" Offset="1"/>
+                                        <GradientStop Color="{DynamicResource ThBlueGradAColor}" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="0.6"/>
+                                        <GradientStop Color="{DynamicResource ThBlueGradCColor}" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
                             </Border>
@@ -209,9 +209,9 @@
                             <Border Grid.Column="0" CornerRadius="3">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Color="#9A63D8" Offset="0"/>
-                                        <GradientStop Color="#C08CF0" Offset="0.6"/>
-                                        <GradientStop Color="#DCC0F8" Offset="1"/>
+                                        <GradientStop Color="{DynamicResource ThRamGradAColor}" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource ThRamGradBColor}" Offset="0.6"/>
+                                        <GradientStop Color="{DynamicResource ThRamGradCColor}" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
                             </Border>
@@ -264,13 +264,13 @@
                 <Grid Grid.Row="0" Margin="0,0,0,10">
                     <TextBlock Text="HISTORIQUE  (60 s)" Style="{StaticResource MHdr}" VerticalAlignment="Center"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Ellipse Width="8" Height="8" Fill="#3B82E0" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource ThBlueLine}" VerticalAlignment="Center"/>
                         <TextBlock Text="CPU" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
                         <Ellipse Width="8" Height="8" Fill="{DynamicResource ThOk}" VerticalAlignment="Center"/>
                         <TextBlock Text="GPU" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
-                        <Ellipse Width="8" Height="8" Fill="#C08CF0" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource ThRamGradB}" VerticalAlignment="Center"/>
                         <TextBlock Text="RAM" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
                         <!-- Entrées NVMe ajoutées dynamiquement (pastille + marque) -->
@@ -288,11 +288,11 @@
                         <!-- (v1.3.5 : aires dégradées sous les courbes ESSAYÉES puis RETIRÉES
                              à la demande de l'utilisateur — garder uniquement courbes lissées
                              + grille pointillée. Ne pas re-proposer.) -->
-                        <Polyline x:Name="RamLine" Stroke="#C08CF0" StrokeThickness="2.2"
+                        <Polyline x:Name="RamLine" Stroke="{DynamicResource ThRamGradB}" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                         <Polyline x:Name="GpuLine" Stroke="{DynamicResource ThOk}" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                        <Polyline x:Name="CpuLine" Stroke="#3B82E0" StrokeThickness="2.2"
+                        <Polyline x:Name="CpuLine" Stroke="{DynamicResource ThBlueLine}" StrokeThickness="2.2"
                                   StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
                     </Grid>
                 </Border>

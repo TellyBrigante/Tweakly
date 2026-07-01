@@ -560,13 +560,15 @@ namespace Optimisation_Tool.Pages
             var (icon, txt) = step;
             icon.Text = state switch
             { GoState.Pass => "✓", GoState.Warn => "⚠", GoState.Fail => "✗", _ => "…" };
-            icon.Foreground = state switch
+            string? role = state switch
             {
-                GoState.Pass => Optimisation_Tool.Helpers.ThemeManager.Brush("ThOk"),
-                GoState.Warn => Optimisation_Tool.Helpers.ThemeManager.Brush("ThWarn"),
-                GoState.Fail => Optimisation_Tool.Helpers.ThemeManager.Brush("ThCrit"),
-                _ => icon.Foreground,
+                GoState.Pass => "ThOk",
+                GoState.Warn => "ThWarn",
+                GoState.Fail => "ThCrit",
+                _ => null,
             };
+            if (role != null)
+                icon.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, role);
             txt.Text = $"{txt.Tag} — {detail}";
             _main.Log($"  [{icon.Text}] {txt.Tag} : {detail}");
         }

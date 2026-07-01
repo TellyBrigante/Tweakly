@@ -35,6 +35,8 @@ namespace Optimisation_Tool.Pages
             public Border       BarFill  = null!;            // remplissage de la barre
             public Ellipse      Dot      = null!;            // pastille de légende
             public TextBlock    TempVal  = null!;
+            public int          TempC;
+            public string       Role     = "ThTextDim";
             public List<double> Hist     = new();
             public Polyline     Line     = null!;
         }
@@ -43,10 +45,10 @@ namespace Optimisation_Tool.Pages
         // Couleurs NVMe — distinctes du CPU, du GPU et de la RAM, qui passent par les rôles de thème.
         private static readonly string[] NvmePalette =
         {
-            "#F5A623",  // orange ambre
-            "#29C7D6",  // cyan
-            "#FF6B9D",  // rose
-            "#E0C84A",  // jaune
+            "ThNvme1",  // orange ambre
+            "ThNvme2",  // cyan
+            "ThNvme3",  // rose
+            "ThNvme4",  // jaune
         };
 
         public PageMonitoring(MainWindow main)
@@ -59,12 +61,26 @@ namespace Optimisation_Tool.Pages
 
         private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            DrawGrid();
+            RefreshThemeVisuals();
             _timer.Start();
             await TickAsync();   // premier rafraîchissement immédiat
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e) => _timer.Stop();
+
+        public void RefreshThemeVisuals()
+        {
+            DrawGrid();
+            DrawLine(CpuLine, null, _cpuHist);
+            DrawLine(GpuLine, null, _gpuHist);
+            DrawLine(RamLine, null, _ramHist);
+
+            foreach (var v in _nvme.Values)
+            {
+                ApplyNvmeTheme(v);
+                DrawLine(v.Line, null, v.Hist);
+            }
+        }
 
         // ── Libération de la RAM (cache fichiers + working sets inactifs) ───────
         private async void BtnFreeRam_Click(object sender, RoutedEventArgs e)
@@ -234,19 +250,26 @@ namespace Optimisation_Tool.Pages
             {
                 if (!_nvme.TryGetValue(n.Name, out var v)) continue;
                 v.UsageBig.Text = $"{n.UsagePct:F0}";
-                var sigCol = LegibleText(v.Color);   // signature, assombrie en mode clair (cohérent partout)
-                v.UsageBig.Foreground = sigCol;
-                v.PctLabel.Foreground = sigCol;
-                v.BarFill.Background  = BarGradient(sigCol);   // dégradé style barre de MAJ (v1.3.5)
-                v.Line.Stroke         = sigCol;
-                v.Dot.Fill            = sigCol;
                 SetBar(v.UsageBar, n.UsagePct);
+                v.TempC = n.TempC;
                 v.TempVal.Text       = $"{n.TempC} °C";
-                v.TempVal.Foreground = TempColor(n.TempC);
+                ApplyNvmeTheme(v);
 
                 Push(v.Hist, n.UsagePct);
                 DrawLine(v.Line, null, v.Hist);
             }
+        }
+
+        private static void ApplyNvmeTheme(NvmeVisual v)
+        {
+            v.Color = ThemeManager.Brush(v.Role);
+            var sigCol = LegibleText(v.Color);   // signature, assombrie en mode clair (cohérent partout)
+            v.UsageBig.Foreground = sigCol;
+            v.PctLabel.Foreground = sigCol;
+            v.BarFill.Background  = BarGradient(sigCol);   // dégradé style barre de MAJ (v1.3.5)
+            v.Line.Stroke         = sigCol;
+            v.Dot.Fill            = sigCol;
+            v.TempVal.Foreground  = TempColor(v.TempC);
         }
 
         private void RebuildNvme(List<NvmeInfo> nvmes)
@@ -264,8 +287,9 @@ namespace Optimisation_Tool.Pages
             int i = 0;
             foreach (var n in nvmes)
             {
-                var color = (Brush)new BrushConverter().ConvertFromString(NvmePalette[i % NvmePalette.Length])!;
-                var v = new NvmeVisual { Color = color };
+                var role = NvmePalette[i % NvmePalette.Length];
+                var color = ThemeManager.Brush(role);
+                var v = new NvmeVisual { Color = color, Role = role };
 
                 // Courbe d'utilisation dans le graphe (couleur signature)
                 v.Line = new Polyline
@@ -329,6 +353,7 @@ namespace Optimisation_Tool.Pages
             // Ligne détail : Température (libellé gauche / valeur droite, comme les tuiles du haut)
             var tempRow = new Grid();
             tempRow.Children.Add(new TextBlock { Text = "Température", Style = (Style)FindResource("MRowLbl") });
+            v.TempC = n.TempC;
             v.TempVal = new TextBlock
             {
                 Text = $"{n.TempC} °C", Style = (Style)FindResource("MRowVal"), Foreground = TempColor(n.TempC),

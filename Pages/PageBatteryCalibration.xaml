@@ -1,0 +1,384 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageBatteryCalibration"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent"
+             Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+        <Style x:Key="BatteryCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16,14"/>
+        </Style>
+
+        <Style x:Key="BatteryMetricLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="BatteryMetricValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="BatteryProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="9"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Value" Value="0"/>
+            <Setter Property="Background" Value="{DynamicResource ThTrack}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThAccentIcon}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid ClipToBounds="True">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{DynamicResource ThBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="5"/>
+                            <Border x:Name="PART_Track" Background="Transparent" CornerRadius="5"/>
+                            <Decorator x:Name="PART_Indicator" HorizontalAlignment="Left">
+                                <Border Background="{TemplateBinding Foreground}" CornerRadius="5"/>
+                            </Decorator>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="18,14,18,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="14"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="Calibrage batterie"
+                           Foreground="{DynamicResource ThTextTitle}"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="24"
+                           FontWeight="SemiBold"/>
+                <TextBlock Text="Charge complète, équilibrage 2 h, drain contrôlé, repos 8 h, puis recharge complète."
+                           Foreground="{DynamicResource ThTextSub}"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="12.5"
+                           TextWrapping="Wrap"
+                           Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button x:Name="BtnRefresh"
+                        Content="ACTUALISER"
+                        Style="{StaticResource SecondaryBtnStyle}"
+                        Padding="16,9"
+                        Click="BtnRefresh_Click"/>
+                <Button x:Name="BtnShowReport"
+                        Content="VOIR LE RAPPORT"
+                        Style="{StaticResource SecondaryBtnStyle}"
+                        Padding="16,9"
+                        Margin="10,0,0,0"
+                        Click="BtnShowReport_Click"/>
+                <Button x:Name="BtnStart"
+                        Content="DÉMARRER LE CALIBRAGE"
+                        Style="{StaticResource CleanRunBtn}"
+                        Padding="20,10"
+                        Margin="10,0,0,0"
+                        Click="BtnStart_Click"/>
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+
+                <Border x:Name="NoBatteryPanel"
+                        Style="{StaticResource BatteryCard}"
+                        Visibility="Collapsed"
+                        Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="Aucune batterie détectée"
+                                   Foreground="{DynamicResource ThTextTitle}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="16"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Cette page est réservée aux PC portables. L'onglet reste verrouillé tant que Windows ne voit aucune batterie."
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <UniformGrid Columns="4" Rows="1" Margin="0,0,0,14">
+                    <Border Style="{StaticResource BatteryCard}" Margin="0,0,10,0">
+                        <StackPanel>
+                            <TextBlock Text="CHARGE" Style="{StaticResource BatteryMetricLabel}"/>
+                            <TextBlock x:Name="TxtCharge" Text="-- %" Style="{StaticResource BatteryMetricValue}" Margin="0,5,0,4"/>
+                            <ProgressBar x:Name="PbCharge" Style="{StaticResource BatteryProgress}"/>
+                            <TextBlock x:Name="TxtBatteryState" Text="Lecture en attente"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,8,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource BatteryCard}" Margin="0,0,10,0">
+                        <StackPanel>
+                            <TextBlock Text="SANTÉ" Style="{StaticResource BatteryMetricLabel}"/>
+                            <TextBlock x:Name="TxtHealth" Text="-- %" Style="{StaticResource BatteryMetricValue}" Margin="0,5,0,4"/>
+                            <TextBlock x:Name="TxtCapacity" Text="Capacité : -- mWh / -- mWh"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource BatteryCard}" Margin="0,0,10,0">
+                        <StackPanel>
+                            <TextBlock Text="TENSION" Style="{StaticResource BatteryMetricLabel}"/>
+                            <TextBlock x:Name="TxtVoltage" Text="-- V" Style="{StaticResource BatteryMetricValue}" Margin="0,5,0,4"/>
+                            <TextBlock x:Name="TxtPower" Text="Puissance : -- W"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource BatteryCard}" Margin="0">
+                        <StackPanel>
+                            <TextBlock Text="CONTR&#212;LEUR BATTERIE" Style="{StaticResource BatteryMetricLabel}"/>
+                            <TextBlock x:Name="TxtSource" Text="--" Style="{StaticResource BatteryMetricValue}" FontSize="17" Margin="0,7,0,5"/>
+                            <TextBlock x:Name="TxtCycles" Text="Cycles : --"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtBatteryTemperature" Text="Température : -- °C"
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.02*"/>
+                        <ColumnDefinition Width="14"/>
+                        <ColumnDefinition Width="0.98*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <Border Style="{StaticResource BatteryCard}" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock x:Name="TxtPhaseTitle"
+                                               Text="Prêt"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="17"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="TxtPhaseDetail"
+                                               Text="Lance le calibrage pour démarrer le protocole complet."
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="12"
+                                               TextWrapping="Wrap"
+                                               Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        x:Name="BtnReset"
+                                        Content="RÉINITIALISER"
+                                        Style="{StaticResource SecondaryBtnStyle}"
+                                        Padding="14,8"
+                                        Margin="12,0,0,0"
+                                        Click="BtnReset_Click"/>
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="StepCharge" Style="{StaticResource BatteryCard}" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="1. Charge complète"
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtStepCharge"
+                                           Text="Branche le PC. Tweakly note la montée de charge jusqu'à 100 %."
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,8"/>
+                                <ProgressBar x:Name="PbStepCharge" Style="{StaticResource BatteryProgress}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="StepBalance" Style="{StaticResource BatteryCard}" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="2. Équilibrage cellules"
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtStepBalance"
+                                           Text="Une fois à 100 %, le PC reste branché pendant 2 h."
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,8"/>
+                                <ProgressBar x:Name="PbStepBalance" Style="{StaticResource BatteryProgress}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="StepDrain" Style="{StaticResource BatteryCard}" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="3. Drain contrôlé"
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtStepDrain"
+                                           Text="Débranche le secteur. Tweakly applique une charge CPU contrôlée et sauvegarde chaque point."
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,8"/>
+                                <ProgressBar x:Name="PbStepDrain" Style="{StaticResource BatteryProgress}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="StepRest" Style="{StaticResource BatteryCard}" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="4. Repos total"
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtStepRest"
+                                           Text="Après extinction, ne redémarre pas le PC pendant 8 h minimum."
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,8"/>
+                                <ProgressBar x:Name="PbStepRest" Style="{StaticResource BatteryProgress}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="StepRecharge" Style="{StaticResource BatteryCard}" Margin="0">
+                            <StackPanel>
+                                <TextBlock Text="5. Recharge complète"
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtStepRecharge"
+                                           Text="Recharge jusqu'à 100 % sans coupure secteur et sans utiliser le PC."
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,8"/>
+                                <ProgressBar x:Name="PbStepRecharge" Style="{StaticResource BatteryProgress}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <Border Style="{StaticResource BatteryCard}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="Graphique calibrage"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="TxtPointCount"
+                                               Text="0 point"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="11"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Canvas x:Name="GraphCanvas"
+                                        Height="260"
+                                        Margin="0,12,0,8"
+                                        ClipToBounds="True"
+                                        SizeChanged="GraphCanvas_SizeChanged"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ThAccentIcon}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Charge %"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="11"
+                                               Margin="6,0,14,0"/>
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ThWarn}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Tension V"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="11"
+                                               Margin="6,0,14,0"/>
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ThCyan}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Puissance W"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="11"
+                                               Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource BatteryCard}">
+                            <StackPanel>
+                                <TextBlock Text="Dernière mesure"
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtLastSample"
+                                           Text="Aucune mesure enregistrée."
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           LineHeight="18"
+                                           Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

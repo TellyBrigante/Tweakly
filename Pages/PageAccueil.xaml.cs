@@ -506,7 +506,11 @@ namespace Optimisation_Tool.Pages
         private void RenderActivity()
         {
             ActivityList.Children.Clear();
-            var sorted = _activity.OrderByDescending(a => a.Time).Take(12).ToList();
+            var sorted = _activity
+                .Where(a => string.IsNullOrEmpty(a.TargetTag) || _main.IsNavigationTargetVisible(a.TargetTag))
+                .OrderByDescending(a => a.Time)
+                .Take(12)
+                .ToList();
             if (sorted.Count == 0)
             {
                 var empty = new TextBlock
@@ -553,9 +557,20 @@ namespace Optimisation_Tool.Pages
         //  Navigation : chaque tuile pointe vers la page complète
         // ═══════════════════════════════════════════════════════════════════════
 
-        private void TileScore_Click   (object s, RoutedEventArgs e) => _main.NavigateToTag("Benchmark");
-        private void TileHealth_Click  (object s, RoutedEventArgs e) => _main.NavigateToTag("EventLog");
-        private void TileGame_Click    (object s, RoutedEventArgs e) => _main.NavigateToTag("GameSession");
+        private void NavigateDashboard(string targetTag, string fallbackTag = "")
+        {
+            if (_main.IsNavigationTargetVisible(targetTag))
+            {
+                _main.NavigateToTag(targetTag);
+                return;
+            }
+            if (!string.IsNullOrEmpty(fallbackTag))
+                _main.NavigateToTag(fallbackTag);
+        }
+
+        private void TileScore_Click   (object s, RoutedEventArgs e) => NavigateDashboard("Benchmark");
+        private void TileHealth_Click  (object s, RoutedEventArgs e) => NavigateDashboard("EventLog", "Diagnostic");
+        private void TileGame_Click    (object s, RoutedEventArgs e) => NavigateDashboard("GameSession", "Monitoring");
         private void TileHardware_Click(object s, RoutedEventArgs e) => _main.NavigateToTag("Monitoring");
         private void TileStorage_Click (object s, RoutedEventArgs e) => _main.NavigateToTag("Diagnostic");
         private void TileNetwork_Click (object s, RoutedEventArgs e) => _main.NavigateToTag("ReseauMon");

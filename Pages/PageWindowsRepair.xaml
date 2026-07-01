@@ -5,8 +5,8 @@
 
     <UserControl.Resources>
         <LinearGradientBrush x:Key="RepairAccent" StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#3B82E0" Offset="0"/>
-            <GradientStop Color="#5BA0FF" Offset="1"/>
+            <GradientStop Color="{DynamicResource ThBlueLineColor}" Offset="0"/>
+            <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="1"/>
         </LinearGradientBrush>
 
         <Style x:Key="StepCardStyle" TargetType="Border">

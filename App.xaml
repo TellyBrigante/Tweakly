@@ -44,6 +44,25 @@
         <SolidColorBrush x:Key="ThOkButtonPressed" Color="#16602E"/>
         <SolidColorBrush x:Key="ThWarn"      Color="#F5C24A"/>
         <SolidColorBrush x:Key="ThCrit"      Color="#E05555"/>
+        <SolidColorBrush x:Key="ThPrimary"        Color="#1870CC"/>
+        <SolidColorBrush x:Key="ThPrimaryHover"   Color="#2080E0"/>
+        <SolidColorBrush x:Key="ThPrimaryPressed" Color="#1260AA"/>
+        <SolidColorBrush x:Key="ThPrimaryText"    Color="#E8F0FF"/>
+        <SolidColorBrush x:Key="ThBlueLine"       Color="#3B82E0"/>
+        <SolidColorBrush x:Key="ThBlueGradA"      Color="#2F6FD8"/>
+        <SolidColorBrush x:Key="ThBlueGradB"      Color="#5BA0FF"/>
+        <SolidColorBrush x:Key="ThBlueGradC"      Color="#8AC0FF"/>
+        <SolidColorBrush x:Key="ThRamGradA"       Color="#9A63D8"/>
+        <SolidColorBrush x:Key="ThRamGradB"       Color="#C08CF0"/>
+        <SolidColorBrush x:Key="ThRamGradC"       Color="#DCC0F8"/>
+        <SolidColorBrush x:Key="ThNvme1"          Color="#F5A623"/>
+        <SolidColorBrush x:Key="ThNvme2"          Color="#29C7D6"/>
+        <SolidColorBrush x:Key="ThNvme3"          Color="#FF6B9D"/>
+        <SolidColorBrush x:Key="ThNvme4"          Color="#E0C84A"/>
+        <SolidColorBrush x:Key="ThCloseHover"     Color="#C42B1C"/>
+        <SolidColorBrush x:Key="ThOverlayStrong"  Color="#CC1A1F36"/>
+        <SolidColorBrush x:Key="ThWhite"          Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="ThBlack"          Color="#000000"/>
 
         <!-- Couleurs thémables pour les dégradés (sombre par défaut) -->
         <Color x:Key="ThCardA">#353D66</Color>
@@ -52,6 +71,20 @@
         <Color x:Key="ThSwOffB">#080A1E</Color>
         <Color x:Key="ThSwOffBdA">#2C3462</Color>
         <Color x:Key="ThSwOffBdB">#07091B</Color>
+        <Color x:Key="ThPrimaryColor">#1870CC</Color>
+        <Color x:Key="ThPrimaryHoverColor">#2080E0</Color>
+        <Color x:Key="ThPrimaryPressedColor">#1260AA</Color>
+        <Color x:Key="ThBlueLineColor">#3B82E0</Color>
+        <Color x:Key="ThBlueGradAColor">#2F6FD8</Color>
+        <Color x:Key="ThBlueGradBColor">#5BA0FF</Color>
+        <Color x:Key="ThBlueGradCColor">#8AC0FF</Color>
+        <Color x:Key="ThRamGradAColor">#9A63D8</Color>
+        <Color x:Key="ThRamGradBColor">#C08CF0</Color>
+        <Color x:Key="ThRamGradCColor">#DCC0F8</Color>
+        <Color x:Key="ThOverlayStrongColor">#CC1A1F36</Color>
+        <Color x:Key="ThWhiteColor">#FFFFFF</Color>
+        <Color x:Key="ThBlackColor">#000000</Color>
+        <Color x:Key="ThBlackAlpha18Color">#00000018</Color>
 
         <!-- ── Toggle switch premium (shared par toutes les pages Optimisations) ── -->
         <Style x:Key="TweakChkStyle" TargetType="CheckBox">
@@ -162,7 +195,7 @@
                                         <RadialGradientBrush Center="0.5,0.5"
                                                              GradientOrigin="0.5,0.5">
                                             <GradientStop Color="#70000018" Offset="0.5"/>
-                                            <GradientStop Color="#00000018" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource ThBlackAlpha18Color}" Offset="1"/>
                                         </RadialGradientBrush>
                                     </Ellipse.Fill>
                                     <Ellipse.RenderTransform>
@@ -183,7 +216,7 @@
                                         <RadialGradientBrush Center="0.40,0.32"
                                                              GradientOrigin="0.40,0.32"
                                                              RadiusX="0.75" RadiusY="0.75">
-                                            <GradientStop Color="#FFFFFF"  Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThWhiteColor}"  Offset="0"/>
                                             <GradientStop Color="#EAF2F8"  Offset="0.40"/>
                                             <GradientStop Color="#C8D8E6"  Offset="1"/>
                                         </RadialGradientBrush>
@@ -331,8 +364,8 @@
 
         <!-- ── Bouton primaire bleu ── -->
         <Style x:Key="PrimaryBtnStyle" TargetType="Button">
-            <Setter Property="Background"      Value="#1870CC"/>
-            <Setter Property="Foreground"      Value="#E8F0FF"/>
+            <Setter Property="Background"      Value="{DynamicResource ThPrimary}"/>
+            <Setter Property="Foreground"      Value="{DynamicResource ThPrimaryText}"/>
             <Setter Property="FontFamily"      Value="{StaticResource AppFont}"/>
             <Setter Property="FontSize"        Value="12"/>
             <Setter Property="FontWeight"      Value="SemiBold"/>
@@ -357,10 +390,10 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#2080E0"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThPrimaryHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#1260AA"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThPrimaryPressed}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThSecBtn}"/>
@@ -476,7 +509,7 @@
             </Setter>
         </Style>
 
-        <!-- Convertisseur statut → couleur (Pack Réinstallation) -->
+        <!-- Convertisseur statut → couleur (Pack Réinstallation, conservé pour compat interne) -->
         <pages:StatusToColorConverter x:Key="StatusColor"/>
 
         <!-- ════════ DA « OPTIM » v1.3.5 (validée sur Nettoyage, déployée sur CPU /
@@ -553,9 +586,9 @@
                             <Border x:Name="TrackOn" CornerRadius="12" Opacity="0" ClipToBounds="True">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                        <GradientStop Color="#2F6FD8" Offset="0"/>
-                                        <GradientStop Color="#5BA0FF" Offset="0.6"/>
-                                        <GradientStop Color="#8AC0FF" Offset="1"/>
+                                        <GradientStop Color="{DynamicResource ThBlueGradAColor}" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="0.6"/>
+                                        <GradientStop Color="{DynamicResource ThBlueGradCColor}" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
                                 <Border x:Name="SwSheenB" CornerRadius="12" IsHitTestVisible="False">
@@ -595,12 +628,12 @@
                                     BorderBrush="#22000000" BorderThickness="0.8">
                                 <Border.Background>
                                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                        <GradientStop Color="#FFFFFF" Offset="0"/>
+                                        <GradientStop Color="{DynamicResource ThWhiteColor}" Offset="0"/>
                                         <GradientStop Color="#D9DEE8" Offset="1"/>
                                     </LinearGradientBrush>
                                 </Border.Background>
                                 <Border.Effect>
-                                    <DropShadowEffect Color="#000000" BlurRadius="6" ShadowDepth="1" Opacity="0.4"/>
+                                    <DropShadowEffect Color="{DynamicResource ThBlackColor}" BlurRadius="6" ShadowDepth="1" Opacity="0.4"/>
                                 </Border.Effect>
                                 <Border.RenderTransform>
                                     <TranslateTransform x:Name="KnobT" X="3"/>
@@ -645,7 +678,7 @@
                                 </Trigger.ExitActions>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Knob" Property="BorderBrush" Value="#5BA0FF"/>
+                                <Setter TargetName="Knob" Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -673,12 +706,12 @@
                                 ClipToBounds="True">
                             <Border.Background>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#3B82E0" Offset="0"/>
-                                    <GradientStop Color="#5BA0FF" Offset="1"/>
+                                    <GradientStop Color="{DynamicResource ThBlueLineColor}" Offset="0"/>
+                                    <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="1"/>
                                 </LinearGradientBrush>
                             </Border.Background>
                             <Border.Effect>
-                                <DropShadowEffect Color="#3B82E0" BlurRadius="16" ShadowDepth="2" Opacity="0.4"/>
+                                <DropShadowEffect Color="{DynamicResource ThBlueLineColor}" BlurRadius="16" ShadowDepth="2" Opacity="0.4"/>
                             </Border.Effect>
                             <Grid>
                                 <Border x:Name="Sheen" CornerRadius="10" Margin="-30,-12"
@@ -723,7 +756,7 @@
                                 </Setter>
                                 <Setter TargetName="Bg" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="#5BA0FF" BlurRadius="22" ShadowDepth="2" Opacity="0.55"/>
+                                        <DropShadowEffect Color="{DynamicResource ThBlueGradBColor}" BlurRadius="22" ShadowDepth="2" Opacity="0.55"/>
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>
@@ -733,7 +766,7 @@
                                 </Setter>
                                 <Setter TargetName="Bg" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="#3B82E0" BlurRadius="8" ShadowDepth="1" Opacity="0.3"/>
+                                        <DropShadowEffect Color="{DynamicResource ThBlueLineColor}" BlurRadius="8" ShadowDepth="1" Opacity="0.3"/>
                                     </Setter.Value>
                                 </Setter>
                             </Trigger>

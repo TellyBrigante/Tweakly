@@ -1,0 +1,230 @@
+<Window x:Class="Optimisation_Tool.Pages.BatteryCalibrationReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Rapport calibrage batterie"
+        Width="1120" Height="780"
+        MinWidth="920" MinHeight="640"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource ThBg}">
+
+    <Window.Resources>
+        <Style x:Key="ReportCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16,14"/>
+        </Style>
+
+        <Style x:Key="ReportLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+
+        <Style x:Key="ReportValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="42"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{DynamicResource ThSidebar}"
+                BorderBrush="{DynamicResource ThBorder}"
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TopBar_MouseLeftButtonDown">
+            <Grid Margin="14,0">
+                <TextBlock Text="Rapport calibrage batterie"
+                           Foreground="{DynamicResource ThTextTitle}"
+                           FontFamily="{StaticResource AppFont}"
+                           FontSize="13"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <Button Content="EXPORTER PNG"
+                            Style="{StaticResource CleanRunBtn}"
+                            Padding="14,8"
+                            Margin="0,0,10,0"
+                            Click="BtnExportPng_Click"/>
+                    <Button Content="FERMER"
+                            Style="{StaticResource SecondaryBtnStyle}"
+                            Padding="14,8"
+                            Click="BtnClose_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Border x:Name="ReportSurface"
+                    Background="{DynamicResource ThBg}"
+                    Padding="18">
+                <StackPanel>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Rapport calibrage batterie"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="26"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock x:Name="TxtReportMeta"
+                                       Text="Généré le --"
+                                       Foreground="{DynamicResource ThTextSub}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="12.5"
+                                       TextWrapping="Wrap"
+                                       Margin="0,5,0,0"/>
+                        </StackPanel>
+                        <Border Grid.Column="1"
+                                Background="{DynamicResource ThInfoTint}"
+                                BorderBrush="{DynamicResource ThBorder}"
+                                BorderThickness="1"
+                                CornerRadius="9"
+                                Padding="12,8"
+                                VerticalAlignment="Top">
+                            <TextBlock x:Name="TxtProtocolState"
+                                       Text="Protocole : --"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"/>
+                        </Border>
+                    </Grid>
+
+                    <UniformGrid Columns="4" Rows="1" Margin="0,0,0,14">
+                        <Border Style="{StaticResource ReportCard}" Margin="0,0,10,0">
+                            <StackPanel>
+                                <TextBlock Text="SANTÉ" Style="{StaticResource ReportLabel}"/>
+                                <TextBlock x:Name="TxtHealth" Text="-- %" Style="{StaticResource ReportValue}" Margin="0,5,0,2"/>
+                                <TextBlock x:Name="TxtCapacity" Text="-- mWh / -- mWh"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReportCard}" Margin="0,0,10,0">
+                            <StackPanel>
+                                <TextBlock Text="DERNIER POINT" Style="{StaticResource ReportLabel}"/>
+                                <TextBlock x:Name="TxtLastCharge" Text="-- %" Style="{StaticResource ReportValue}" Margin="0,5,0,2"/>
+                                <TextBlock x:Name="TxtLastDetail" Text="-- V | -- W | -- °C"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReportCard}" Margin="0,0,10,0">
+                            <StackPanel>
+                                <TextBlock Text="DRAIN" Style="{StaticResource ReportLabel}"/>
+                                <TextBlock x:Name="TxtDrainCut" Text="-- %" Style="{StaticResource ReportValue}" Margin="0,5,0,2"/>
+                                <TextBlock x:Name="TxtDrainDetail" Text="Dernier point avant coupure"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource ReportCard}" Margin="0">
+                            <StackPanel>
+                                <TextBlock Text="MESURES" Style="{StaticResource ReportLabel}"/>
+                                <TextBlock x:Name="TxtSampleCount" Text="0 point" Style="{StaticResource ReportValue}" Margin="0,5,0,2"/>
+                                <TextBlock x:Name="TxtSource" Text="Source : --"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.15*"/>
+                            <ColumnDefinition Width="14"/>
+                            <ColumnDefinition Width="0.85*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource ReportCard}">
+                            <StackPanel>
+                                <Grid>
+                                    <TextBlock Text="Graphique complet"
+                                               Foreground="{DynamicResource ThTextTitle}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="17"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Text="% / V / W"
+                                               Foreground="{DynamicResource ThTextDim}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="11"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Canvas x:Name="ChartCanvas"
+                                        Height="310"
+                                        Margin="0,12,0,8"
+                                        ClipToBounds="True"
+                                        SizeChanged="ChartCanvas_SizeChanged"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ThAccentIcon}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Charge %" Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}" FontSize="11" Margin="6,0,14,0"/>
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ThWarn}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Tension V" Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}" FontSize="11" Margin="6,0,14,0"/>
+                                    <Ellipse Width="8" Height="8" Fill="{DynamicResource ThCyan}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Puissance W" Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}" FontSize="11" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource ReportCard}">
+                            <StackPanel>
+                                <TextBlock Text="Synthèse protocole"
+                                           Foreground="{DynamicResource ThTextTitle}"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="17"
+                                           FontWeight="SemiBold"/>
+                                <StackPanel x:Name="ProtocolPanel" Margin="0,12,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border Style="{StaticResource ReportCard}">
+                        <StackPanel>
+                            <TextBlock Text="Points clés"
+                                       Foreground="{DynamicResource ThTextTitle}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="17"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="Le graphique utilise tous les points enregistrés. Le tableau ci-dessous garde les points importants pour un PNG lisible."
+                                       Foreground="{DynamicResource ThTextDim}"
+                                       FontFamily="{StaticResource AppFont}"
+                                       FontSize="11.5"
+                                       TextWrapping="Wrap"
+                                       Margin="0,4,0,12"/>
+                            <StackPanel x:Name="KeyRowsPanel"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </ScrollViewer>
+    </Grid>
+</Window>

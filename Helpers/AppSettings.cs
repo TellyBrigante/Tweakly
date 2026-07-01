@@ -26,6 +26,9 @@ namespace Optimisation_Tool.Helpers
         [JsonPropertyName("cpuTempEnabled")]
         public bool CpuTempEnabled { get; set; } = false;
 
+        [JsonPropertyName("navigationMode")]
+        public string NavigationMode { get; set; } = "Advanced";
+
         // ── Chemin du fichier : config\tweakly-settings.json (depuis v1.2.8) ──
         public static string FilePath => PathLayout.SettingsFile;
 

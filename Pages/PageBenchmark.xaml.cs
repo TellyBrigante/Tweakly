@@ -618,13 +618,15 @@ namespace Optimisation_Tool.Pages
                 Margin       = new Thickness(0, 8, 0, 0),
             };
             legend.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
-            var orange = Optimisation_Tool.Helpers.ThemeManager.Brush("ThOrange");
-            var blue   = Optimisation_Tool.Helpers.ThemeManager.Brush("ThLadderCpu");
-            var steel  = Optimisation_Tool.Helpers.ThemeManager.Brush("ThSteel");
-            void Sq(SolidColorBrush c) => legend.Inlines.Add(new System.Windows.Documents.Run("■ ") { Foreground = c });
-            Sq(orange); legend.Inlines.Add(new System.Windows.Documents.Run("ta mesure réelle      "));
-            Sq(blue);   legend.Inlines.Add(new System.Windows.Documents.Run("ton CPU (score attendu)      "));
-            Sq(steel);  legend.Inlines.Add(new System.Windows.Documents.Run("CPUs voisins (moyennes publiques)      "));
+            void Sq(string role)
+            {
+                var run = new System.Windows.Documents.Run("■ ");
+                run.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, role);
+                legend.Inlines.Add(run);
+            }
+            Sq("ThOrange");    legend.Inlines.Add(new System.Windows.Documents.Run("ta mesure réelle      "));
+            Sq("ThLadderCpu"); legend.Inlines.Add(new System.Windows.Documents.Run("ton CPU (score attendu)      "));
+            Sq("ThSteel");     legend.Inlines.Add(new System.Windows.Documents.Run("CPUs voisins (moyennes publiques)      "));
             legend.Inlines.Add(new System.Windows.Documents.Run("— échelle : 265K = 100"));
             LadderPanel.Children.Add(legend);
 
@@ -784,9 +786,9 @@ namespace Optimisation_Tool.Pages
             {
                 Points = pts,
                 StrokeThickness = 1.8,
-                Stroke = Optimisation_Tool.Helpers.ThemeManager.Brush("ThLadderCpu"),
                 StrokeLineJoin = PenLineJoin.Round,
             };
+            line.SetResourceReference(Shape.StrokeProperty, "ThLadderCpu");
             SparkCanvas.Children.Add(line);
             // Ligne de référence 100
             double y100 = h - (100 - minS) / (maxS - minS) * h;
@@ -794,9 +796,9 @@ namespace Optimisation_Tool.Pages
             {
                 X1 = 0, X2 = w, Y1 = y100, Y2 = y100,
                 StrokeThickness = 1, Opacity = 0.4,
-                Stroke = Optimisation_Tool.Helpers.ThemeManager.Brush("ThOk"),
                 StrokeDashArray = new DoubleCollection { 3, 3 },
             };
+            refLine.SetResourceReference(Shape.StrokeProperty, "ThOk");
             SparkCanvas.Children.Insert(0, refLine);
         }
 

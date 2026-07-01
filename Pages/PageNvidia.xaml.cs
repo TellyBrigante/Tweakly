@@ -68,12 +68,19 @@ namespace Optimisation_Tool.Pages
 
         private static void StyleTab(Button btn, bool active)
         {
+            btn.ApplyTemplate();
             if (btn.Template.FindName("Bg", btn) is not Border bg) return;
             if (btn.Template.FindName("Lbl", btn) is not TextBlock lbl) return;
-            bg.Background = active ? ThemeManager.Brush("ThTabSel")
-                                   : new SolidColorBrush(Colors.Transparent);
-            if (active) lbl.Foreground = new SolidColorBrush(Colors.White);
-            else        lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            if (active)
+            {
+                bg.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
+                lbl.Foreground = Brushes.White;
+            }
+            else
+            {
+                bg.Background = Brushes.Transparent;
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            }
         }
 
         // ── Éditeur des paramètres GLOBAUX (NVAPI, lecture + écriture) ─────────

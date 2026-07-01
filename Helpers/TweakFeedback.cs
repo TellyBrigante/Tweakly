@@ -70,12 +70,9 @@ namespace Optimisation_Tool.Helpers
         {
             // Couleur thémable (vive en sombre, assombrie/lisible en clair)
             var role = level switch { Level.Ok => "ThOk", Level.Warn => "ThWarn", Level.Err => "ThCrit", _ => "ThTextDim" };
-            var accent = ThemeManager.C(role);
-            dot.Fill        = new SolidColorBrush(accent);
+            dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, role);
             text.Text       = msg;
-            text.Foreground = emphasize
-                ? new SolidColorBrush(accent)
-                : (Application.Current?.Resources["ThTextBody"] as Brush ?? Brushes.White);
+            text.SetResourceReference(TextBlock.ForegroundProperty, emphasize ? role : "ThTextBody");
 
             // Transformations pour le « pop » + glissement
             var scale = new ScaleTransform(0.94, 0.94);

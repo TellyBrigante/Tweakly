@@ -22,7 +22,34 @@ namespace Optimisation_Tool.Pages
         public string Name      { get; set; } = "";
         public string Info      { get; set; } = "";
         public string Badge     { get; set; } = "";
-        public Brush  BadgeColor { get; set; } = Brushes.Gray;
+        public string Role      { get; set; } = "ThTextDim";
+    }
+
+    // Ligne de l'onglet "Réglages BIOS" : lecture seule, preuve locale, aucune déduction agressive.
+    public sealed class FirmwareSettingItem
+    {
+        public string Group  { get; set; } = "";
+        public string Title  { get; set; } = "";
+        public string Value  { get; set; } = "";
+        public string Detail { get; set; } = "";
+        public string Source { get; set; } = "";
+        public string Role   { get; set; } = "ThTextDim";
+    }
+
+    public sealed class FirmwareInsightItem
+    {
+        public string Title  { get; set; } = "";
+        public string Value  { get; set; } = "";
+        public string Detail { get; set; } = "";
+        public string Role   { get; set; } = "ThTextDim";
+    }
+
+    public sealed class FirmwareChangeItem
+    {
+        public string Title  { get; set; } = "";
+        public string Before { get; set; } = "";
+        public string After  { get; set; } = "";
+        public string Role   { get; set; } = "ThTextDim";
     }
 
     public partial class PageSpecs : UserControl
@@ -30,6 +57,7 @@ namespace Optimisation_Tool.Pages
         private readonly MainWindow _main;
         private bool   _loaded   = false;
         private bool   _compatLoaded = false;
+        private bool   _biosLoaded = false;
         private string _biosMfr  = "";
         private string _biosModel = "";
 
@@ -45,27 +73,50 @@ namespace Optimisation_Tool.Pages
         {
             PanelSpecs.Visibility  = Visibility.Visible;
             PanelCompat.Visibility = Visibility.Collapsed;
+            PanelBios.Visibility   = Visibility.Collapsed;
             StyleTab(BtnTabSpecs, true);
             StyleTab(BtnTabCompat, false);
+            StyleTab(BtnTabBios, false);
         }
 
         private void BtnTabCompat_Click(object sender, RoutedEventArgs e)
         {
             PanelSpecs.Visibility  = Visibility.Collapsed;
             PanelCompat.Visibility = Visibility.Visible;
+            PanelBios.Visibility   = Visibility.Collapsed;
             StyleTab(BtnTabSpecs, false);
             StyleTab(BtnTabCompat, true);
+            StyleTab(BtnTabBios, false);
             if (!_compatLoaded) { _compatLoaded = true; _ = LoadCompatAsync(); }
+        }
+
+        private void BtnTabBios_Click(object sender, RoutedEventArgs e)
+        {
+            PanelSpecs.Visibility  = Visibility.Collapsed;
+            PanelCompat.Visibility = Visibility.Collapsed;
+            PanelBios.Visibility   = Visibility.Visible;
+            StyleTab(BtnTabSpecs, false);
+            StyleTab(BtnTabCompat, false);
+            StyleTab(BtnTabBios, true);
+            if (!_biosLoaded) { _biosLoaded = true; _ = LoadBiosSettingsAsync(); }
         }
 
         private static void StyleTab(Button btn, bool active)
         {
+            btn.ApplyTemplate();
             if (btn.Template.FindName("Bg",  btn) is not Border bg)     return;
             if (btn.Template.FindName("Lbl", btn) is not TextBlock lbl) return;
-            bg.Background  = active ? ThemeManager.Brush("ThTabSel")
-                                    : new SolidColorBrush(Colors.Transparent);
-            lbl.Foreground = active ? new SolidColorBrush(Colors.White)
-                                    : ThemeManager.Brush("ThTextDim");
+
+            if (active)
+            {
+                bg.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
+                lbl.Foreground = Brushes.White;
+            }
+            else
+            {
+                bg.Background = Brushes.Transparent;
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            }
         }
 
         // ── Chargement ────────────────────────────────────────────────────────
@@ -76,6 +127,8 @@ namespace Optimisation_Tool.Pages
             _loaded = true;
 
             StyleTab(BtnTabSpecs, true);   // onglet Spécifications actif par défaut
+            StyleTab(BtnTabCompat, false);
+            StyleTab(BtnTabBios, false);
 
             // Le score d'optimisation a été retiré : le Tweakly Score (page d'accueil) couvre ce rôle.
             await LoadHardwareAsync();
@@ -285,6 +338,556 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { _main.Log($"BIOS URL : erreur — {ex.Message}"); }
         }
 
+        // ── Réglages BIOS / firmware (lecture seule) ─────────────────────────
+
+        private async Task LoadBiosSettingsAsync()
+        {
+            TxtBiosSummary.Text = "Lecture des informations firmware...";
+            BiosSettingsList.ItemsSource = null;
+
+            List<FirmwareSettingItem> items;
+            try { items = await Task.Run(CollectFirmwareSettings); }
+            catch (Exception ex)
+            {
+                items = new List<FirmwareSettingItem>
+                {
+                    FwItem("Lecture", "Analyse firmware", "Impossible", ex.Message, "Tweakly", "ThCrit")
+                };
+            }
+
+            BiosSettingsList.ItemsSource = items;
+            BiosInsightList.ItemsSource = BuildFirmwareInsights(items);
+
+            var previous = Helpers.FirmwareSnapshotStore.Latest();
+            var snapshot = CreateFirmwareSnapshot(items);
+            RenderFirmwareChanges(previous, snapshot, items);
+            Helpers.FirmwareSnapshotStore.Append(snapshot);
+
+            int unavailable = items.Count(i => i.Value.Contains("Non expos", StringComparison.OrdinalIgnoreCase) ||
+                                               i.Value.Contains("Impossible", StringComparison.OrdinalIgnoreCase));
+            TxtBiosSummary.Text = unavailable > 0
+                ? $"{items.Count} point(s) vérifié(s), {unavailable} information(s) non exposée(s) par Windows."
+                : $"{items.Count} point(s) vérifié(s).";
+            TxtBiosLastRead.Text = $"Lu {DateTime.Now:HH:mm:ss}";
+            _main.Log($"Informations Système : réglages BIOS/firmware chargés — {items.Count} point(s).");
+        }
+
+        private static List<FirmwareSettingItem> CollectFirmwareSettings()
+        {
+            var items = new List<FirmwareSettingItem>();
+
+            var board = QueryBoardAndBios();
+            items.Add(FwItem("Carte mère", "Modèle", board.Board.Length > 0 ? board.Board : "Non exposé",
+                board.Manufacturer.Length > 0 ? board.Manufacturer : "Fabricant non exposé.", "WMI", board.Board.Length > 0 ? "ThTextBody" : "ThTextDim"));
+            items.Add(FwItem("Carte mère", "BIOS", board.Bios.Length > 0 ? board.Bios : "Non exposé",
+                board.BiosDate.Length > 0 ? $"Date : {board.BiosDate}" : "Date non exposée.", "WMI", board.Bios.Length > 0 ? "ThAccentIcon" : "ThTextDim"));
+
+            var firmware = QueryFirmwareMode();
+            items.Add(FwItem("Démarrage", "Mode firmware", firmware.Value, firmware.Detail, firmware.Source, firmware.Role));
+
+            var secureBoot = QuerySecureBoot();
+            items.Add(FwItem("Démarrage", "Secure Boot", secureBoot.Value, secureBoot.Detail, secureBoot.Source, secureBoot.Role));
+
+            var tpm = QueryTpm();
+            items.Add(FwItem("Sécurité", "TPM", tpm.Value, tpm.Detail, tpm.Source, tpm.Role));
+
+            var virt = QueryCpuVirtualization();
+            items.Add(FwItem("CPU", "Virtualisation firmware", virt.Value, virt.Detail, virt.Source, virt.Role));
+
+            var hv = QueryHypervisor();
+            items.Add(FwItem("Windows", "Hyperviseur actif", hv.Value, hv.Detail, hv.Source, hv.Role));
+
+            var vbs = QueryVbs();
+            items.Add(FwItem("Windows", "VBS / Device Guard", vbs.Value, vbs.Detail, vbs.Source, vbs.Role));
+
+            var hvci = QueryHvciState();
+            items.Add(FwItem("Windows", "Intégrité mémoire (HVCI)", hvci.Value, hvci.Detail, hvci.Source, hvci.Role));
+
+            var mem = QueryMemoryClock();
+            items.Add(FwItem("Mémoire", "Fréquence RAM actuelle", mem.Value, mem.Detail, mem.Source, mem.Role));
+            items.Add(FwItem("Mémoire", "Profil mémoire", mem.ProfileValue, mem.ProfileDetail, mem.Source, mem.ProfileRole));
+
+            return items;
+        }
+
+        private static FirmwareSettingItem FwItem(string group, string title, string value, string detail, string source, string role)
+            => new()
+            {
+                Group = group,
+                Title = title,
+                Value = value,
+                Detail = detail,
+                Source = source,
+                Role = role,
+            };
+
+        private static List<FirmwareInsightItem> BuildFirmwareInsights(List<FirmwareSettingItem> items)
+        {
+            FirmwareSettingItem item(string title) =>
+                items.FirstOrDefault(i => i.Title.Equals(title, StringComparison.OrdinalIgnoreCase))
+                ?? FwItem("", title, "Non exposé", "", "Tweakly", "ThTextDim");
+
+            var firmware = item("Mode firmware");
+            var bios = item("BIOS");
+            var secureBoot = item("Secure Boot");
+            var tpm = item("TPM");
+            var memClock = item("Fréquence RAM actuelle");
+            var memProfile = item("Profil mémoire");
+            var hv = item("Hyperviseur actif");
+            var vbs = item("VBS / Device Guard");
+            var hvci = item("Intégrité mémoire (HVCI)");
+
+            bool uefi = firmware.Value.Equals("UEFI", StringComparison.OrdinalIgnoreCase);
+            bool secure = StartsActive(secureBoot.Value);
+            bool tpm20 = tpm.Value.Contains("2.0", StringComparison.OrdinalIgnoreCase);
+
+            var missing = new List<string>();
+            if (!uefi) missing.Add("UEFI");
+            if (!secure) missing.Add("Secure Boot");
+            if (!tpm20) missing.Add("TPM 2.0");
+
+            var perfFlags = new List<string>();
+            if (StartsActive(hv.Value)) perfFlags.Add("hyperviseur actif");
+            if (StartsActive(vbs.Value) || vbs.Value.StartsWith("Configuré", StringComparison.OrdinalIgnoreCase)) perfFlags.Add("VBS actif/configuré");
+            if (StartsActive(hvci.Value)) perfFlags.Add("HVCI actif");
+
+            return new List<FirmwareInsightItem>
+            {
+                Insight("Plateforme", $"{firmware.Value} · BIOS {bios.Value}",
+                    bios.Detail.Length > 0 ? bios.Detail : "Version BIOS non exposée.",
+                    uefi ? "ThOk" : firmware.Role),
+
+                Insight("Base Windows 11", missing.Count == 0 ? "Prête" : "À vérifier",
+                    missing.Count == 0
+                        ? "UEFI, Secure Boot et TPM 2.0 détectés."
+                        : "Manquant ou non exposé : " + string.Join(", ", missing) + ".",
+                    missing.Count == 0 ? "ThOk" : "ThWarn"),
+
+                Insight("Mémoire", memProfile.Value,
+                    $"{memClock.Value}. {Shorten(memProfile.Detail, 145)}",
+                    memProfile.Role),
+
+                Insight("Impact perf Windows", perfFlags.Count == 0 ? "Aucun frein détecté" : "Impact possible",
+                    perfFlags.Count == 0
+                        ? "Hyperviseur, VBS et HVCI inactifs."
+                        : string.Join(", ", perfFlags) + ".",
+                    perfFlags.Count == 0 ? "ThOk" : "ThWarn"),
+            };
+        }
+
+        private static FirmwareInsightItem Insight(string title, string value, string detail, string role)
+            => new()
+            {
+                Title = title,
+                Value = value,
+                Detail = detail,
+                Role = role,
+            };
+
+        private static readonly string[] FirmwareTrackedKeys =
+        {
+            "Carte mère|BIOS",
+            "Démarrage|Mode firmware",
+            "Démarrage|Secure Boot",
+            "Sécurité|TPM",
+            "CPU|Virtualisation firmware",
+            "Windows|Hyperviseur actif",
+            "Windows|VBS / Device Guard",
+            "Windows|Intégrité mémoire (HVCI)",
+            "Mémoire|Fréquence RAM actuelle",
+            "Mémoire|Profil mémoire",
+        };
+
+        private static Helpers.FirmwareSnapshot CreateFirmwareSnapshot(List<FirmwareSettingItem> items)
+        {
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var i in items)
+                values[SnapshotKey(i)] = i.Value;
+
+            return new Helpers.FirmwareSnapshot
+            {
+                CapturedAtUtc = DateTime.UtcNow,
+                Values = values,
+            };
+        }
+
+        private void RenderFirmwareChanges(Helpers.FirmwareSnapshot? previous, Helpers.FirmwareSnapshot current, List<FirmwareSettingItem> items)
+        {
+            if (previous == null)
+            {
+                BiosChangeList.ItemsSource = Array.Empty<FirmwareChangeItem>();
+                TxtBiosChangesTitle.Text = "Référence créée";
+                TxtBiosChangesSub.Text = "La prochaine lecture affichera les changements BIOS/firmware détectés depuis cette base.";
+                return;
+            }
+
+            var roleByKey = items.ToDictionary(SnapshotKey, i => i.Role, StringComparer.OrdinalIgnoreCase);
+            var changes = new List<FirmwareChangeItem>();
+
+            foreach (string key in FirmwareTrackedKeys)
+            {
+                previous.Values.TryGetValue(key, out string? before);
+                current.Values.TryGetValue(key, out string? after);
+                before = CleanSnapshotValue(before);
+                after = CleanSnapshotValue(after);
+                if (before.Length == 0 || after.Length == 0) continue;
+                if (before.Equals(after, StringComparison.OrdinalIgnoreCase)) continue;
+
+                string role = roleByKey.TryGetValue(key, out var r) ? r : "ThAccentIcon";
+                changes.Add(new FirmwareChangeItem
+                {
+                    Title = SnapshotTitle(key),
+                    Before = before,
+                    After = after,
+                    Role = role,
+                });
+            }
+
+            BiosChangeList.ItemsSource = changes;
+            string previousLocal = previous.CapturedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture);
+
+            if (changes.Count == 0)
+            {
+                TxtBiosChangesTitle.Text = "Aucun changement détecté";
+                TxtBiosChangesSub.Text = $"Comparé à la lecture du {previousLocal}.";
+            }
+            else
+            {
+                TxtBiosChangesTitle.Text = $"{changes.Count} changement(s) détecté(s)";
+                TxtBiosChangesSub.Text = $"Comparé à la lecture du {previousLocal}.";
+            }
+        }
+
+        private static string SnapshotKey(FirmwareSettingItem item) => $"{item.Group}|{item.Title}";
+
+        private static string SnapshotTitle(string key)
+        {
+            int idx = key.IndexOf('|');
+            return idx >= 0 && idx + 1 < key.Length ? key[(idx + 1)..] : key;
+        }
+
+        private static string CleanSnapshotValue(string? value)
+            => (value ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
+
+        private static bool StartsActive(string value)
+            => value.StartsWith("Activé", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("Activée", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("Actif", StringComparison.OrdinalIgnoreCase);
+
+        private static string Shorten(string value, int maxChars)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length <= maxChars) return value;
+            return value[..Math.Max(0, maxChars - 1)].TrimEnd() + "…";
+        }
+
+        private static (string Value, string Detail, string Source, string Role) Info(string value, string detail, string source, string role)
+            => (value, detail, source, role);
+
+        private sealed class MemoryClockInfo
+        {
+            public string Value { get; init; } = "Non exposé";
+            public string Detail { get; init; } = "Fréquence mémoire non lisible via SMBIOS.";
+            public string Source { get; init; } = "SMBIOS";
+            public string Role { get; init; } = "ThTextDim";
+            public string ProfileValue { get; init; } = "Non vérifiable";
+            public string ProfileDetail { get; init; } = "Windows ne donne pas le nom du profil XMP/EXPO actif.";
+            public string ProfileRole { get; init; } = "ThTextDim";
+        }
+
+        private static (string Manufacturer, string Board, string Bios, string BiosDate) QueryBoardAndBios()
+        {
+            string manufacturer = "", board = "", bios = "", biosDate = "";
+            try
+            {
+                using var q = new ManagementObjectSearcher("SELECT Manufacturer, Product FROM Win32_BaseBoard");
+                foreach (ManagementObject o in q.Get())
+                {
+                    manufacturer = (o["Manufacturer"]?.ToString() ?? "").Trim();
+                    board = (o["Product"]?.ToString() ?? "").Trim();
+                    o.Dispose();
+                    break;
+                }
+            }
+            catch { }
+
+            try
+            {
+                using var q = new ManagementObjectSearcher("SELECT SMBIOSBIOSVersion, ReleaseDate FROM Win32_BIOS");
+                foreach (ManagementObject o in q.Get())
+                {
+                    bios = (o["SMBIOSBIOSVersion"]?.ToString() ?? "").Trim();
+                    var raw = o["ReleaseDate"]?.ToString() ?? "";
+                    biosDate = raw.Length >= 8 ? $"{raw[6..8]}/{raw[4..6]}/{raw[..4]}" : raw;
+                    o.Dispose();
+                    break;
+                }
+            }
+            catch { }
+
+            return (manufacturer, board, bios, biosDate);
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QueryFirmwareMode()
+        {
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control");
+                if (k?.GetValue("PEFirmwareType") is int v)
+                {
+                    return v switch
+                    {
+                        2 => Info("UEFI", "Windows a démarré en mode UEFI.", "Registre", "ThOk"),
+                        1 => Info("Legacy BIOS", "Windows a démarré en mode BIOS hérité.", "Registre", "ThWarn"),
+                        _ => Info($"Inconnu ({v})", "Valeur firmware non reconnue.", "Registre", "ThTextDim"),
+                    };
+                }
+            }
+            catch { }
+
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SecureBoot\State");
+                if (k?.GetValue("UEFISecureBootEnabled") is int)
+                    return Info("UEFI", "PEFirmwareType absent, mais l'état Secure Boot UEFI est exposé par Windows.", "Registre", "ThOk");
+            }
+            catch { }
+
+            return Info("Non exposé", "Windows ne fournit pas le type de firmware sur cette machine.", "Registre", "ThTextDim");
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QuerySecureBoot()
+        {
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\SecureBoot\State");
+                if (k?.GetValue("UEFISecureBootEnabled") is int v)
+                {
+                    return v == 1
+                        ? Info("Activé", "Le démarrage sécurisé UEFI est actif.", "Registre", "ThOk")
+                        : Info("Désactivé", "Secure Boot est disponible mais désactivé.", "Registre", "ThWarn");
+                }
+            }
+            catch { }
+            return Info("Non exposé", "La valeur Secure Boot n'est pas lisible depuis Windows.", "Registre", "ThTextDim");
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QueryTpm()
+        {
+            try
+            {
+                using var q = new ManagementObjectSearcher(
+                    @"root\CIMV2\Security\MicrosoftTpm",
+                    "SELECT IsEnabled_InitialValue, IsActivated_InitialValue, SpecVersion FROM Win32_Tpm");
+                foreach (ManagementObject o in q.Get())
+                {
+                    bool enabled = Convert.ToBoolean(o["IsEnabled_InitialValue"] ?? false);
+                    bool active  = Convert.ToBoolean(o["IsActivated_InitialValue"] ?? false);
+                    string spec  = (o["SpecVersion"]?.ToString() ?? "").Trim();
+                    o.Dispose();
+
+                    if (enabled && active)
+                    {
+                        string version = spec.Contains("2.0", StringComparison.OrdinalIgnoreCase) ? "2.0" : spec;
+                        return Info(version.Length > 0 ? $"Activé ({version})" : "Activé",
+                            "TPM présent et activé côté firmware.", "WMI TPM", "ThOk");
+                    }
+                    return Info("Désactivé", "TPM détecté mais pas entièrement activé.", "WMI TPM", "ThWarn");
+                }
+            }
+            catch { }
+            return Info("Non détecté", "TPM non trouvé ou namespace TPM inaccessible.", "WMI TPM", "ThTextDim");
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QueryCpuVirtualization()
+        {
+            try
+            {
+                using var q = new ManagementObjectSearcher(
+                    "SELECT Name, VirtualizationFirmwareEnabled, SecondLevelAddressTranslationExtensions FROM Win32_Processor");
+                foreach (ManagementObject o in q.Get())
+                {
+                    bool virt = Convert.ToBoolean(o["VirtualizationFirmwareEnabled"] ?? false);
+                    bool slat = Convert.ToBoolean(o["SecondLevelAddressTranslationExtensions"] ?? false);
+                    string cpu = (o["Name"]?.ToString() ?? "").Trim();
+                    o.Dispose();
+                    return virt
+                        ? Info("Activée", $"{cpu}\nSLAT : {(slat ? "présent" : "non exposé")}.", "WMI CPU", "ThOk")
+                        : Info("Désactivée", "La virtualisation CPU est désactivée dans le firmware/BIOS.", "WMI CPU", "ThWarn");
+                }
+            }
+            catch { }
+            return Info("Non exposé", "Windows ne fournit pas l'état de virtualisation firmware.", "WMI CPU", "ThTextDim");
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QueryHypervisor()
+        {
+            try
+            {
+                using var q = new ManagementObjectSearcher("SELECT HypervisorPresent FROM Win32_ComputerSystem");
+                foreach (ManagementObject o in q.Get())
+                {
+                    bool present = Convert.ToBoolean(o["HypervisorPresent"] ?? false);
+                    o.Dispose();
+                    return present
+                        ? Info("Actif", "L'hyperviseur Windows tourne actuellement.", "WMI", "ThAccentIcon")
+                        : Info("Inactif", "Aucun hyperviseur Windows actif détecté.", "WMI", "ThOk");
+                }
+            }
+            catch { }
+            return Info("Non exposé", "État Hyper-V/hyperviseur non lisible.", "WMI", "ThTextDim");
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QueryVbs()
+        {
+            try
+            {
+                using var q = new ManagementObjectSearcher(
+                    @"root\Microsoft\Windows\DeviceGuard",
+                    "SELECT VirtualizationBasedSecurityStatus FROM Win32_DeviceGuard");
+                foreach (ManagementObject o in q.Get())
+                {
+                    int status = Convert.ToInt32(o["VirtualizationBasedSecurityStatus"] ?? 0);
+                    o.Dispose();
+                    return status switch
+                    {
+                        2 => Info("Actif", "Virtualization-Based Security est en cours d'exécution.", "DeviceGuard", "ThAccentIcon"),
+                        1 => Info("Configuré", "VBS est configuré mais pas forcément actif.", "DeviceGuard", "ThWarn"),
+                        0 => Info("Inactif", "VBS n'est pas actif.", "DeviceGuard", "ThOk"),
+                        _ => Info($"Inconnu ({status})", "Statut DeviceGuard non reconnu.", "DeviceGuard", "ThTextDim"),
+                    };
+                }
+            }
+            catch { }
+            return Info("Non exposé", "DeviceGuard n'est pas lisible sur cette machine.", "DeviceGuard", "ThTextDim");
+        }
+
+        private static (string Value, string Detail, string Source, string Role) QueryHvciState()
+        {
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(
+                    @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity");
+                if (k?.GetValue("Enabled") is int enabled)
+                {
+                    return enabled == 1
+                        ? Info("Activée", "L'intégrité mémoire est activée côté Windows.", "Registre", "ThAccentIcon")
+                        : Info("Désactivée", "L'intégrité mémoire est désactivée côté Windows.", "Registre", "ThOk");
+                }
+            }
+            catch { }
+            return Info("Désactivée", "La clé HVCI est absente : Windows n'expose pas d'intégrité mémoire active.", "Registre", "ThOk");
+        }
+
+        private static MemoryClockInfo QueryMemoryClock()
+        {
+            try
+            {
+                using var q = new ManagementObjectSearcher(
+                    "SELECT Capacity, Speed, ConfiguredClockSpeed, SMBIOSMemoryType, PartNumber FROM Win32_PhysicalMemory");
+                int modules = 0, speed = 0, configured = 0, type = 0;
+                long total = 0;
+                var parts = new List<string>();
+                foreach (ManagementObject o in q.Get())
+                {
+                    modules++;
+                    total += Convert.ToInt64(o["Capacity"] ?? 0);
+                    if (speed == 0) int.TryParse(o["Speed"]?.ToString(), out speed);
+                    if (configured == 0) int.TryParse(o["ConfiguredClockSpeed"]?.ToString(), out configured);
+                    if (type == 0) int.TryParse(o["SMBIOSMemoryType"]?.ToString(), out type);
+                    var part = (o["PartNumber"]?.ToString() ?? "").Trim();
+                    if (part.Length > 0) parts.Add(part);
+                    o.Dispose();
+                }
+
+                if (modules > 0)
+                {
+                    var typeName = type switch { 20 => "DDR2", 24 => "DDR3", 26 => "DDR4", 34 => "DDR5", _ => "DDR" };
+                    int shown = configured > 0 ? configured : speed;
+                    string totalGb = Math.Round(total / (double)(1L << 30), 0).ToString("F0", CultureInfo.InvariantCulture) + " Go";
+                    int rated = ParseMemoryRatedMhz(parts);
+                    string baseDetail = $"{modules} module(s), {totalGb}. Valeur lue par SMBIOS.";
+                    var profile = BuildMemoryProfile(typeName, configured, speed, rated, parts);
+                    return new MemoryClockInfo
+                    {
+                        Value = shown > 0 ? $"{typeName} @ {shown} MHz" : $"{typeName} détectée",
+                        Detail = baseDetail,
+                        Source = "SMBIOS",
+                        Role = shown > 0 ? "ThAccentIcon" : "ThTextBody",
+                        ProfileValue = profile.Value,
+                        ProfileDetail = profile.Detail,
+                        ProfileRole = profile.Role,
+                    };
+                }
+            }
+            catch { }
+            return new MemoryClockInfo();
+        }
+
+        private static int ParseMemoryRatedMhz(IEnumerable<string> partNumbers)
+        {
+            foreach (string part in partNumbers.Where(p => !string.IsNullOrWhiteSpace(p)))
+            {
+                var m = Regex.Match(part, @"(?:^|[^0-9])(?:F[45]-|DDR[45]?-?)?(\d{4,5})(?:[^0-9]|$)", RegexOptions.IgnoreCase);
+                if (m.Success && int.TryParse(m.Groups[1].Value, out int mhz) && mhz >= 1600 && mhz <= 10000)
+                    return mhz;
+            }
+            return 0;
+        }
+
+        private static (string Value, string Detail, string Role) BuildMemoryProfile(
+            string typeName, int configuredMhz, int speedMhz, int ratedMhz, IReadOnlyCollection<string> partNumbers)
+        {
+            int shown = configuredMhz > 0 ? configuredMhz : speedMhz;
+            string part = partNumbers.FirstOrDefault() ?? "";
+            string moduleLine = part.Length > 0 ? $"Module : {part}" : "Module : non exposé par Windows";
+
+            if (ratedMhz > 0 && shown > 0)
+            {
+                if (shown >= ratedMhz - 100)
+                {
+                    return ("Cohérent avec le kit",
+                        $"{moduleLine}\nKit annoncé : {ratedMhz} MHz\nFréquence Windows : {shown} MHz\nLa RAM tourne à la bonne fréquence.",
+                        "ThOk");
+                }
+
+                return ("Sous la fréquence du kit",
+                    $"{moduleLine}\nKit annoncé : {ratedMhz} MHz\nFréquence Windows : {shown} MHz\nLe profil XMP/EXPO n'est probablement pas appliqué.",
+                    "ThWarn");
+            }
+
+            if (shown <= 0)
+            {
+                return ("Non vérifiable",
+                    "Windows ne donne ni fréquence configurée, ni référence exploitable du module.",
+                    "ThTextDim");
+            }
+
+            if (typeName == "DDR5")
+            {
+                return shown >= 6000
+                    ? ("Fréquence élevée détectée",
+                        $"{moduleLine}\nFréquence Windows : {shown} MHz\nLa fréquence est élevée pour de la DDR5.",
+                        "ThAccentIcon")
+                    : ("Profil rapide non prouvé",
+                        $"{moduleLine}\nFréquence Windows : {shown} MHz\nSi le kit est vendu au-dessus, le profil XMP/EXPO n'est probablement pas appliqué.",
+                        "ThWarn");
+            }
+
+            if (typeName == "DDR4")
+            {
+                return shown >= 3000
+                    ? ("Fréquence élevée détectée",
+                        $"{moduleLine}\nFréquence Windows : {shown} MHz\nLa fréquence est élevée pour de la DDR4.",
+                        "ThAccentIcon")
+                    : ("Profil rapide non prouvé",
+                        $"{moduleLine}\nFréquence Windows : {shown} MHz\nSi le kit est vendu au-dessus, le profil XMP/EXPO n'est probablement pas appliqué.",
+                        "ThWarn");
+            }
+
+            return ("Fréquence lue",
+                $"{moduleLine}\nFréquence Windows : {shown} MHz\nTweakly ne peut pas conclure proprement pour ce type mémoire.",
+                "ThTextBody");
+        }
 
 
         // ── Compatibilité PCIe / M.2 ────────────────────────────────────────────
@@ -326,10 +929,10 @@ namespace Optimisation_Tool.Pages
                 TxtCompatGpuBw.Text  = $"Bande passante : {curBw} Go/s  /  max théorique {maxBw} Go/s";
                 SetBarPct(CompatGpuBar, pct);
 
-                Color col; string status;
+                string role; string status;
                 if (g.curGen == g.maxGen && g.curWidth == g.maxWidth)
                 {
-                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThOk");
+                    role = "ThOk";
                     status = $"OPTIMAL — le GPU tourne à pleine vitesse ({pct:F0} %)";
                 }
                 else if (g.atRest)
@@ -337,7 +940,7 @@ namespace Optimisation_Tool.Pages
                     // Driver Nvidia downclock le lien PCIe quand le GPU est inactif (ASPM). Comportement
                     // NORMAL : la vraie vitesse revient en charge. On l'affiche en bleu informatif,
                     // PAS en jaune alerte — sinon on inquiète l'utilisateur pour rien.
-                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThAccentIcon");
+                    role = "ThAccentIcon";
                     status = $"GPU AU REPOS — le lien descend à {GenName[g.curGen]} x{g.curWidth} pour économiser. " +
                              $"En charge, il revient à {GenName[g.maxGen]} x{g.maxWidth}.";
                     // On gonfle la barre au max pour refléter la capacité réelle, pas le repos
@@ -345,16 +948,16 @@ namespace Optimisation_Tool.Pages
                 }
                 else if (g.curGen < g.maxGen)
                 {
-                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThWarn");
+                    role = "ThWarn";
                     status = $"SLOT LIMITÉ — actuel {GenName[g.curGen]} x{g.curWidth}, le GPU supporte {GenName[g.maxGen]} x{g.maxWidth} ({pct:F0} %)";
                 }
                 else
                 {
-                    col = Optimisation_Tool.Helpers.ThemeManager.C("ThWarn");
+                    role = "ThWarn";
                     status = $"VOIES RÉDUITES — x{g.curWidth} actuel / max x{g.maxWidth} ({pct:F0} %)";
                 }
-                CompatGpuFill.Background = new SolidColorBrush(col);
-                TxtCompatGpuStatus.Foreground = new SolidColorBrush(col);
+                CompatGpuFill.SetResourceReference(Border.BackgroundProperty, role);
+                TxtCompatGpuStatus.SetResourceReference(TextBlock.ForegroundProperty, role);
                 TxtCompatGpuStatus.Text = status;
             }
             else
@@ -362,6 +965,7 @@ namespace Optimisation_Tool.Pages
                 TxtCompatGpuGen.Text = "Données PCIe indisponibles (GPU NVIDIA + pilotes requis).";
                 TxtCompatGpuBw.Text  = "";
                 TxtCompatGpuStatus.Text = "";
+                CompatGpuFill.SetResourceReference(Border.BackgroundProperty, "ThTextDim");
                 SetBarPct(CompatGpuBar, 0);
             }
 
@@ -517,19 +1121,19 @@ namespace Optimisation_Tool.Pages
                     double bw = Math.Round(BwLane.GetValueOrDefault(spec.gen) * spec.w, 1);
                     item.Info  = $"Spec constructeur : {GenName[spec.gen]} x{spec.w}  ({bw} Go/s théorique)";
                     item.Badge = $"{GenName[spec.gen]} x{spec.w}";
-                    item.BadgeColor = FrozenBrush(spec.gen switch
+                    item.Role = spec.gen switch
                     {
-                        5 => Optimisation_Tool.Helpers.ThemeManager.C("ThWarn"),
-                        4 => Optimisation_Tool.Helpers.ThemeManager.C("ThOk"),
-                        3 => Optimisation_Tool.Helpers.ThemeManager.C("ThAccentIcon"),
-                        _ => Optimisation_Tool.Helpers.ThemeManager.C("ThTextDim"),
-                    });
+                        5 => "ThWarn",
+                        4 => "ThOk",
+                        3 => "ThAccentIcon",
+                        _ => "ThTextDim",
+                    };
                 }
                 else
                 {
                     item.Info  = "Modèle non répertorié — consulter les specs du fabricant";
                     item.Badge = "?";
-                    item.BadgeColor = FrozenBrush(Optimisation_Tool.Helpers.ThemeManager.C("ThTextDim"));
+                    item.Role = "ThTextDim";
                 }
                 list.Add(item);
             }

@@ -24,7 +24,7 @@ using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
-    // ── Convertisseur statut → couleur (déclaré ici, enregistré dans App.xaml) ─
+    // ── Convertisseur statut → couleur (conservé pour compatibilité interne) ─
 
     public sealed class StatusToColorConverter : IValueConverter
     {
@@ -62,8 +62,17 @@ namespace Optimisation_Tool.Pages
         public string Status
         {
             get => _status;
-            set { _status = value; OnPropChanged(); }
+            set { _status = value; OnPropChanged(); OnPropChanged(nameof(StatusRole)); }
         }
+
+        public string StatusRole => Status switch
+        {
+            var s when s.StartsWith("✓") => "ThOk",
+            var s when s.StartsWith("✗") => "ThCrit",
+            "En cours…"                  => "ThAccentIcon",
+            "En attente"                 => "ThTextDim",
+            _                            => "ThTextBody",
+        };
 
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropChanged([CallerMemberName] string? n = null)
@@ -172,15 +181,18 @@ namespace Optimisation_Tool.Pages
 
         private static void SetToggleActive(Button btn, bool active)
         {
-            btn.Background = active
-                ? new SolidColorBrush(Color.FromRgb(0x18, 0x70, 0xCC))
-                : ThemeManager.Brush("ThSecBtn");
-            btn.Foreground = active
-                ? new SolidColorBrush(Color.FromRgb(0xE8, 0xF0, 0xFF))
-                : ThemeManager.Brush("ThTextNav");
-            btn.BorderBrush = active
-                ? new SolidColorBrush(Color.FromRgb(0x18, 0x70, 0xCC))
-                : ThemeManager.Brush("ThBorder");
+            if (active)
+            {
+                btn.SetResourceReference(BackgroundProperty, "ThTabSel");
+                btn.Foreground = Brushes.White;
+                btn.SetResourceReference(BorderBrushProperty, "ThTabSel");
+            }
+            else
+            {
+                btn.SetResourceReference(BackgroundProperty, "ThSecBtn");
+                btn.SetResourceReference(ForegroundProperty, "ThTextNav");
+                btn.SetResourceReference(BorderBrushProperty, "ThBorder");
+            }
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -214,37 +226,35 @@ namespace Optimisation_Tool.Pages
             if (_step > stepN)
             {
                 // Terminé — vert
-                dot.Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x7A, 0x3C));
-                dot.BorderBrush = new SolidColorBrush(Color.FromRgb(0x28, 0xA0, 0x50));
+                dot.SetResourceReference(Border.BackgroundProperty, "ThOk");
+                dot.SetResourceReference(Border.BorderBrushProperty, "ThOk");
                 num.Text = "✓";
                 num.Foreground = Brushes.White;
-                lbl.Foreground = ThemeManager.Brush("ThOk");
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
             }
             else if (_step == stepN)
             {
                 // Actif — bleu
-                dot.Background = new SolidColorBrush(Color.FromRgb(0x18, 0x70, 0xCC));
-                dot.BorderBrush = new SolidColorBrush(Color.FromRgb(0x25, 0x80, 0xE0));
+                dot.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
+                dot.SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                 num.Text = stepN.ToString();
                 num.Foreground = Brushes.White;
-                lbl.Foreground = ThemeManager.Brush("ThTextTitle");
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
             }
             else
             {
                 // Futur — gris (thémé : neutre dans les deux modes)
-                dot.Background = ThemeManager.Brush("ThTrack");
-                dot.BorderBrush = ThemeManager.Brush("ThBorder");
+                dot.SetResourceReference(Border.BackgroundProperty, "ThTrack");
+                dot.SetResourceReference(Border.BorderBrushProperty, "ThBorder");
                 num.Text = stepN.ToString();
-                num.Foreground = ThemeManager.Brush("ThTextDim");
-                lbl.Foreground = ThemeManager.Brush("ThTextDim");
+                num.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
             }
         }
 
         private void UpdateStepLine(Border line, int activatesAtStep)
         {
-            line.Background = _step >= activatesAtStep
-                ? new SolidColorBrush(Color.FromRgb(0x1E, 0x7A, 0x3C))
-                : ThemeManager.Brush("ThBorder");
+            line.SetResourceReference(Border.BackgroundProperty, _step >= activatesAtStep ? "ThOk" : "ThBorder");
         }
 
         // ═════════════════════════════════════════════════════════════════════
@@ -738,14 +748,14 @@ namespace Optimisation_Tool.Pages
             if (zipOk)
             {
                 TxtZipTitle.Text = "✓  ZIP prêt !";
-                TxtZipTitle.Foreground = ThemeManager.Brush("ThOk");
+                TxtZipTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
                 TxtZipPath.Text        = _zipPath;
                 _main.Log($"Pack Réinstallation : ZIP créé → {_zipPath}");
             }
             else
             {
                 TxtZipTitle.Text = "✗  Erreur ZIP";
-                TxtZipTitle.Foreground = ThemeManager.Brush("ThCrit");
+                TxtZipTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
                 TxtZipPath.Text        = $"Fichiers dans : {_zipPath}";
             }
             _main.ClearTaskbarProgress();
@@ -782,7 +792,7 @@ namespace Optimisation_Tool.Pages
 
             _zipPath = dlg.FileName;
             TxtPickedZip.Text = dlg.FileName;
-            TxtPickedZip.Foreground = ThemeManager.Brush("ThOk");
+            TxtPickedZip.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
             TxtPickedZip.FontStyle = FontStyles.Normal;
             BtnNextR1.IsEnabled = true;
         }
@@ -851,7 +861,7 @@ namespace Optimisation_Tool.Pages
             _cts = new CancellationTokenSource();
             GoToStep(4);
             TxtInstTitle.Text = "Installation en cours…";
-            TxtInstTitle.Foreground = ThemeManager.Brush("ThTextTitle");
+            TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
             TxtInstStatus.Text = $"0 / {toInstall.Count}";
             SetBar(BarInst, 0, toInstall.Count);
             BtnCancelInst.IsEnabled = true;
@@ -903,22 +913,22 @@ namespace Optimisation_Tool.Pages
             if (_cts.Token.IsCancellationRequested)
             {
                 TxtInstTitle.Text       = $"Annulé — {done} / {toInstall.Count} traitée(s).";
-                TxtInstTitle.Foreground = ThemeManager.Brush("ThCrit");
+                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
             }
             else if (failed == 0)
             {
                 TxtInstTitle.Text       = "✓  Tout est installé !";
-                TxtInstTitle.Foreground = ThemeManager.Brush("ThOk");
+                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
             }
             else if (succeeded == 0)
             {
                 TxtInstTitle.Text       = $"✗  Échec — {failed} application(s) non installée(s).";
-                TxtInstTitle.Foreground = ThemeManager.Brush("ThCrit");
+                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
             }
             else
             {
                 TxtInstTitle.Text       = $"⚠  Partiel — {succeeded} OK, {failed} échec(s).";
-                TxtInstTitle.Foreground = ThemeManager.Brush("ThWarn");
+                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
             }
 
             TxtInstApp.Text         = "";

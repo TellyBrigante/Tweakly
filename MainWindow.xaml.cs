@@ -38,6 +38,14 @@ namespace Optimisation_Tool
         }
         private List<NavGroup> _groups = new();
 
+        private static readonly HashSet<string> EasyHiddenNavTags = new(StringComparer.Ordinal)
+        {
+            "EventLog",
+            "GameSession",
+            "CPU",
+            "Nvidia",
+        };
+
         // Settings persistants
         public static AppSettings Settings { get; private set; } = new();
 
@@ -58,6 +66,7 @@ namespace Optimisation_Tool
                 ["Nvidia"]    = new Lazy<UserControl>(() => new PageNvidia(this)),
                 ["CPU"]       = new Lazy<UserControl>(() => new PageCPU(this)),
                 ["Windows"]   = new Lazy<UserControl>(() => new PageWindows(this)),
+                ["Battery"]   = new Lazy<UserControl>(() => new PageBatteryCalibration(this)),
                 ["Reseau"]    = new Lazy<UserControl>(() => new PageReseau(this)),
                 ["Privacy"]   = new Lazy<UserControl>(() => new PagePrivacy(this)),
                 ["Apps"]      = new Lazy<UserControl>(() => new PageApps(this)),
@@ -80,7 +89,7 @@ namespace Optimisation_Tool
                 new NavGroup { Header = BtnNavMonitorGroup, Panel = MonitorGroupPanel, Label = "Surveiller",
                                Tags = new HashSet<string> { "Monitoring", "ReseauMon", "GameSession" } },
                 new NavGroup { Header = BtnNavOptimizeGroup, Panel = OptimizeGroupPanel, Label = "Optimiser",
-                               Tags = new HashSet<string> { "Windows", "CPU", "Nvidia", "Reseau", "Privacy" } },
+                               Tags = new HashSet<string> { "Windows", "Battery", "CPU", "Nvidia", "Reseau", "Privacy" } },
                 new NavGroup { Header = BtnNavRepairGroup, Panel = RepairGroupPanel, Label = "Réparer",
                                Tags = new HashSet<string> { "WinRepair", "Nettoyage", "Apps" } },
                 new NavGroup { Header = BtnNavPrepareGroup, Panel = PrepareGroupPanel, Label = "Réinstaller",
@@ -104,6 +113,7 @@ namespace Optimisation_Tool
                 Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode);
+                ApplyNavigationMode(Settings.NavigationMode);
                 // Tray déjà initialisé dans le ctor (voir commentaire là-bas). « Démarrer
                 // minimisé » ne s'applique QUE si Windows nous a lancés au boot (--startup) :
                 // un lancement manuel affiche toujours l'app. Quand il s'applique, la fenêtre
@@ -132,6 +142,19 @@ namespace Optimisation_Tool
                         // → l'utilisateur comprend que c'est verrouillé et pourquoi, pas juste « grisé ».
                         BtnNavNvidia.Content   = "🔒  Nvidia  (indisponible)";
                         BtnNavNvidia.Opacity   = 0.55;
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    bool hasBattery = Helpers.BatteryProbe.HasBattery();
+                    if (!hasBattery)
+                    {
+                        BtnNavBattery.IsEnabled = false;
+                        BtnNavBattery.ToolTip = "Aucune batterie détectée sur ce PC.";
+                        BtnNavBattery.Content = "🔒  Calibrage Batterie  (indisponible)";
+                        BtnNavBattery.Opacity = 0.55;
                     }
                 }
                 catch { }
@@ -362,7 +385,6 @@ namespace Optimisation_Tool
                 return;
             }
 
-            var accent = ThemeManager.Brush("ThAccentIcon");
             bool first = true;
             foreach (var raw in notes.Replace("\r\n", "\n").Split('\n'))
             {
@@ -374,8 +396,12 @@ namespace Optimisation_Tool
                 var t = line.TrimStart();
                 if (t.StartsWith("- ") || t.StartsWith("* ") || t.StartsWith("• "))
                 {
-                    TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run("•  ")
-                    { Foreground = accent, FontWeight = FontWeights.Bold });
+                    var bullet = new System.Windows.Documents.Run("•  ")
+                    {
+                        FontWeight = FontWeights.Bold
+                    };
+                    bullet.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "ThAccentIcon");
+                    TxtUpdNotes.Inlines.Add(bullet);
                     TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run(t.Substring(2).TrimStart()));
                 }
                 else
@@ -486,8 +512,67 @@ namespace Optimisation_Tool
         /// </summary>
         public void NavigateToTag(string tag)
         {
+            if (!IsNavTagVisible(tag)) return;
             var btn = FindNavButtonByTag(tag);
             if (btn != null) NavigateTo(btn);
+        }
+
+        public void ApplyNavigationMode(string mode)
+        {
+            Settings.NavigationMode = NormalizeNavigationMode(mode);
+            Settings.Save();
+            UpdateNavigationModeButton();
+
+            foreach (var tag in _pages.Keys)
+            {
+                var btn = FindNavButtonByTag(tag);
+                if (btn == null) continue;
+                btn.Visibility = IsNavTagVisible(tag) ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            foreach (var g in _groups)
+            {
+                bool hasVisibleChild = false;
+                foreach (var tag in g.Tags)
+                {
+                    if (IsNavTagVisible(tag))
+                    {
+                        hasVisibleChild = true;
+                        break;
+                    }
+                }
+
+                g.Header.Visibility = hasVisibleChild ? Visibility.Visible : Visibility.Collapsed;
+                g.Panel.Visibility  = hasVisibleChild && g.Expanded ? Visibility.Visible : Visibility.Collapsed;
+                if (hasVisibleChild)
+                    g.Header.Content = (g.Expanded ? "▾  " : "▸  ") + g.Label;
+            }
+
+            if (_selectedNav?.Tag is string selectedTag && !IsNavTagVisible(selectedTag))
+                NavigateTo(BtnNavAccueil);
+
+            if (MainContent.Content is PageReglages reglages)
+                reglages.SyncNavigationModeSegment();
+        }
+
+        public static bool IsAdvancedNavigationMode(string mode)
+            => string.Equals(NormalizeNavigationMode(mode), "Advanced", StringComparison.Ordinal);
+
+        private static string NormalizeNavigationMode(string? mode)
+            => string.Equals(mode, "Easy", StringComparison.OrdinalIgnoreCase) ? "Easy" : "Advanced";
+
+        private static bool IsNavTagVisible(string tag)
+            => IsAdvancedNavigationMode(Settings.NavigationMode) || !EasyHiddenNavTags.Contains(tag);
+
+        public bool IsNavigationTargetVisible(string tag) => IsNavTagVisible(tag);
+
+        private void UpdateNavigationModeButton()
+        {
+            bool advanced = IsAdvancedNavigationMode(Settings.NavigationMode);
+            if (BtnNavModeToggle.Template.FindName("NavModeLbl", BtnNavModeToggle) is System.Windows.Controls.TextBlock lbl)
+                lbl.Text = advanced ? "Mode simple" : "Mode avancé";
+            if (BtnNavModeToggle.Template.FindName("NavModeIcon", BtnNavModeToggle) is System.Windows.Controls.TextBlock ico)
+                ico.Text = advanced ? "\uE7EF" : "\uE713";
         }
 
         private Button? FindNavButtonByTag(string tag)
@@ -511,6 +596,8 @@ namespace Optimisation_Tool
         public void NavigateTo(Button btn)
         {
             if (btn.Tag is not string tag || !_pages.ContainsKey(tag)) return;
+            if (!IsNavTagVisible(tag)) return;
+            if (!btn.IsEnabled) return;
 
             // Désélectionner l'ancien bouton
             if (_selectedNav != null)
@@ -558,7 +645,7 @@ namespace Optimisation_Tool
                 btn.Background = b;
                 b.BeginAnimation(SolidColorBrush.ColorProperty,
                     new ColorAnimation(target, TimeSpan.FromMilliseconds(200)));
-                btn.Foreground = ThemeManager.Brush("ThTextTitle");
+                btn.SetResourceReference(ForegroundProperty, "ThTextTitle");
             }
             else
             {
@@ -581,6 +668,13 @@ namespace Optimisation_Tool
             => ApplyTheme(ThemeManager.Current == ThemeManager.Mode.Dark
                 ? ThemeManager.Mode.Light
                 : ThemeManager.Mode.Dark);
+
+        private void BtnNavModeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            bool advanced = IsAdvancedNavigationMode(Settings.NavigationMode);
+            ApplyNavigationMode(advanced ? "Easy" : "Advanced");
+            Log($"Réglages : mode d'utilisation {(advanced ? "Simple" : "Avancé")} activé.");
+        }
 
         /// <summary>Applique un thème et resynchronise les éléments posés en code.</summary>
         public void ApplyTheme(ThemeManager.Mode mode)
@@ -611,6 +705,9 @@ namespace Optimisation_Tool
                 var g = GroupOf(_selectedNav.Tag as string ?? "");
                 if (g != null && !g.Expanded) ApplyNavStyle(g.Header, true);
             }
+
+            if (MainContent.Content is PageMonitoring monitoring)
+                monitoring.RefreshThemeVisuals();
         }
 
         // ── Fenêtre ───────────────────────────────────────────────────────────

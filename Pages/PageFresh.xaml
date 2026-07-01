@@ -7,9 +7,9 @@
 
         <!-- Accent de barre de progression : camaïeu bleu (validé sur l'écran de MAJ) -->
         <LinearGradientBrush x:Key="FreshAccent" StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#2F6FD8" Offset="0"/>
-            <GradientStop Color="#5BA0FF" Offset="0.6"/>
-            <GradientStop Color="#8AC0FF" Offset="1"/>
+            <GradientStop Color="{DynamicResource ThBlueGradAColor}" Offset="0"/>
+            <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="0.6"/>
+            <GradientStop Color="{DynamicResource ThBlueGradCColor}" Offset="1"/>
         </LinearGradientBrush>
 
         <!-- Checkbox (accent bleu Tweakly, refonte v1.3.5) -->
@@ -31,11 +31,11 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Bd"   Property="Background"  Value="#2E5BA0FF"/>
-                                <Setter TargetName="Bd"   Property="BorderBrush" Value="#5BA0FF"/>
+                                <Setter TargetName="Bd"   Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
                                 <Setter TargetName="Tick" Property="Visibility"  Value="Visible"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5BA0FF"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -78,6 +78,24 @@
                     <Setter Property="BorderBrush"     Value="#665BA0FF"/>
                     <Setter Property="BorderThickness" Value="1"/>
                 </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FreshStatusText" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusRole}" Value="ThOk">
+                    <Setter Property="Foreground" Value="{DynamicResource ThOk}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusRole}" Value="ThCrit">
+                    <Setter Property="Foreground" Value="{DynamicResource ThCrit}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusRole}" Value="ThAccentIcon">
+                    <Setter Property="Foreground" Value="{DynamicResource ThAccentIcon}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusRole}" Value="ThTextDim">
+                    <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
 
@@ -136,7 +154,7 @@
             <!-- Étape 1 -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                 <Border x:Name="SS1Dot" Width="24" Height="24" CornerRadius="12"
-                        Background="#1870CC" BorderBrush="#2580E0" BorderThickness="2"
+                        Background="{DynamicResource ThPrimary}" BorderBrush="{DynamicResource ThPrimaryHover}" BorderThickness="2"
                         VerticalAlignment="Center">
                     <TextBlock x:Name="SS1Num" Text="1" Foreground="White"
                                FontSize="11.5" FontWeight="Bold"
@@ -200,7 +218,7 @@
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                 <Border x:Name="RS1Dot" Width="24" Height="24" CornerRadius="12"
-                        Background="#1870CC" BorderBrush="#2580E0" BorderThickness="2">
+                        Background="{DynamicResource ThPrimary}" BorderBrush="{DynamicResource ThPrimaryHover}" BorderThickness="2">
                     <TextBlock x:Name="RS1Num" Text="1" Foreground="White"
                                FontSize="11.5" FontWeight="Bold"
                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -297,7 +315,7 @@
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.Resources>
                             <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#1F5BA0FF"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="#5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="{DynamicResource ThBlueGradBColor}"/>
                             <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#145BA0FF"/>
                             <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#805BA0FF"/>
                         </DataGrid.Resources>
@@ -538,7 +556,7 @@
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.Resources>
                             <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#1F5BA0FF"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="#5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="{DynamicResource ThBlueGradBColor}"/>
                             <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#145BA0FF"/>
                             <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#805BA0FF"/>
                         </DataGrid.Resources>
@@ -584,7 +602,7 @@
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding Status}"
-                                                   Foreground="{Binding Status, Converter={StaticResource StatusColor}}"
+                                                   Style="{StaticResource FreshStatusText}"
                                                    FontFamily="{StaticResource AppFont}" FontSize="11.5"
                                                    VerticalAlignment="Center" Padding="12,0"/>
                                     </DataTemplate>

@@ -9,7 +9,7 @@ namespace Optimisation_Tool.Helpers
     /// Gère le thème clair / sombre. Les ~17 couleurs structurelles sont exposées
     /// comme brushes de ressource (clés "Th*") référencées via DynamicResource dans
     /// le XAML. Basculer le thème remplace ces ressources → toute l'UI se met à jour.
-    /// Les couleurs d'accent (bleu/vert/rouge) restent identiques dans les deux modes.
+    /// Les couleurs d'accent ont aussi une variante claire quand la version sombre devient illisible.
     /// </summary>
     public static class ThemeManager
     {
@@ -90,6 +90,25 @@ namespace Optimisation_Tool.Helpers
             ["ThTabSel"]    = ("#254E8C", "#2A62C4"),   // pastille d'onglet sélectionné (segmented) : bleu assez foncé pour du texte blanc dans les DEUX thèmes
             ["ThLadderCpu"] = ("#5BA0FF", "#2A62C4"),   // classement « ton CPU » — SOMBRE = valeur validée (dark intact), clair = bleu profond
             ["ThSteel"]     = ("#4F6EA8", "#566C98"),   // classement « voisins » bleu acier — dark validé, clair ajusté
+            ["ThPrimary"]       = ("#1870CC", "#2A62C4"),
+            ["ThPrimaryHover"]  = ("#2080E0", "#1F5FBF"),
+            ["ThPrimaryPressed"]= ("#1260AA", "#174A96"),
+            ["ThPrimaryText"]   = ("#E8F0FF", "#FFFFFF"),
+            ["ThBlueLine"]      = ("#3B82E0", "#1F4E94"),
+            ["ThBlueGradA"]     = ("#2F6FD8", "#1F4E94"),
+            ["ThBlueGradB"]     = ("#5BA0FF", "#2A62C4"),
+            ["ThBlueGradC"]     = ("#8AC0FF", "#3A73D9"),
+            ["ThRamGradA"]      = ("#9A63D8", "#6E35A7"),
+            ["ThRamGradB"]      = ("#C08CF0", "#7A3FB8"),
+            ["ThRamGradC"]      = ("#DCC0F8", "#8F58C7"),
+            ["ThNvme1"]         = ("#F5A623", "#C26A12"),
+            ["ThNvme2"]         = ("#29C7D6", "#0E7C8A"),
+            ["ThNvme3"]         = ("#FF6B9D", "#B5417A"),
+            ["ThNvme4"]         = ("#E0C84A", "#8E7400"),
+            ["ThCloseHover"]    = ("#C42B1C", "#A4261A"),
+            ["ThOverlayStrong"] = ("#CC1A1F36", "#CC313845"),
+            ["ThWhite"]         = ("#FFFFFF", "#FFFFFF"),
+            ["ThBlack"]         = ("#000000", "#000000"),
         };
 
         // Couleurs (pour les dégradés : carte de score, pilule des switches)
@@ -101,6 +120,20 @@ namespace Optimisation_Tool.Helpers
             ["ThSwOffB"]   = ("#080A1E", "#989EAA"),   // switch OFF fond bas
             ["ThSwOffBdA"] = ("#2C3462", "#868C96"),   // switch OFF bordure haut
             ["ThSwOffBdB"] = ("#07091B", "#6E7480"),   // switch OFF bordure bas
+            ["ThPrimaryColor"]        = ("#1870CC", "#2A62C4"),
+            ["ThPrimaryHoverColor"]   = ("#2080E0", "#1F5FBF"),
+            ["ThPrimaryPressedColor"] = ("#1260AA", "#174A96"),
+            ["ThBlueLineColor"]       = ("#3B82E0", "#1F4E94"),
+            ["ThBlueGradAColor"]      = ("#2F6FD8", "#1F4E94"),
+            ["ThBlueGradBColor"]      = ("#5BA0FF", "#2A62C4"),
+            ["ThBlueGradCColor"]      = ("#8AC0FF", "#3A73D9"),
+            ["ThRamGradAColor"]       = ("#9A63D8", "#6E35A7"),
+            ["ThRamGradBColor"]       = ("#C08CF0", "#7A3FB8"),
+            ["ThRamGradCColor"]       = ("#DCC0F8", "#8F58C7"),
+            ["ThOverlayStrongColor"]  = ("#CC1A1F36", "#CC313845"),
+            ["ThWhiteColor"]          = ("#FFFFFF", "#FFFFFF"),
+            ["ThBlackColor"]          = ("#000000", "#000000"),
+            ["ThBlackAlpha18Color"]   = ("#00000018", "#00000018"),
         };
 
         /// <summary>Couleur courante d'un rôle (pour le code-behind).</summary>

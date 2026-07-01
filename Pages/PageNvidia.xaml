@@ -29,8 +29,8 @@
                                 <Setter Property="Background" Value="{DynamicResource ThSelection}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="#1870CC"/>
-                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                                <Setter Property="Background" Value="{DynamicResource ThPrimary}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThWhite}"/>
                             </Trigger>
                         </Style.Triggers>
                     </Style>
@@ -104,7 +104,7 @@
                             </Trigger>
                             <Trigger Property="IsDropDownOpen" Value="True">
                                 <Setter TargetName="Arrow" Property="Text" Value="&#x25B4;"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#5BA0FF"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

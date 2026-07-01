@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.4.6";
+        public const string AppVersion = "1.4.7";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -48,6 +48,7 @@ namespace Optimisation_Tool.Pages
             ChkAutoUpdate.IsChecked    = MainWindow.Settings.AutoUpdate;
             ChkSounds.IsChecked        = MainWindow.Settings.SoundsEnabled;
             ChkCpuTemp.IsChecked       = MainWindow.Settings.CpuTempEnabled;
+            UpdateNavigationModeSegment(MainWindow.Settings.NavigationMode);
             UpdateThemeSegment(ThemeManager.Current);
             _loading = false;
         }
@@ -215,18 +216,32 @@ namespace Optimisation_Tool.Pages
             StyleSegment(BtnThemeLight, mode == ThemeManager.Mode.Light);
         }
 
+        private void UpdateNavigationModeSegment(string mode)
+        {
+            bool advanced = MainWindow.IsAdvancedNavigationMode(mode);
+            StyleSegment(BtnNavModeEasy,     !advanced);
+            StyleSegment(BtnNavModeAdvanced,  advanced);
+        }
+
+        public void SyncNavigationModeSegment()
+            => UpdateNavigationModeSegment(MainWindow.Settings.NavigationMode);
+
         private static void StyleSegment(Button btn, bool active)
         {
+            btn.ApplyTemplate();
             if (btn.Template.FindName("Bg",  btn) is not Border bg)  return;
             if (btn.Template.FindName("Lbl", btn) is not TextBlock lbl) return;
 
-            bg.Background  = active
-                ? ThemeManager.Brush("ThTabSel")
-                : new SolidColorBrush(Colors.Transparent);
-
-            lbl.Foreground = active
-                ? new SolidColorBrush(Colors.White)
-                : ThemeManager.Brush("ThTextDim");
+            if (active)
+            {
+                bg.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
+                lbl.Foreground = Brushes.White;
+            }
+            else
+            {
+                bg.Background = Brushes.Transparent;
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+            }
         }
 
         // ── Mises à jour (GitHub Releases) ──────────────────────────────────────
@@ -481,6 +496,22 @@ namespace Optimisation_Tool.Pages
         {
             _main.ApplyTheme(ThemeManager.Mode.Light);
             UpdateThemeSegment(ThemeManager.Mode.Light);
+        }
+
+        private void BtnNavModeEasy_Click(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            _main.ApplyNavigationMode("Easy");
+            UpdateNavigationModeSegment("Easy");
+            _main.Log("Réglages : mode d'utilisation Simple activé.");
+        }
+
+        private void BtnNavModeAdvanced_Click(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            _main.ApplyNavigationMode("Advanced");
+            UpdateNavigationModeSegment("Advanced");
+            _main.Log("Réglages : mode d'utilisation Avancé activé.");
         }
 
         // ── Liens & dossiers ────────────────────────────────────────────────────
