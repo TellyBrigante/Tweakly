@@ -271,9 +271,51 @@
                         <TextBlock Text="&#xE730;" Style="{StaticResource DashHdrIcon}"/>
                         <TextBlock Text="SANTÉ SYSTÈME" Style="{StaticResource DashHdrLbl}"/>
                     </StackPanel>
-                    <TextBlock x:Name="TxtHealthValue" Text="—" Style="{StaticResource DashValue}"
-                               Foreground="{DynamicResource ThTextTitle}"/>
-                    <TextBlock x:Name="TxtHealthSub" Text="Analyse…" Style="{StaticResource DashSub}"/>
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border x:Name="HealthRefreshChip"
+                                Background="{DynamicResource ThSecBtn}"
+                                BorderBrush="{DynamicResource ThBorder}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,6"
+                                Cursor="Hand"
+                                PreviewMouseLeftButtonDown="HealthRefreshChip_PreviewMouseLeftButtonDown"
+                                PreviewMouseLeftButtonUp="HealthRefreshChip_PreviewMouseLeftButtonUp">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtHealthRefreshIcon"
+                                           Text="&#xE72C;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ThAccentIcon}"
+                                           Margin="0,0,7,0"/>
+                                <TextBlock x:Name="TxtHealthRefresh"
+                                           Text="Rafraîchir"
+                                           FontFamily="{StaticResource AppFont}"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ThTextTitle}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock x:Name="TxtHealthValue"
+                                   Grid.Column="1"
+                                   Text=""
+                                   Style="{StaticResource DashValue}"
+                                   FontSize="22"
+                                   LineHeight="26"
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource ThTextTitle}"/>
+                    </Grid>
+                    <TextBlock x:Name="TxtHealthSub" Text="Analyse à la demande." Style="{StaticResource DashSub}"/>
                     <!-- Liste des 3 derniers incidents -->
                     <StackPanel x:Name="HealthList" Margin="0,12,0,0"/>
                 </StackPanel>

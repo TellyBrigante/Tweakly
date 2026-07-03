@@ -361,13 +361,13 @@ namespace Optimisation_Tool.Pages
                     step.Dot.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
                     step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                     step.Num.Text = number.ToString(CultureInfo.InvariantCulture);
-                    step.Num.Foreground = Brushes.White;
+                    step.Num.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
                     break;
                 case StepVisual.Done:
                     step.Dot.SetResourceReference(Border.BackgroundProperty, "ThOk");
                     step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThOk");
                     step.Num.Text = "\u2713";
-                    step.Num.Foreground = Brushes.White;
+                    step.Num.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
                     break;
                 case StepVisual.Skipped:
                     step.Dot.SetResourceReference(Border.BackgroundProperty, "ThTrack");
@@ -379,7 +379,7 @@ namespace Optimisation_Tool.Pages
                     step.Dot.SetResourceReference(Border.BackgroundProperty, "ThCrit");
                     step.Dot.SetResourceReference(Border.BorderBrushProperty, "ThCrit");
                     step.Num.Text = "!";
-                    step.Num.Foreground = Brushes.White;
+                    step.Num.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
                     break;
                 default:
                     step.Dot.SetResourceReference(Border.BackgroundProperty, "ThTrack");

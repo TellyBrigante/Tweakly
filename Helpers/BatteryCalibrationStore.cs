@@ -40,6 +40,7 @@ namespace Optimisation_Tool.Helpers
         public DateTime StartedAt { get; set; } = DateTime.Now;
         public BatteryCalibrationPhase Phase { get; set; } = BatteryCalibrationPhase.Idle;
         public DateTime PhaseStartedAt { get; set; } = DateTime.Now;
+        public DateTime LastSavedAt { get; set; } = DateTime.Now;
         public DateTime? CompletedAt { get; set; }
         public int TargetBalanceHours { get; set; } = 2;
         public int TargetRestHours { get; set; } = 8;
@@ -66,6 +67,8 @@ namespace Optimisation_Tool.Helpers
     public static class BatteryCalibrationStore
     {
         public static string FilePath => Path.Combine(PathLayout.Config, "tweakly-battery-calibration.json");
+        private static string BackupFilePath => FilePath + ".bak";
+        private static string TempFilePath => FilePath + ".tmp";
 
         private static readonly JsonSerializerOptions Options = new()
         {
@@ -75,29 +78,43 @@ namespace Optimisation_Tool.Helpers
 
         public static BatteryCalibrationSession Load()
         {
-            try
+            var candidates = new[]
             {
-                if (!File.Exists(FilePath)) return new BatteryCalibrationSession();
-                var json = File.ReadAllText(FilePath);
-                return JsonSerializer.Deserialize<BatteryCalibrationSession>(json, Options) ?? new BatteryCalibrationSession();
-            }
-            catch
-            {
-                return new BatteryCalibrationSession();
-            }
+                TryLoad(FilePath, "principal"),
+                TryLoad(BackupFilePath, "backup"),
+                TryLoad(TempFilePath, "temporaire")
+            }.Where(s => s != null).Cast<BatteryCalibrationSession>().ToList();
+
+            if (candidates.Count == 0) return new BatteryCalibrationSession();
+            return candidates
+                .OrderByDescending(SessionSortDate)
+                .ThenByDescending(s => s.Samples.Count)
+                .First();
         }
 
         public static void Save(BatteryCalibrationSession session)
         {
             try
             {
+                session.LastSavedAt = DateTime.Now;
                 Directory.CreateDirectory(PathLayout.Config);
-                var tmp = FilePath + ".tmp";
-                File.WriteAllText(tmp, JsonSerializer.Serialize(session, Options));
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-                File.Move(tmp, FilePath);
+                File.WriteAllText(TempFilePath, JsonSerializer.Serialize(session, Options));
+
+                if (File.Exists(FilePath))
+                {
+                    File.Replace(TempFilePath, FilePath, BackupFilePath, ignoreMetadataErrors: true);
+                }
+                else
+                {
+                    File.Move(TempFilePath, FilePath);
+                    File.Copy(FilePath, BackupFilePath, overwrite: true);
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.Write("BatteryCalibrationStore.Save ERREUR : " + ex.Message + " | path=" + FilePath);
+                TryCopyCurrentToBackup();
+            }
         }
 
         public static void Reset()
@@ -105,6 +122,43 @@ namespace Optimisation_Tool.Helpers
             try
             {
                 if (File.Exists(FilePath)) File.Delete(FilePath);
+                if (File.Exists(BackupFilePath)) File.Delete(BackupFilePath);
+                if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
+            }
+            catch { }
+        }
+
+        private static BatteryCalibrationSession? TryLoad(string path, string label)
+        {
+            try
+            {
+                if (!File.Exists(path)) return null;
+                var json = File.ReadAllText(path);
+                var session = JsonSerializer.Deserialize<BatteryCalibrationSession>(json, Options);
+                if (session == null) return null;
+                session.Samples ??= new List<BatteryCalibrationSample>();
+                return session;
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write($"BatteryCalibrationStore.Load {label} ERREUR : {ex.Message} | path={path}");
+                return null;
+            }
+        }
+
+        private static DateTime SessionSortDate(BatteryCalibrationSession session)
+        {
+            var sampleDate = session.LastSample?.Timestamp ?? DateTime.MinValue;
+            var savedDate = session.LastSavedAt == default ? DateTime.MinValue : session.LastSavedAt;
+            return savedDate > sampleDate ? savedDate : sampleDate;
+        }
+
+        private static void TryCopyCurrentToBackup()
+        {
+            try
+            {
+                if (File.Exists(FilePath))
+                    File.Copy(FilePath, BackupFilePath, overwrite: true);
             }
             catch { }
         }

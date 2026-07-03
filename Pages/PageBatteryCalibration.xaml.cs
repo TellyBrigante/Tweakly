@@ -169,16 +169,38 @@ namespace Optimisation_Tool.Pages
             var last = _session.LastSample;
             if (last == null) return;
 
+            if (_session.Phase != BatteryCalibrationPhase.Complete
+                && IsActive(last.Phase)
+                && PhaseOrder(_session.Phase) < PhaseOrder(last.Phase))
+            {
+                _session.Phase = last.Phase;
+                _session.PhaseStartedAt = last.Timestamp;
+                BatteryCalibrationStore.Save(_session);
+            }
+
             var gap = DateTime.Now - last.Timestamp;
             if (_session.Phase == BatteryCalibrationPhase.Drain && gap >= TimeSpan.FromMinutes(30))
             {
-                SetPhase(gap >= TimeSpan.FromHours(RestHours) ? BatteryCalibrationPhase.Recharge : BatteryCalibrationPhase.Rest, save: true);
+                if (gap >= TimeSpan.FromHours(RestHours))
+                    SetPhase(BatteryCalibrationPhase.Recharge, save: true);
+                else
+                    SetPhase(BatteryCalibrationPhase.Rest, save: true, phaseStartedAt: last.Timestamp);
+
                 RestorePowerPlanGuardIfNeeded();
             }
-            else if (_session.Phase == BatteryCalibrationPhase.Rest && gap >= TimeSpan.FromHours(RestHours))
+            else if (_session.Phase == BatteryCalibrationPhase.Rest)
             {
-                SetPhase(BatteryCalibrationPhase.Recharge, save: true);
-                RestorePowerPlanGuardIfNeeded();
+                if (_session.PhaseStartedAt > last.Timestamp)
+                {
+                    _session.PhaseStartedAt = last.Timestamp;
+                    BatteryCalibrationStore.Save(_session);
+                }
+
+                if (DateTime.Now - _session.PhaseStartedAt >= TimeSpan.FromHours(RestHours))
+                {
+                    SetPhase(BatteryCalibrationPhase.Recharge, save: true);
+                    RestorePowerPlanGuardIfNeeded();
+                }
             }
         }
 
@@ -252,11 +274,20 @@ namespace Optimisation_Tool.Pages
             }
         }
 
-        private void SetPhase(BatteryCalibrationPhase phase, bool save)
+        private void SetPhase(BatteryCalibrationPhase phase, bool save, DateTime? phaseStartedAt = null)
         {
-            if (_session.Phase == phase) return;
+            if (_session.Phase == phase)
+            {
+                if (phaseStartedAt.HasValue && _session.PhaseStartedAt != phaseStartedAt.Value)
+                {
+                    _session.PhaseStartedAt = phaseStartedAt.Value;
+                    if (save) BatteryCalibrationStore.Save(_session);
+                }
+                return;
+            }
+
             _session.Phase = phase;
-            _session.PhaseStartedAt = DateTime.Now;
+            _session.PhaseStartedAt = phaseStartedAt ?? DateTime.Now;
             if (phase == BatteryCalibrationPhase.Complete)
                 _session.CompletedAt = DateTime.Now;
             if (phase != BatteryCalibrationPhase.Drain)
@@ -361,9 +392,10 @@ namespace Optimisation_Tool.Pages
             TxtVoltage.Text = s.VoltageV.HasValue ? $"{s.VoltageV.Value:0.000} V" : "-- V";
             TxtPower.Text = $"Puissance : {FormatW(s.PowerW)} | Courant : {FormatA(s.CurrentA)}";
 
-            TxtSource.Text = s.Source;
-            TxtCycles.Text = $"Cycles : {FormatCycles(s.CycleCount)}";
-            TxtBatteryTemperature.Text = $"Température : {FormatC(s.TemperatureC)}";
+            TxtSource.Text = FormatSource(s.Source);
+            TxtCycles.Text = $"État : {s.StateText} | Secteur : {AcText(s.OnAcPower)}";
+            TxtBatteryTemperature.Text = ControllerCapacityLine(s);
+            TxtControllerDetail.Text = ControllerDetail(s);
         }
 
         private void UpdatePhaseUi()
@@ -808,6 +840,24 @@ namespace Optimisation_Tool.Pages
             return FormatDuration(DateTime.Now - _session.PhaseStartedAt);
         }
 
+        private static string ControllerCapacityLine(BatterySnapshot s)
+        {
+            if (!s.HasBattery) return "Capacité : -- mWh / -- mWh";
+            if (s.RemainingCapacityMWh.HasValue || s.FullChargeCapacityMWh.HasValue)
+                return $"Capacité : {FormatMWh(s.RemainingCapacityMWh)} / {FormatMWh(s.FullChargeCapacityMWh)}";
+            return $"Charge : {FormatPercent(s.ChargePercent)} | Santé : {FormatHealth(s.HealthPercent)}";
+        }
+
+        private static string ControllerDetail(BatterySnapshot s)
+        {
+            if (!s.HasBattery) return "Tension : -- V | Puissance : -- W";
+            if (s.CycleCount.HasValue || s.TemperatureC.HasValue)
+                return $"Cycles : {FormatCycles(s.CycleCount)} | Température : {FormatC(s.TemperatureC)}";
+            if (s.VoltageV.HasValue || s.PowerW.HasValue)
+                return $"Tension : {FormatV(s.VoltageV)} | Puissance : {FormatW(s.PowerW)}";
+            return $"Charge : {FormatPercent(s.ChargePercent)} | Courant : {FormatA(s.CurrentA)}";
+        }
+
         private static string FormatDuration(TimeSpan t)
         {
             if (t.TotalHours >= 1) return $"{(int)t.TotalHours} h {t.Minutes:00} min";
@@ -822,6 +872,10 @@ namespace Optimisation_Tool.Pages
         private static string FormatMWh(int? value) => value.HasValue ? $"{value.Value:N0} mWh" : "-- mWh";
         private static string FormatCycles(int? value) => value.HasValue ? $"{value.Value} cycle(s)" : "-- cycle(s)";
         private static string FormatHealth(double? value) => value.HasValue ? $"{value.Value:0} %" : "-- %";
+        private static string FormatSource(string value)
+            => string.IsNullOrWhiteSpace(value)
+                ? "Windows"
+                : value.Replace("Battery API", "API").Replace("ACPI WMI", "ACPI").Replace("Win32_Battery", "Win32");
         private static string AcText(bool? onAc) => onAc == true ? "branché" : onAc == false ? "batterie" : "inconnu";
         private static string YesNo(bool value) => value ? "oui" : "non";
         private static string FirstNonEmpty(params string[] values) => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "";

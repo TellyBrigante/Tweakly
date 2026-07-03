@@ -85,40 +85,46 @@ namespace Optimisation_Tool.Helpers
 
         public static BatterySnapshot Read()
         {
+            var acpiWmi = ReadAcpiWmi();
+            var win32Wmi = ReadWmi();
+
             foreach (var devicePath in EnumerateBatteryDevicePaths())
             {
                 var low = ReadBatteryDevice(devicePath);
                 if (low.HasBattery)
-                    return MergeWithWmi(low);
+                    return MergeSnapshots(low, acpiWmi, win32Wmi);
             }
 
-            return ReadWmi();
+            return MergeSnapshots(acpiWmi, win32Wmi);
         }
 
-        private static BatterySnapshot MergeWithWmi(BatterySnapshot low)
+        private static BatterySnapshot MergeSnapshots(params BatterySnapshot[] snapshots)
         {
-            var wmi = ReadWmi();
-            if (!wmi.HasBattery) return low;
+            var usable = snapshots.Where(s => s.HasBattery).ToArray();
+            if (usable.Length == 0) return new BatterySnapshot();
 
             return new BatterySnapshot
             {
                 HasBattery = true,
-                Source = "Battery API + WMI",
-                Name = FirstNonEmpty(low.Name, wmi.Name),
-                Manufacturer = FirstNonEmpty(low.Manufacturer, wmi.Manufacturer),
-                Chemistry = FirstNonEmpty(low.Chemistry, wmi.Chemistry),
-                ChargePercent = low.ChargePercent ?? wmi.ChargePercent,
-                RemainingCapacityMWh = low.RemainingCapacityMWh ?? wmi.RemainingCapacityMWh,
-                FullChargeCapacityMWh = low.FullChargeCapacityMWh ?? wmi.FullChargeCapacityMWh,
-                DesignCapacityMWh = low.DesignCapacityMWh ?? wmi.DesignCapacityMWh,
-                CycleCount = low.CycleCount ?? wmi.CycleCount,
-                VoltageMv = low.VoltageMv,
-                RateMw = low.RateMw ?? wmi.RateMw,
-                TemperatureC = low.TemperatureC ?? wmi.TemperatureC,
-                OnAcPower = low.OnAcPower ?? wmi.OnAcPower,
-                IsCharging = low.IsCharging ?? wmi.IsCharging,
-                IsDischarging = low.IsDischarging ?? wmi.IsDischarging,
-                IsCritical = low.IsCritical ?? wmi.IsCritical,
+                Source = string.Join(" + ", usable
+                    .Select(s => s.Source)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)),
+                Name = FirstNonEmpty(usable.Select(s => s.Name).ToArray()),
+                Manufacturer = FirstNonEmpty(usable.Select(s => s.Manufacturer).ToArray()),
+                Chemistry = FirstNonEmpty(usable.Select(s => s.Chemistry).ToArray()),
+                ChargePercent = FirstNullable(usable.Select(s => s.ChargePercent)),
+                RemainingCapacityMWh = FirstNullable(usable.Select(s => s.RemainingCapacityMWh)),
+                FullChargeCapacityMWh = FirstNullable(usable.Select(s => s.FullChargeCapacityMWh)),
+                DesignCapacityMWh = FirstNullable(usable.Select(s => s.DesignCapacityMWh)),
+                CycleCount = FirstNullable(usable.Select(s => s.CycleCount)),
+                VoltageMv = FirstNullable(usable.Select(s => s.VoltageMv)),
+                RateMw = FirstNullable(usable.Select(s => s.RateMw)),
+                TemperatureC = FirstNullable(usable.Select(s => s.TemperatureC)),
+                OnAcPower = FirstNullable(usable.Select(s => s.OnAcPower)),
+                IsCharging = FirstNullable(usable.Select(s => s.IsCharging)),
+                IsDischarging = FirstNullable(usable.Select(s => s.IsDischarging)),
+                IsCritical = FirstNullable(usable.Select(s => s.IsCritical)),
             };
         }
 
@@ -190,7 +196,7 @@ namespace Optimisation_Tool.Helpers
                 return new BatterySnapshot
                 {
                     HasBattery = true,
-                    Source = "WMI",
+                    Source = "Win32_Battery",
                     Name = b["Name"]?.ToString() ?? b["DeviceID"]?.ToString() ?? "Batterie",
                     Manufacturer = b["Manufacturer"]?.ToString() ?? "",
                     Chemistry = BatteryChemistryName(ToInt(b["Chemistry"])),
@@ -202,6 +208,61 @@ namespace Optimisation_Tool.Helpers
                     IsCharging = statusCode is 6 or 7 or 8 or 9,
                     IsDischarging = statusCode == 1,
                     IsCritical = statusCode == 4,
+                };
+            }
+            catch
+            {
+                return new BatterySnapshot();
+            }
+        }
+
+        private static BatterySnapshot ReadAcpiWmi()
+        {
+            try
+            {
+                var status = ReadFirstRootWmiObject("BatteryStatus");
+                var full = ReadFirstRootWmiObject("BatteryFullChargedCapacity");
+                var staticData = ReadFirstRootWmiObject("BatteryStaticData");
+                var cycles = ReadFirstRootWmiObject("BatteryCycleCount");
+                var temp = ReadFirstRootWmiObject("BatteryTemperature");
+
+                if (status.Count == 0 && full.Count == 0 && staticData.Count == 0 && cycles.Count == 0 && temp.Count == 0)
+                    return new BatterySnapshot();
+
+                int? remaining = Positive(ToInt(Value(status, "RemainingCapacity")));
+                int? fullCapacity = Positive(ToInt(Value(full, "FullChargedCapacity")));
+                int? design = Positive(ToInt(Value(staticData, "DesignedCapacity")));
+                int? voltage = Positive(ToInt(Value(status, "Voltage")));
+                int? rate = ToInt(Value(status, "Rate"));
+                if (rate == BATTERY_UNKNOWN_RATE) rate = null;
+                int? cycleCount = Positive(ToInt(Value(cycles, "CycleCount")));
+                int? tempTenthsKelvin = Positive(ToInt(Value(temp, "Temperature")));
+                double? temperatureC = tempTenthsKelvin.HasValue
+                    ? Math.Round(tempTenthsKelvin.Value / 10.0 - 273.15, 1)
+                    : null;
+
+                int? percent = remaining.HasValue && fullCapacity is > 0
+                    ? Math.Clamp((int)Math.Round(remaining.Value * 100.0 / fullCapacity.Value), 0, 100)
+                    : null;
+
+                return new BatterySnapshot
+                {
+                    HasBattery = true,
+                    Source = "ACPI WMI",
+                    Name = FirstNonEmpty(ToText(Value(staticData, "DeviceName")), ToText(Value(staticData, "Tag")), "Batterie"),
+                    Manufacturer = ToText(Value(staticData, "ManufactureName")),
+                    ChargePercent = percent,
+                    RemainingCapacityMWh = remaining,
+                    FullChargeCapacityMWh = fullCapacity,
+                    DesignCapacityMWh = design,
+                    CycleCount = cycleCount,
+                    VoltageMv = voltage,
+                    RateMw = rate,
+                    TemperatureC = temperatureC,
+                    OnAcPower = ToBool(Value(status, "PowerOnline")),
+                    IsCharging = ToBool(Value(status, "Charging")),
+                    IsDischarging = ToBool(Value(status, "Discharging")),
+                    IsCritical = ToBool(Value(status, "Critical"))
                 };
             }
             catch
@@ -362,6 +423,42 @@ namespace Optimisation_Tool.Helpers
         private static bool Known(uint value) => value != 0 && value != BATTERY_UNKNOWN_CAPACITY;
         private static bool KnownVoltage(uint value) => value != 0 && value != BATTERY_UNKNOWN_VOLTAGE;
 
+        private static Dictionary<string, object?> ReadFirstRootWmiObject(string className)
+        {
+            try
+            {
+                using var searcher = new ManagementObjectSearcher(@"root\wmi", $"SELECT * FROM {className}");
+                using var results = searcher.Get();
+                var obj = results.Cast<ManagementObject>().FirstOrDefault();
+                if (obj == null) return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+                try
+                {
+                    var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    foreach (PropertyData property in obj.Properties)
+                        values[property.Name] = property.Value;
+                    return values;
+                }
+                finally
+                {
+                    obj.Dispose();
+                }
+            }
+            catch
+            {
+                return new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        private static object? Value(Dictionary<string, object?> values, string name)
+            => values.TryGetValue(name, out var value) ? value : null;
+
+        private static int? Positive(int? value)
+            => value is > 0 ? value : null;
+
+        private static T? FirstNullable<T>(IEnumerable<T?> values) where T : struct
+            => values.FirstOrDefault(v => v.HasValue);
+
         private static int? ToInt(object? value)
         {
             if (value == null) return null;
@@ -369,6 +466,20 @@ namespace Optimisation_Tool.Helpers
                 return i;
             return null;
         }
+
+        private static bool? ToBool(object? value)
+        {
+            if (value is bool b) return b;
+            if (value == null) return null;
+            if (bool.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), out var parsedBool))
+                return parsedBool;
+            if (int.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedInt))
+                return parsedInt != 0;
+            return null;
+        }
+
+        private static string ToText(object? value)
+            => value?.ToString()?.Trim() ?? "";
 
         private static string FirstNonEmpty(params string[] values)
             => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))?.Trim() ?? "";

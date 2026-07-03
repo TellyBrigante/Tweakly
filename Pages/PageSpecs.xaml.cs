@@ -110,13 +110,20 @@ namespace Optimisation_Tool.Pages
             if (active)
             {
                 bg.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
-                lbl.Foreground = Brushes.White;
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
             }
             else
             {
                 bg.Background = Brushes.Transparent;
                 lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
             }
+        }
+
+        public void RefreshThemeVisuals()
+        {
+            StyleTab(BtnTabSpecs, PanelSpecs.Visibility == Visibility.Visible);
+            StyleTab(BtnTabCompat, PanelCompat.Visibility == Visibility.Visible);
+            StyleTab(BtnTabBios, PanelBios.Visibility == Visibility.Visible);
         }
 
         // ── Chargement ────────────────────────────────────────────────────────
@@ -188,8 +195,8 @@ namespace Optimisation_Tool.Pages
                     };
                     foreach (var idx in pattern.Where(i => i < sticks.Length).Take(Math.Min(used, 4)))
                     {
-                        sticks[idx].Background  = new SolidColorBrush(Color.FromArgb(0x55, 0x5B, 0xA0, 0xFF));
-                        sticks[idx].BorderBrush = new SolidColorBrush(Color.FromRgb(0x5B, 0xA0, 0xFF));
+                        sticks[idx].SetResourceReference(Border.BackgroundProperty, "ThInfoTint");
+                        sticks[idx].SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                     }
                 }
             }

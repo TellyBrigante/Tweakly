@@ -24,6 +24,7 @@ namespace Optimisation_Tool
 
         private readonly List<double> _pingHist = new();   // -1 = perte
         private const int PingWindow = 20;
+        private string _verdictRole = "ThTextDim";
 
         public MiniMonitor(MainWindow main)
         {
@@ -107,17 +108,23 @@ namespace Optimisation_Tool
         // Mêmes seuils que la page Monitoring Réseau.
         private void UpdateVerdict(double avg, double jitter, double loss, int validCount)
         {
-            if (validCount == 0)                 SetVerdict("HORS LIGNE", 0xE0, 0x55, 0x55);
-            else if (loss > 5)                   SetVerdict("INSTABLE",   0xE0, 0x55, 0x55);
-            else if (avg >= 150 || jitter >= 30) SetVerdict("MOYEN",      0xF5, 0xC2, 0x4A);
-            else if (avg >= 80  || jitter >= 15) SetVerdict("BON",        0x5B, 0xA0, 0xFF);
-            else                                 SetVerdict("EXCELLENT",  0x2E, 0xC4, 0x6A);
+            if (validCount == 0)                 SetVerdict("HORS LIGNE", "ThCrit");
+            else if (loss > 5)                   SetVerdict("INSTABLE",   "ThCrit");
+            else if (avg >= 150 || jitter >= 30) SetVerdict("MOYEN",      "ThWarn");
+            else if (avg >= 80  || jitter >= 15) SetVerdict("BON",        "ThAccentIcon");
+            else                                 SetVerdict("EXCELLENT",  "ThOk");
         }
 
-        private void SetVerdict(string txt, byte r, byte g, byte b)
+        private void SetVerdict(string txt, string role)
         {
-            TxtVerdict.Text        = txt;
-            PillVerdict.Background = new SolidColorBrush(Color.FromRgb(r, g, b));
+            TxtVerdict.Text = txt;
+            _verdictRole = role;
+            RefreshThemeVisuals();
+        }
+
+        public void RefreshThemeVisuals()
+        {
+            PillVerdict.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, _verdictRole);
         }
 
         private static double ComputeJitter(List<double> data)

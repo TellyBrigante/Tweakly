@@ -112,8 +112,9 @@ namespace Optimisation_Tool
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;
                 Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
-                ApplyTheme(mode);
-                ApplyNavigationMode(Settings.NavigationMode);
+                ApplyTheme(mode, persist: false);
+                ApplyNavigationMode(Settings.NavigationMode, persist: false);
+                try { FitToWorkArea(); } catch { }
                 // Tray déjà initialisé dans le ctor (voir commentaire là-bas). « Démarrer
                 // minimisé » ne s'applique QUE si Windows nous a lancés au boot (--startup) :
                 // un lancement manuel affiche toujours l'app. Quand il s'applique, la fenêtre
@@ -135,14 +136,7 @@ namespace Optimisation_Tool
                 try
                 {
                     if (Helpers.SystemMonitor.ShouldLockNvidiaTab())
-                    {
-                        BtnNavNvidia.IsEnabled = false;
-                        BtnNavNvidia.ToolTip   = "Aucune carte graphique Nvidia détectée sur ce PC.";
-                        // Indicateur visuel explicite : préfixe « 🔒 » + suffixe « (indisponible) »
-                        // → l'utilisateur comprend que c'est verrouillé et pourquoi, pas juste « grisé ».
-                        BtnNavNvidia.Content   = "🔒  Nvidia  (indisponible)";
-                        BtnNavNvidia.Opacity   = 0.55;
-                    }
+                        LockNavButton(BtnNavNvidia, "Aucune carte graphique Nvidia détectée sur ce PC.");
                 }
                 catch { }
 
@@ -150,24 +144,12 @@ namespace Optimisation_Tool
                 {
                     bool hasBattery = Helpers.BatteryProbe.HasBattery();
                     if (!hasBattery)
-                    {
-                        BtnNavBattery.IsEnabled = false;
-                        BtnNavBattery.ToolTip = "Aucune batterie détectée sur ce PC.";
-                        BtnNavBattery.Content = "🔒  Calibrage Batterie  (indisponible)";
-                        BtnNavBattery.Opacity = 0.55;
-                    }
+                        LockNavButton(BtnNavBattery, "Aucune batterie détectée sur ce PC.");
                 }
                 catch { }
 
                 // Démarrage : page d'accueil = Dashboard (v1.4.3)
                 NavigateTo(BtnNavAccueil);
-
-                // PRÉCHAUFFAGE du monitoring (v1.3.5) : un Collect() léger en arrière-plan paie
-                // les démarrages à froid utiles à l'accueil (WMI CPU, LibreHardwareMonitor, NvAPI)
-                // pendant que l'utilisateur est sur la page d'accueil → quand il ouvre
-                // Monitoring Système / le mode mini, les valeurs tombent dès le 1er tick.
-                if (!App.ShouldStartMinimized(Settings.StartMinimized))
-                    _ = Task.Run(() => { try { Helpers.SystemMonitor.Collect(Helpers.MonCollectParts.Light); } catch { } });
 
                 // Forcer la fenêtre au PREMIER PLAN (pas seulement Topmost flicker, qui ne
                 // suffit pas si une autre app détient le foreground). On utilise
@@ -517,10 +499,19 @@ namespace Optimisation_Tool
             if (btn != null) NavigateTo(btn);
         }
 
-        public void ApplyNavigationMode(string mode)
+        private static void LockNavButton(Button button, string tooltip)
+        {
+            button.IsEnabled = false;
+            button.ToolTip = tooltip;
+            ToolTipService.SetShowOnDisabled(button, true);
+            button.Opacity = 0.55;
+        }
+
+        public void ApplyNavigationMode(string mode, bool persist = true)
         {
             Settings.NavigationMode = NormalizeNavigationMode(mode);
-            Settings.Save();
+            if (persist)
+                Settings.Save();
             UpdateNavigationModeButton();
 
             foreach (var tag in _pages.Keys)
@@ -677,13 +668,14 @@ namespace Optimisation_Tool
         }
 
         /// <summary>Applique un thème et resynchronise les éléments posés en code.</summary>
-        public void ApplyTheme(ThemeManager.Mode mode)
+        public void ApplyTheme(ThemeManager.Mode mode, bool persist = true)
         {
             ThemeManager.Apply(mode);
 
             // Persister le choix
             Settings.Theme = mode == ThemeManager.Mode.Dark ? "Dark" : "Light";
-            Settings.Save();
+            if (persist)
+                Settings.Save();
 
             // Le bouton affiche le mode CIBLE (l'inverse du mode courant)
             // Mode sombre actif → bouton "Mode clair" + soleil. Mode clair → "Mode sombre" + lune.
@@ -691,9 +683,8 @@ namespace Optimisation_Tool
             if (BtnTheme.Template.FindName("ThemeIcon", BtnTheme) is System.Windows.Controls.TextBlock ico)
             {
                 ico.Text = goingToLight ? "\uE706" : "\uE708";   // E706 soleil, E708 lune (MDL2)
-                ico.Foreground = new SolidColorBrush(goingToLight
-                    ? Color.FromRgb(0xF5, 0xC2, 0x4A)            // soleil doré
-                    : Color.FromRgb(0x3F, 0x4E, 0x96));          // lune indigo FONCE — l'ancien #AEB8E8 pale etait invisible sur le fond clair
+                ico.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty,
+                    goingToLight ? "ThWarn" : "ThAccentIcon");
             }
             if (BtnTheme.Template.FindName("ThemeLbl", BtnTheme) is System.Windows.Controls.TextBlock lbl)
                 lbl.Text = goingToLight ? "Mode clair" : "Mode sombre";
@@ -708,9 +699,38 @@ namespace Optimisation_Tool
 
             if (MainContent.Content is PageMonitoring monitoring)
                 monitoring.RefreshThemeVisuals();
+
+            if (MainContent.Content is PageSpecs specs)
+                specs.RefreshThemeVisuals();
+
+            _mini?.RefreshThemeVisuals();
         }
 
         // ── Fenêtre ───────────────────────────────────────────────────────────
+
+        private void FitToWorkArea()
+        {
+            if (WindowState != WindowState.Normal) return;
+
+            var work = SystemParameters.WorkArea;
+            if (work.Width <= 0 || work.Height <= 0) return;
+
+            const double desiredWidth = 1180;
+            const double desiredHeight = 820;
+
+            double minWidth = Math.Min(940, Math.Max(820, work.Width - 40));
+            double minHeight = Math.Min(620, Math.Max(540, work.Height - 40));
+            MinWidth = minWidth;
+            MinHeight = minHeight;
+
+            double width = Math.Min(desiredWidth, Math.Max(minWidth, work.Width * 0.90));
+            double height = Math.Min(desiredHeight, Math.Max(minHeight, work.Height * 0.88));
+
+            Width = width;
+            Height = height;
+            Left = work.Left + Math.Max(0, (work.Width - width) / 2);
+            Top = work.Top + Math.Max(0, (work.Height - height) / 2);
+        }
 
         private void DragBar_MouseDown(object sender, MouseButtonEventArgs e)
         {

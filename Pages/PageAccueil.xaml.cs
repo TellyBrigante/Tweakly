@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Optimisation_Tool.Helpers;
@@ -18,7 +19,7 @@ namespace Optimisation_Tool.Pages
     ///
     /// Chargement INTELLIGENT :
     ///   • Score / Stockage / Dernière session : lecture instantanée locale (JSON / WMI).
-    ///   • Santé système : scan EventLog en arrière-plan, la tuile se remplit quand prêt.
+    ///   • Santé système : scan EventLog uniquement sur demande, pour garder l'accueil léger.
     ///   • Matériel : SystemMonitor.Collect léger sur un timer 5 s.
     ///   • Réseau : NetworkMonitor.CollectAsync en arrière-plan.
     ///
@@ -33,6 +34,7 @@ namespace Optimisation_Tool.Pages
         private bool _hwBusy;
         private bool _loaded;
         private bool _heavyLoaded;
+        private bool _healthBusy;
 
         // ── Timeline « Activité récente » (bench, sessions jeu, incidents) ─────
         // Agrégée à partir de plusieurs sources, triée chronologiquement, re-rendue à
@@ -65,6 +67,7 @@ namespace Optimisation_Tool.Pages
                 LoadGame();
                 LoadStorage();
                 LoadActivity();   // benchmarks + sessions jeu (lecture instantanée locale)
+                SetHealthIdle();
                 UpdateHeader();
             }
             StartDeferredLoads();
@@ -78,7 +81,6 @@ namespace Optimisation_Tool.Pages
         {
             if (_heavyLoaded || !_main.IsLiveSamplingAllowed()) return;
             _heavyLoaded = true;
-            _ = LoadHealthAsync();   // scan EventLog : uniquement quand le dashboard est vraiment consulté
             _ = LoadNetworkAsync();
         }
 
@@ -167,6 +169,66 @@ namespace Optimisation_Tool.Pages
         // ═══════════════════════════════════════════════════════════════════════
         //  Tuile 2 : Santé système + 3 derniers incidents
         // ═══════════════════════════════════════════════════════════════════════
+
+        private void SetHealthIdle()
+        {
+            HeaderBadge.Visibility = Visibility.Collapsed;
+
+            TxtHealthValue.Text = "";
+            TxtHealthValue.SetResourceReference(ForegroundProperty, "ThTextTitle");
+            TxtHealthSub.Text = "Analyse à la demande.";
+            SetHealthRefreshState(false);
+
+            HealthList.Children.Clear();
+            var row = new TextBlock
+            {
+                Text = "Rafraîchis cette tuile pour afficher un résumé.",
+                FontFamily = (FontFamily)FindResource("AppFont"),
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 4),
+            };
+            row.SetResourceReference(ForegroundProperty, "ThTextDim");
+            HealthList.Children.Add(row);
+        }
+
+        private void SetHealthRefreshState(bool busy)
+        {
+            TxtHealthRefresh.Text = busy ? "Analyse..." : "Rafraîchir";
+            TxtHealthRefreshIcon.Text = busy ? "\uE895" : "\uE72C";
+            HealthRefreshChip.Opacity = busy ? 0.65 : 1.0;
+            HealthRefreshChip.Cursor = busy ? Cursors.Arrow : Cursors.Hand;
+        }
+
+        private void HealthRefreshChip_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private async void HealthRefreshChip_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            await RefreshHealthAsync();
+        }
+
+        private async Task RefreshHealthAsync()
+        {
+            if (_healthBusy) return;
+            _healthBusy = true;
+            try
+            {
+                SetHealthRefreshState(true);
+                TxtHealthValue.Text = "";
+                TxtHealthSub.Text = "Analyse des journaux Windows...";
+                HealthList.Children.Clear();
+                await LoadHealthAsync();
+            }
+            finally
+            {
+                _healthBusy = false;
+                SetHealthRefreshState(false);
+            }
+        }
 
         private async Task LoadHealthAsync()
         {

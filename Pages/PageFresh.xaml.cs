@@ -47,7 +47,7 @@ namespace Optimisation_Tool.Pages
 
     public sealed class FreshAppItem : INotifyPropertyChanged
     {
-        private bool   _sel    = true;
+        private bool   _sel    = false;
         private string _status = "—";
 
         public string Name     { get; set; } = "";
@@ -184,7 +184,7 @@ namespace Optimisation_Tool.Pages
             if (active)
             {
                 btn.SetResourceReference(BackgroundProperty, "ThTabSel");
-                btn.Foreground = Brushes.White;
+                btn.SetResourceReference(ForegroundProperty, "ThWhite");
                 btn.SetResourceReference(BorderBrushProperty, "ThTabSel");
             }
             else
@@ -229,7 +229,7 @@ namespace Optimisation_Tool.Pages
                 dot.SetResourceReference(Border.BackgroundProperty, "ThOk");
                 dot.SetResourceReference(Border.BorderBrushProperty, "ThOk");
                 num.Text = "✓";
-                num.Foreground = Brushes.White;
+                num.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
                 lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
             }
             else if (_step == stepN)
@@ -238,7 +238,7 @@ namespace Optimisation_Tool.Pages
                 dot.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
                 dot.SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                 num.Text = stepN.ToString();
-                num.Foreground = Brushes.White;
+                num.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
                 lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
             }
             else
@@ -343,7 +343,7 @@ namespace Optimisation_Tool.Pages
                     Name       = reg.Name,
                     WingetId   = hasId ? entry.id  : "",
                     Version    = hasId && entry.ver.Length > 0 ? entry.ver : reg.Version,
-                    IsSelected = hasId,
+                    IsSelected = false,
                     Status     = hasId ? "—" : "— Sans Winget ID",
                 };
                 _saveItems.Add(item);
@@ -831,7 +831,7 @@ namespace Optimisation_Tool.Pages
                         Name       = a.Name,
                         WingetId   = a.WingetId,
                         Version    = a.Version,
-                        IsSelected = true,
+                        IsSelected = false,
                         Status     = "—",
                     });
                 }

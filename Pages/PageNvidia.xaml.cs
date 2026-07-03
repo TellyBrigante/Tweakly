@@ -74,7 +74,7 @@ namespace Optimisation_Tool.Pages
             if (active)
             {
                 bg.SetResourceReference(Border.BackgroundProperty, "ThTabSel");
-                lbl.Foreground = Brushes.White;
+                lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThWhite");
             }
             else
             {
