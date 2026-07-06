@@ -64,12 +64,11 @@ namespace Optimisation_Tool.Pages
             ProtocolPanel.Children.Clear();
             AddProtocolLine("Équilibrage 2 h continu", !_session.BalanceInterrupted, _session.BalanceInterrupted ? "Secteur retiré au moins une fois." : "Aucune coupure secteur notée.");
             AddProtocolLine("Recharge finale continue", !_session.RechargeInterrupted, _session.RechargeInterrupted ? "Secteur retiré avant 100 %." : "Aucune coupure secteur notée.");
-            AddProtocolLine("Action critique Windows restaurée", !_session.PowerPlanGuardApplied, _session.PowerPlanGuardApplied ? "Restauration encore en attente." : "Plan d'alimentation revenu à l'état initial.");
             AddProtocolLine("Dernier drain connu", drainLast != null, drainLast == null ? "Aucun point de drain." : $"{FormatPercent(drainLast.ChargePercent)} à {drainLast.Timestamp:HH:mm:ss}.");
             AddProtocolLine("Durée totale mesurée", last != null && first != null, first != null && last != null ? FormatDuration(last.Timestamp - first.Timestamp) : "--");
 
             if (!string.IsNullOrWhiteSpace(_session.PowerPlanGuardError))
-                AddProtocolLine("Powercfg", false, _session.PowerPlanGuardError);
+                AddProtocolLine("Réglage batterie Windows", false, _session.PowerPlanGuardError);
         }
 
         private void AddProtocolLine(string title, bool ok, string detail)
@@ -122,15 +121,7 @@ namespace Optimisation_Tool.Pages
             })
             {
                 var points = _session.Samples.Where(s => s.Phase == phase).ToList();
-                if (points.Count == 0)
-                {
-                    AddKeyRow(PhaseTitle(phase), "aucun point", null);
-                    continue;
-                }
-
-                AddKeyRow(PhaseTitle(phase), "début", points[0]);
-                if (points.Count > 1)
-                    AddKeyRow(PhaseTitle(phase), "fin", points[^1]);
+                AddKeyPhaseRow(PhaseTitle(phase), points);
             }
         }
 
@@ -138,44 +129,57 @@ namespace Optimisation_Tool.Pages
         {
             var row = CreateKeyRow();
             AddCell(row, "Phase", true);
-            AddCell(row, "Point", true);
             AddCell(row, "Heure", true);
             AddCell(row, "%", true);
-            AddCell(row, "V", true);
-            AddCell(row, "W", true);
-            AddCell(row, "°C", true);
-            AddCell(row, "mWh", true);
+            AddCell(row, "V fin", true);
+            AddCell(row, "W fin", true);
+            AddCell(row, "°C fin", true);
+            AddCell(row, "mWh fin", true);
             AddCell(row, "Secteur", true);
             KeyRowsPanel.Children.Add(row);
         }
 
-        private void AddKeyRow(string phase, string point, BatteryCalibrationSample? sample)
+        private void AddKeyPhaseRow(string phase, List<BatteryCalibrationSample> points)
         {
             var row = CreateKeyRow();
             AddCell(row, phase, false);
-            AddCell(row, point, false);
-            AddCell(row, sample?.Timestamp.ToString("HH:mm:ss") ?? "--", false);
-            AddCell(row, FormatPercent(sample?.ChargePercent), false);
-            AddCell(row, FormatV(sample?.VoltageV), false);
-            AddCell(row, FormatW(sample?.PowerW), false);
-            AddCell(row, FormatC(sample?.TemperatureC), false);
-            AddCell(row, FormatMWh(sample?.RemainingCapacityMWh), false);
-            AddCell(row, AcText(sample?.OnAcPower), false);
+
+            if (points.Count == 0)
+            {
+                AddCell(row, "aucun point", false);
+                AddCell(row, "-- %", false);
+                AddCell(row, "-- V", false);
+                AddCell(row, "-- W", false);
+                AddCell(row, "-- °C", false);
+                AddCell(row, "-- mWh", false);
+                AddCell(row, "--", false);
+                KeyRowsPanel.Children.Add(row);
+                return;
+            }
+
+            var first = points[0];
+            var last = points[^1];
+            AddCell(row, FormatTimeRange(first, last), false);
+            AddCell(row, FormatPercentRange(first.ChargePercent, last.ChargePercent), false);
+            AddCell(row, FormatV(last.VoltageV), false);
+            AddCell(row, FormatW(last.PowerW), false);
+            AddCell(row, FormatC(last.TemperatureC), false);
+            AddCell(row, FormatMWh(last.RemainingCapacityMWh), false);
+            AddCell(row, FormatAcRange(first.OnAcPower, last.OnAcPower), false);
             KeyRowsPanel.Children.Add(row);
         }
 
         private Grid CreateKeyRow()
         {
             var row = new Grid { Margin = new Thickness(0, 0, 0, 5) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.25, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.35, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.2, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.85, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.85, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.75, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.9, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.55, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.75, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.75, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.75, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.9, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.9, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.8, GridUnitType.Star) });
             return row;
         }
 
@@ -188,7 +192,8 @@ namespace Optimisation_Tool.Pages
                 FontFamily = AppFont(),
                 FontSize = header ? 11 : 10.5,
                 FontWeight = header ? FontWeights.SemiBold : FontWeights.Normal,
-                TextWrapping = TextWrapping.Wrap,
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(0, 0, 8, 0)
             };
             Grid.SetColumn(tb, row.Children.Count);
@@ -355,6 +360,26 @@ namespace Optimisation_Tool.Pages
             BatteryCalibrationPhase.Complete => "Calibrage terminé",
             _ => "Prêt"
         };
+
+        private static string FormatTimeRange(BatteryCalibrationSample first, BatteryCalibrationSample last)
+            => first.Timestamp == last.Timestamp
+                ? first.Timestamp.ToString("HH:mm:ss")
+                : $"{first.Timestamp:HH:mm:ss} -> {last.Timestamp:HH:mm:ss}";
+
+        private static string FormatPercentRange(int? first, int? last)
+        {
+            if (!first.HasValue && !last.HasValue) return "-- %";
+            if (!last.HasValue || first == last) return FormatPercent(first);
+            if (!first.HasValue) return FormatPercent(last);
+            return $"{first.Value} -> {last.Value} %";
+        }
+
+        private static string FormatAcRange(bool? first, bool? last)
+        {
+            var a = AcText(first);
+            var b = AcText(last);
+            return string.Equals(a, b, StringComparison.OrdinalIgnoreCase) ? b : $"{a} -> {b}";
+        }
 
         private static string FormatDuration(TimeSpan t)
         {

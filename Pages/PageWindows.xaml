@@ -7,13 +7,13 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <!-- DA optim v1.3.5 : rangées switch/icône/texte (styles dans App.xaml) -->
+            <!-- DA optim v1.3.5 : rangees switch/icone/texte (styles dans App.xaml) -->
             <TextBlock Text="OPTIMISATIONS WINDOWS"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
             <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
                     BorderThickness="1" CornerRadius="12" Padding="8,7">
-                <StackPanel>
+                <StackPanel Grid.IsSharedSizeScope="True">
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkHAGS}"
                             MouseLeftButtonUp="Row_Click">
@@ -27,9 +27,32 @@
                                 <TextBlock Text="&#xE714;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Planification GPU mat&#233;rielle (HAGS)" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Le GPU g&#232;re lui-m&#234;me sa file de travail — moins de latence."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Activer la planification GPU mat&#233;rielle (HAGS)" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOn}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="I" Style="{StaticResource CleanMiniStateText}"/>
+                                                <Border Grid.Column="1" Style="{StaticResource CleanMiniStateKnob}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Windows 11 r&#233;cent : Test latence ; red&#233;marrage requis."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -46,9 +69,32 @@
                                 <TextBlock Text="&#xE7FC;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver la barre de jeu Xbox" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Gain de performances — coupe l'overlay Win+G."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver la barre de jeu Xbox" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper Win+G et les services Xbox."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -65,9 +111,32 @@
                                 <TextBlock Text="&#xE722;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver l'enregistrement DVR" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Stoppe la capture vid&#233;o permanente en arri&#232;re-plan."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'enregistrement DVR" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper la capture Xbox."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -84,9 +153,32 @@
                                 <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Priorit&#233; GPU &#233;lev&#233;e pour les jeux" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="SystemProfile — les jeux passent devant le reste."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Forcer une priorit&#233; GPU &#233;lev&#233;e" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Ne pas cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Laisse comme &#231;a sauf test cibl&#233;."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -103,9 +195,32 @@
                                 <TextBlock Text="&#xE713;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Mode MSI pour le GPU" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Interruptions par messages — r&#233;duit la latence."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Activer le mode MSI pour le GPU" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Test latence GPU ; red&#233;marrage requis."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -122,9 +237,32 @@
                                 <TextBlock Text="&#xE8BD;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver l'acc&#233;l&#233;ration mat&#233;rielle Discord" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Lib&#232;re le GPU pour le jeu pendant que Discord tourne."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'acc&#233;l&#233;ration mat&#233;rielle Discord" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour r&#233;duire l'usage GPU de Discord."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -141,14 +279,37 @@
                                 <TextBlock Text="&#xE768;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver l'overlay Steam" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Supprime l'incrustation Steam en jeu (Shift+Tab)."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'overlay Steam" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper Shift+Tab."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
 
-                    <!-- ── Nouveaux tweaks v1.3.6 (clés validées en réel le 2026-06-12) ── -->
+                    <!-- Nouveaux tweaks v1.3.6 (cles validees en reel le 2026-06-12) -->
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkGameMode}"
                             MouseLeftButtonUp="Row_Click">
@@ -162,9 +323,32 @@
                                 <TextBlock Text="&#xE734;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Activer le Mode Jeu Windows" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Priorise le jeu au premier plan et bloque Windows Update en pleine partie."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Activer le Mode Jeu Windows" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOn}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="I" Style="{StaticResource CleanMiniStateText}"/>
+                                                <Border Grid.Column="1" Style="{StaticResource CleanMiniStateKnob}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Priorise le jeu et limite les interruptions."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -181,9 +365,32 @@
                                 <TextBlock Text="&#xE8A7;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Optimisations pour les jeux fen&#234;tr&#233;s" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Pr&#233;sentation moderne (flip) en fen&#234;tr&#233;/borderless — latence r&#233;duite (Windows 11)."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Activer les optimisations pour jeux fen&#234;tr&#233;s" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour fen&#234;tr&#233;/borderless."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -200,9 +407,32 @@
                                 <TextBlock Text="&#xE765;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Couper les popups d'accessibilit&#233; en jeu" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Plus de fen&#234;tre « Touches r&#233;manentes » quand tu spammes Shift en pleine partie."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver les popups d'accessibilit&#233; en jeu" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper les popups clavier."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -217,13 +447,13 @@
                         Click="BtnAppliquer_Click"/>
             </StackPanel>
 
-            <!-- ── Réparations (pipeline de tests visibles, v1.3.6) ── -->
+            <!-- Reparations (pipeline de tests visibles, v1.3.6) -->
             <Border Height="1" Background="{DynamicResource ThBorder}" Margin="0,22,0,14"/>
             <TextBlock Text="R&#201;PARATIONS"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,8"/>
-            <!-- Tuile pleine largeur : texte à gauche, bouton à droite (le texte ne fait
-                 plus 3 lignes et les étapes du diag restent haut sur la page) -->
+            <!-- Tuile pleine largeur : texte a gauche, bouton a droite (le texte ne fait
+                 plus 3 lignes et les etapes du diag restent haut sur la page) -->
             <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
                     BorderThickness="1" CornerRadius="12" Padding="16,13">
                 <StackPanel>
@@ -246,7 +476,7 @@
                                 VerticalAlignment="Center"
                                 Click="BtnFixGamingOverlay_Click"/>
                     </Grid>
-                    <!-- Étapes du diagnostic (remplies en direct pendant l'exécution) -->
+                    <!-- Etapes du diagnostic (remplies en direct pendant l'execution) -->
                     <StackPanel x:Name="GoStepsPanel" Visibility="Collapsed" Margin="0,12,0,0"/>
                 </StackPanel>
             </Border>

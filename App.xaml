@@ -522,7 +522,7 @@
         <Style x:Key="CleanRowStyle" TargetType="Border">
             <Setter Property="Background"   Value="Transparent"/>
             <Setter Property="CornerRadius" Value="10"/>
-            <Setter Property="Padding"      Value="12,9"/>
+            <Setter Property="Padding"      Value="12,10"/>
             <Setter Property="Cursor"       Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
@@ -561,10 +561,97 @@
         </Style>
         <Style x:Key="CleanRowDesc" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
-            <Setter Property="FontSize"   Value="11"/>
+            <Setter Property="FontSize"   Value="11.2"/>
             <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,2,0,0"/>
+            <Setter Property="LineHeight" Value="15.5"/>
+            <Setter Property="Margin" Value="0,5,0,0"/>
+        </Style>
+        <Style x:Key="CleanDefaultBadge" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThInfoTint}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="Margin" Value="12,0,0,0"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="CleanDefaultText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThAccentIcon}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="CleanMiniStateOn" TargetType="Border">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="17"/>
+            <Setter Property="CornerRadius" Value="8.5"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Color="{DynamicResource ThBlueGradAColor}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource ThBlueGradBColor}" Offset="0.65"/>
+                        <GradientStop Color="{DynamicResource ThBlueGradCColor}" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CleanMiniStateOff" TargetType="Border">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="17"/>
+            <Setter Property="CornerRadius" Value="8.5"/>
+            <Setter Property="Background" Value="{DynamicResource ThTrack}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,5,0"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+        <Style x:Key="CleanMiniStateText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="8"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThPrimaryText}"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="LineHeight" Value="10"/>
+            <Setter Property="LineStackingStrategy" Value="BlockLineHeight"/>
+        </Style>
+        <Style x:Key="CleanMiniStateTextOff" TargetType="TextBlock" BasedOn="{StaticResource CleanMiniStateText}">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+        </Style>
+        <Style x:Key="CleanMiniStateKnob" TargetType="Border">
+            <Setter Property="Width" Value="12"/>
+            <Setter Property="Height" Value="12"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="BorderBrush" Value="#22000000"/>
+            <Setter Property="BorderThickness" Value="0.8"/>
+            <Setter Property="Background">
+                <Setter.Value>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="{DynamicResource ThWhiteColor}" Offset="0"/>
+                        <GradientStop Color="#D9DEE8" Offset="1"/>
+                    </LinearGradientBrush>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="{DynamicResource ThBlackColor}" BlurRadius="4" ShadowDepth="1" Opacity="0.35"/>
+                </Setter.Value>
+            </Setter>
         </Style>
 
         <!-- Switch pilule : OFF creuse + « O », ON dégradé bleu + reflet bleu glacé + « I »,

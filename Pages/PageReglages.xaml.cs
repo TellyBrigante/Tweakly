@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.4.8";
+        public const string AppVersion = "1.4.9";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -530,6 +530,54 @@ namespace Optimisation_Tool.Pages
         {
             try { new LogViewerWindow(Window.GetWindow(this)!).Show(); }
             catch (Exception ex) { _main.Log($"Réglages : erreur ouverture journal — {ex.Message}"); }
+        }
+
+        private async void BtnRestoreWindowsDefaults_Click(object sender, RoutedEventArgs e)
+        {
+            var confirm = MessageBox.Show(
+                "Tweakly va restaurer les réglages CPU, Windows, réseau et confidentialité qu'il sait modifier.\n\n" +
+                "NVIDIA n'est pas inclus. Certains changements peuvent demander un redémarrage.\n\n" +
+                "Continuer ?",
+                "Restaurer les réglages Windows",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes) return;
+
+            BtnRestoreWindowsDefaults.IsEnabled = false;
+            TxtRestoreDefaultsStatus.Text = "Restauration en cours...";
+            _main.Log("Réglages : restauration des réglages Windows par défaut...");
+
+            try
+            {
+                var report = await Task.Run(() => Helpers.WindowsDefaultsRestorer.RestoreAll(_main.Log));
+                var errors = report.Steps
+                    .Where(s => s.State == RestoreStepState.Error)
+                    .Take(3)
+                    .Select(s => $"{s.Group} / {s.Name}");
+
+                var suffix = report.NeedsRestart ? " Redémarrage conseillé." : "";
+                if (report.ErrorCount == 0)
+                {
+                    TxtRestoreDefaultsStatus.Text =
+                        $"Terminé : {report.OkCount} OK, {report.SkippedCount} ignoré(s).{suffix}";
+                }
+                else
+                {
+                    TxtRestoreDefaultsStatus.Text =
+                        $"Terminé avec {report.ErrorCount} erreur(s) : {string.Join(", ", errors)}. Voir le journal.{suffix}";
+                }
+
+                _main.Log($"Réglages : restauration terminée — {report.OkCount} OK, {report.SkippedCount} ignoré(s), {report.ErrorCount} erreur(s).");
+            }
+            catch (Exception ex)
+            {
+                TxtRestoreDefaultsStatus.Text = $"Restauration impossible : {ex.Message}";
+                _main.Log($"Réglages : restauration impossible — {ex.Message}");
+            }
+            finally
+            {
+                BtnRestoreWindowsDefaults.IsEnabled = true;
+            }
         }
 
         private void OpenUrl(string url)

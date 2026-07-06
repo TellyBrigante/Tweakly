@@ -175,7 +175,7 @@
                                        FontFamily="{StaticResource AppFont}"
                                        FontSize="11"
                                        TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtBatteryTemperature" Text="Température : -- °C"
+                            <TextBlock x:Name="TxtBatteryTemperature" Text="Température : -- °&#x2060;C"
                                        Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}"
                                        FontSize="11"

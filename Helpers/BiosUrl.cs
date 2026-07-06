@@ -13,13 +13,13 @@ namespace Optimisation_Tool.Helpers
         public static string Build(string biosMfr, string biosModel)
         {
             var mfr   = (biosMfr ?? "").Trim();
-            var model = (biosModel ?? "").Trim();
+            var model = NormalizeModel(biosModel);
             var mfrUp = mfr.ToUpperInvariant();
 
             // ── MSI / Micro-Star ─────────────────────────────────────────────
             // Page BIOS directe : msi.com/Motherboard/MAG-Z790-TOMAHAWK-WIFI/support#bios
             if (mfrUp.Contains("MSI") || mfrUp.Contains("MICRO-STAR"))
-                return $"https://www.msi.com/Motherboard/{MakeSlug(model)}/support#bios";
+                return $"https://www.msi.com/Motherboard/{MakeSlug(StripMsiBoardId(model))}/support#bios";
 
             // ── Gigabyte / AORUS ─────────────────────────────────────────────
             // Page BIOS directe : gigabyte.com/{pays}/Motherboard/Z790-AORUS-MASTER/support#bios
@@ -31,14 +31,12 @@ namespace Optimisation_Tool.Helpers
             }
 
             // ── ASUS / ASUSTeK ───────────────────────────────────────────────
-            // URL directe produit : asus.com/{pays}/motherboards-components/motherboards/{line}/{SLUG}/HelpDesk_BIOS/
+            // La route supportonly évite les segments fragiles par gamme/pays :
+            // asus.com/supportonly/TUF%20GAMING%20B550-PLUS/helpdesk_bios/
             if (mfrUp.Contains("ASUS") || mfrUp.Contains("ASUSTEK"))
             {
-                var slug = MakeSlug(model).ToUpperInvariant();
-                var line = GetAsusProductLine(model);
-                var cc   = GetCountryCode("ASUS");
-                var cp   = cc.Length > 0 ? $"/{cc}" : "";
-                return $"https://www.asus.com{cp}/motherboards-components/motherboards/{line}/{slug}/HelpDesk_BIOS/";
+                var supportModel = NormalizeAsusSupportOnlyModel(model);
+                return $"https://www.asus.com/supportonly/{Uri.EscapeDataString(supportModel)}/helpdesk_bios/";
             }
 
             // ── ASRock ───────────────────────────────────────────────────────
@@ -61,6 +59,28 @@ namespace Optimisation_Tool.Helpers
             // ── Fallback universel ───────────────────────────────────────────
             return "https://www.google.com/search?q="
                  + Uri.EscapeDataString($"{mfr} {model} BIOS update download");
+        }
+
+        private static string NormalizeModel(string? model)
+        {
+            var s = (model ?? "").Trim();
+            s = Regex.Replace(s, @"\s+", " ");
+            return s.Trim();
+        }
+
+        private static string StripMsiBoardId(string model)
+        {
+            // WMI peut exposer "MAG Z790 TOMAHAWK WIFI (MS-7D91)" alors que MSI attend
+            // uniquement le nom commercial dans l'URL produit.
+            return Regex.Replace(model, @"\s*\(MS-[^)]+\)\s*$", "", RegexOptions.IgnoreCase).Trim();
+        }
+
+        private static string NormalizeAsusSupportOnlyModel(string model)
+        {
+            var s = NormalizeModel(model);
+            s = Regex.Replace(s, @"\s*\(rev(?:ision)?\.?\s*[^)]*\)\s*$", "", RegexOptions.IgnoreCase);
+            s = Regex.Replace(s, @"\s+rev(?:ision)?\.?\s*[\w.]+$", "", RegexOptions.IgnoreCase);
+            return s.Trim();
         }
 
         /// <summary>
@@ -149,39 +169,6 @@ namespace Optimisation_Tool.Helpers
         {
             var s = Regex.Replace(model, @"\s+", "-");
             return Regex.Replace(s, @"[()\\\/]", "").Trim('-');
-        }
-
-        /// <summary>
-        /// Détermine la ligne de produit ASUS à partir du préfixe du modèle.
-        /// Utilisé pour construire l'URL ASUS correcte (segment {line} dans le chemin).
-        /// </summary>
-        private static string GetAsusProductLine(string model)
-        {
-            var mu = model.ToUpperInvariant();
-
-            // ROG = Republic of Gamers : préfixes ROG, STRIX (sans ROG), MAXIMUS, CROSSHAIR, APEX, FORMULA
-            if (mu.StartsWith("ROG")        ||
-                mu.StartsWith("STRIX")      ||
-                mu.Contains("MAXIMUS")      ||
-                mu.Contains("CROSSHAIR")    ||
-                mu.Contains("APEX")         ||
-                mu.Contains("FORMULA"))
-                return "rog";
-
-            // TUF Gaming
-            if (mu.StartsWith("TUF"))       return "tuf-gaming";
-
-            // PRIME
-            if (mu.StartsWith("PRIME"))     return "prime";
-
-            // ProArt
-            if (mu.StartsWith("PROART"))    return "proart";
-
-            // Expert Boards (workstation)
-            if (mu.StartsWith("PRO WS") || mu.StartsWith("PROWS")) return "expert-boards";
-
-            // Fallback : catégorie générique sur laquelle ASUS redirige correctement
-            return "all-series";
         }
 
         /// <summary>

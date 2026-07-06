@@ -7,13 +7,13 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <!-- DA optim v1.3.5 (validée sur Nettoyage) : rangées switch/icône/texte -->
+            <!-- DA optim v1.3.5 (validee sur Nettoyage) : rangees switch/icone/texte -->
             <TextBlock Text="TWEAKS CPU"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
             <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
                     BorderThickness="1" CornerRadius="12" Padding="8,7">
-                <StackPanel>
+                <StackPanel Grid.IsSharedSizeScope="True">
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkUltimatePower}"
                             MouseLeftButtonUp="Row_Click">
@@ -27,9 +27,32 @@
                                 <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Mode Performances Ultimes" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Active le plan d'alimentation Windows le plus agressif (Power Plan)."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Activer le mode Performances Ultimes" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche sur PC fixe ; &#224; &#233;viter sur batterie."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -46,9 +69,32 @@
                                 <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver le Power Throttling" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="&#201;vite le bridage du CPU pour les applications en arri&#232;re-plan."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver le Power Throttling" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour &#233;viter le bridage CPU."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -65,18 +111,41 @@
                                 <TextBlock Text="&#xE71D;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Prioriser les applications au premier plan" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="SystemResponsiveness — le CPU sert d'abord l'application active."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Prioriser les applications au premier plan" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour prioriser l'application active."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
 
-                    <!-- ⚠️ GlobalTimerResolution RETIRÉ (2026-06-12) : mesuré CATASTROPHIQUE
-                         au bench sur build Windows 26200 (score Système effondré) alors que la
-                         doc 22H2/23H2 le dit bénéfique — comportement dépendant du build =
-                         viole la règle « jamais d'instabilité ». NE PAS le remettre sans
-                         re-validation bench avant/après sur le build cible. -->
+                    <!-- GlobalTimerResolution RETIRE (2026-06-12) : mesure catastrophique
+                         au bench sur build Windows 26200 (score Systeme effondre) alors que la
+                         doc 22H2/23H2 le dit benefique - comportement dependant du build =
+                         viole la regle "jamais d'instabilite". NE PAS le remettre sans
+                         re-validation bench avant/apres sur le build cible. -->
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkHVCI}"
                             MouseLeftButtonUp="Row_Click">
@@ -90,9 +159,32 @@
                                 <TextBlock Text="&#xE72E;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver Memory Integrity (HVCI)" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Gros gain de performances — r&#233;duit la s&#233;curit&#233; du syst&#232;me."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver Memory Integrity (HVCI)" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour gagner en perf, protection r&#233;duite."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>

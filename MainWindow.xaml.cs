@@ -101,6 +101,7 @@ namespace Optimisation_Tool
                 // Migration silencieuse vers le layout v1.2.8 (config\ + data\<sous-dossiers>\).
                 // DOIT être appelée AVANT tout helper qui touche aux fichiers. Idempotente, blindée.
                 try { Helpers.PathLayout.MigrateIfNeeded(); } catch { }
+                try { Helpers.BatteryCalibrationStore.RestorePowerPlanGuardIfNeeded(); } catch { }
 
                 // Répare en arrière-plan les tâches « démarrer avec Windows » créées par
                 // d'anciennes versions (sans le flag --startup) — sinon l'app s'ouvrirait en
@@ -109,6 +110,7 @@ namespace Optimisation_Tool
 
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
+                Helpers.CpuStabilityDefaults.ApplyIfNeeded(Settings, Log);
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;
                 Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
@@ -142,9 +144,13 @@ namespace Optimisation_Tool
 
                 try
                 {
+#if !DEBUG
                     bool hasBattery = Helpers.BatteryProbe.HasBattery();
                     if (!hasBattery)
                         LockNavButton(BtnNavBattery, "Aucune batterie détectée sur ce PC.");
+#else
+                    BtnNavBattery.ToolTip = "Debug : simulation batterie disponible si aucune batterie réelle n'est détectée.";
+#endif
                 }
                 catch { }
 
@@ -896,8 +902,6 @@ namespace Optimisation_Tool
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
         [DllImport("user32.dll")] private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
         private const int SW_SHOW     = 5;
-        private const int SW_MINIMIZE = 6;
-        private const int SW_RESTORE  = 9;
         private const byte VK_MENU              = 0x12;   // Alt
         private const uint KEYEVENTF_KEYUP       = 0x0002;
 
@@ -927,18 +931,15 @@ namespace Optimisation_Tool
                 if (attempt >= 2)
                 {
                     t.Stop();
-                    // FILET FINAL « minimize/restore » : si Windows refuse toujours le focus
-                    // (AttachThreadInput + Alt fantôme insuffisants après l'élévation UAC),
-                    // on minimise puis restaure par programme — Windows donne TOUJOURS le
-                    // foreground à une fenêtre qui se restaure depuis l'état minimisé.
-                    // Le flash est imperceptible au démarrage. Seule méthode 100 % fiable.
+                    // Filet final sans minimize/restore : l'ancienne méthode pouvait provoquer
+                    // un flash ou une disparition visuelle selon le timing Windows.
                     try
                     {
                         var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
                         if (GetForegroundWindow() != hwnd)
                         {
-                            ShowWindow(hwnd, SW_MINIMIZE);
-                            ShowWindow(hwnd, SW_RESTORE);
+                            ShowWindow(hwnd, SW_SHOW);
+                            BringWindowToTop(hwnd);
                             SetForegroundWindow(hwnd);
                             Activate();
                         }
@@ -952,8 +953,7 @@ namespace Optimisation_Tool
         /// <summary>
         /// Passation depuis le SPLASH (v1.3.5) : quand le splash se ferme, Windows peut
         /// rendre le foreground à explorer au lieu de MainWindow → l'app « restait dans la
-        /// barre des tâches » (régression vécue). Le splash appelle ceci après sa fermeture :
-        /// tentative AttachThreadInput, puis filet minimize/restore si Windows refuse encore.
+        /// barre des tâches » (régression vécue). Le splash appelle ceci après sa fermeture.
         /// </summary>
         public void EnsureForeground()
         {
@@ -964,10 +964,8 @@ namespace Optimisation_Tool
                 var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
                 if (hwnd != IntPtr.Zero && GetForegroundWindow() != hwnd)
                 {
-                    // Filet 100 % fiable : une fenêtre qui se restaure depuis l'état
-                    // minimisé reçoit TOUJOURS le foreground.
-                    ShowWindow(hwnd, SW_MINIMIZE);
-                    ShowWindow(hwnd, SW_RESTORE);
+                    ShowWindow(hwnd, SW_SHOW);
+                    BringWindowToTop(hwnd);
                     SetForegroundWindow(hwnd);
                     Activate();
                 }
@@ -1063,6 +1061,14 @@ namespace Optimisation_Tool
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             ShuttingDown = true;
+            try
+            {
+                if (_pages.TryGetValue("Battery", out var batteryPage)
+                    && batteryPage.IsValueCreated
+                    && batteryPage.Value is PageBatteryCalibration battery)
+                    battery.PrepareForAppShutdown();
+            }
+            catch { }
             // Retire la tray icon AVANT la fermeture (sinon elle reste affichée comme
             // fantôme jusqu'à un survol souris).
             try { _tray?.Dispose(); } catch { }

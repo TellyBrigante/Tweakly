@@ -318,6 +318,35 @@
                 </StackPanel>
             </Border>
 
+            <TextBlock Text="RESTAURATION" Style="{StaticResource SecHdr}"/>
+            <Border Style="{StaticResource CardStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,0">
+                        <TextBlock Text="Restaurer les r&#233;glages Windows"
+                                   Foreground="{DynamicResource ThTextBody}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
+                        <TextBlock Text="Remet les optimisations CPU, Windows, r&#233;seau et confidentialit&#233; aux valeurs standard. NVIDIA reste &#224; part."
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                   Margin="0,3,0,0" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="TxtRestoreDefaultsStatus"
+                                   Text="Aucune restauration lanc&#233;e."
+                                   Foreground="{DynamicResource ThTextDim}"
+                                   FontFamily="{StaticResource AppFont}" FontSize="11.5"
+                                   Margin="0,6,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button x:Name="BtnRestoreWindowsDefaults" Grid.Column="1"
+                            Content="Restaurer"
+                            Style="{StaticResource SecondaryBtnStyle}"
+                            VerticalAlignment="Center"
+                            Click="BtnRestoreWindowsDefaults_Click"/>
+                </Grid>
+            </Border>
+
             <!-- ══ LIENS ══ -->
             <TextBlock Text="LIENS &amp; DOSSIERS" Style="{StaticResource SecHdr}"/>
             <Border Style="{StaticResource CardStyle}">

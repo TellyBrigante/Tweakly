@@ -48,6 +48,10 @@ namespace Optimisation_Tool.Helpers
         public bool BalanceInterrupted { get; set; }
         public bool RechargeInterrupted { get; set; }
         public string LastWarning { get; set; } = "";
+        public bool ChargeFullPromptShown { get; set; }
+        public bool DrainPromptShown { get; set; }
+        public bool RechargePromptShown { get; set; }
+        public bool CompletePromptShown { get; set; }
         public bool PowerPlanGuardApplied { get; set; }
         public int? OriginalDcCriticalBatteryAction { get; set; }
         public int? OriginalDcLowBatteryAction { get; set; }
@@ -126,6 +130,34 @@ namespace Optimisation_Tool.Helpers
                 if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
             }
             catch { }
+        }
+
+        public static void RestorePowerPlanGuardIfNeeded()
+        {
+            try
+            {
+                var session = Load();
+                if (!session.PowerPlanGuardApplied) return;
+
+                if (BatteryPowerPlanGuard.RestoreDrainSettings(
+                        session.OriginalDcCriticalBatteryAction,
+                        session.OriginalDcLowBatteryAction,
+                        out var error))
+                {
+                    session.PowerPlanGuardApplied = false;
+                    session.PowerPlanGuardError = "";
+                }
+                else
+                {
+                    session.PowerPlanGuardError = error;
+                }
+
+                Save(session);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write("BatteryCalibrationStore.RestorePowerPlanGuardIfNeeded ERREUR : " + ex.Message);
+            }
         }
 
         private static BatteryCalibrationSession? TryLoad(string path, string label)

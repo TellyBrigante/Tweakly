@@ -23,12 +23,31 @@ namespace Optimisation_Tool.Pages
         private BatterySnapshot _lastSnapshot = new();
         private CancellationTokenSource? _drainCts;
         private readonly List<Thread> _drainThreads = new();
-        private volatile int _drainDutyPercent = 55;
+        private volatile int _drainDutyPercent = DrainStartDutyPercent;
         private bool _idleSleepGuardActive;
+#if DEBUG
+        private Button? _debugSimulationButton;
+        private bool _debugSimulationEnabled;
+        private const double DebugChargeSeconds = 20.0;
+        private const double DebugBalanceSeconds = 20.0;
+        private const double DebugDrainSeconds = 45.0;
+        private const double DebugRestSeconds = 20.0;
+        private const double DebugRechargeSeconds = 25.0;
+        private const int DebugDesignCapacityMWh = 48000;
+        private const int DebugFullCapacityMWh = 41760;
+#endif
 
         private const int BalanceHours = 2;
         private const int RestHours = 8;
         private const int SampleSeconds = 5;
+        private const int DrainStartDutyPercent = 85;
+        private const int DrainMinDutyPercent = 45;
+        private const int DrainWarmCapDutyPercent = 60;
+        private const int DrainMaxDutyPercent = 95;
+        private const double DrainWarmBatteryC = 45.0;
+        private const double DrainHotBatteryC = 50.0;
+        private const double DrainTargetMinW = 18.0;
+        private const double DrainTargetMaxW = 45.0;
 
         public PageBatteryCalibration(MainWindow main)
         {
@@ -36,13 +55,47 @@ namespace Optimisation_Tool.Pages
             InitializeComponent();
 
             _session = BatteryCalibrationStore.Load();
+#if DEBUG
+            _debugSimulationEnabled = ShouldEnableDebugSimulationByDefault();
+            InstallDebugSimulationButton();
+#endif
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(SampleSeconds) };
             _timer.Tick += (_, _) => RefreshAndLog();
-            Unloaded += (_, _) =>
+            Unloaded += (_, _) => HandlePageUnloaded();
+        }
+
+        public void PrepareForAppShutdown()
+        {
+            _timer.Stop();
+            StopDrainLoad();
+            RestorePowerPlanGuardIfNeeded();
+            ReleaseIdleSleepGuard();
+            BatteryCalibrationStore.Save(_session);
+        }
+
+        private void HandlePageUnloaded()
+        {
+            if (_main.ShuttingDown)
             {
-                StopDrainLoad();
-                ReleaseIdleSleepGuard();
-            };
+                PrepareForAppShutdown();
+                return;
+            }
+
+            if (IsActive(_session.Phase))
+            {
+                UpdatePowerGuards(_lastSnapshot);
+                if (_session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.OnAcPower == false)
+                {
+                    EnsureDrainPowerPlanGuard();
+                    EnsureDrainLoad();
+                }
+                return;
+            }
+
+            _timer.Stop();
+            StopDrainLoad();
+            RestorePowerPlanGuardIfNeeded();
+            ReleaseIdleSleepGuard();
         }
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
@@ -136,14 +189,121 @@ namespace Optimisation_Tool.Pages
                 BatteryCalibrationStore.Save(_session);
             }
 
+            ClearResolvedPowerPlanWarning();
             UpdatePhaseUi();
             DrawGraph();
+            if (!IsVisible && !IsActive(_session.Phase))
+                _timer.Stop();
         }
 
         private BatterySnapshot ReadSnapshot()
         {
+#if DEBUG
+            if (_debugSimulationEnabled) return ReadDebugSimulationSnapshot();
+#endif
             return BatteryProbe.Read();
         }
+
+#if DEBUG
+        private void InstallDebugSimulationButton()
+        {
+            if (BtnRefresh.Parent is not Panel panel) return;
+
+            _debugSimulationButton = new Button
+            {
+                Style = (Style)FindResource("SecondaryBtnStyle"),
+                Padding = new Thickness(16, 9, 16, 9),
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+            _debugSimulationButton.Click += (_, _) =>
+            {
+                _debugSimulationEnabled = !_debugSimulationEnabled;
+                UpdateDebugSimulationButton();
+                RefreshAndLog();
+            };
+
+            panel.Children.Insert(0, _debugSimulationButton);
+            UpdateDebugSimulationButton();
+        }
+
+        private static bool ShouldEnableDebugSimulationByDefault()
+        {
+            try { return !BatteryProbe.HasBattery(); }
+            catch { return true; }
+        }
+
+        private void UpdateDebugSimulationButton()
+        {
+            if (_debugSimulationButton == null) return;
+            _debugSimulationButton.Content = _debugSimulationEnabled ? "SIMULATION ACTIVE" : "SIMULATION DEBUG";
+        }
+
+        private BatterySnapshot ReadDebugSimulationSnapshot()
+        {
+            var now = DateTime.Now;
+            var phase = _session.Phase;
+            var elapsed = Math.Max(0, (now - _session.PhaseStartedAt).TotalSeconds);
+
+            double charge = phase switch
+            {
+                BatteryCalibrationPhase.ChargeToFull => Lerp(58, 100, elapsed / DebugChargeSeconds),
+                BatteryCalibrationPhase.CellBalance => 100,
+                BatteryCalibrationPhase.Drain => Lerp(100, 4, elapsed / DebugDrainSeconds),
+                BatteryCalibrationPhase.Rest => 4,
+                BatteryCalibrationPhase.Recharge => Lerp(4, 100, elapsed / DebugRechargeSeconds),
+                BatteryCalibrationPhase.Complete => 100,
+                _ => 58
+            };
+
+            charge = Math.Clamp(charge, 0, 100);
+            bool onAc = phase is BatteryCalibrationPhase.Idle
+                or BatteryCalibrationPhase.ChargeToFull
+                or BatteryCalibrationPhase.CellBalance
+                or BatteryCalibrationPhase.Recharge
+                or BatteryCalibrationPhase.Complete;
+            bool charging = onAc && phase is (BatteryCalibrationPhase.ChargeToFull or BatteryCalibrationPhase.Recharge);
+            bool discharging = !onAc && phase == BatteryCalibrationPhase.Drain;
+
+            int percent = (int)Math.Round(charge);
+            int remaining = (int)Math.Round(DebugFullCapacityMWh * charge / 100.0);
+            int voltage = (int)Math.Round(10800 + charge / 100.0 * 1800);
+            int rate = phase switch
+            {
+                BatteryCalibrationPhase.ChargeToFull => 28000,
+                BatteryCalibrationPhase.CellBalance => 1200,
+                BatteryCalibrationPhase.Drain => -28000,
+                BatteryCalibrationPhase.Recharge => 24000,
+                _ => 0
+            };
+            double temp = phase == BatteryCalibrationPhase.Drain
+                ? 34.0 + Math.Min(8.0, elapsed / DebugDrainSeconds * 8.0)
+                : 31.5;
+
+            return new BatterySnapshot
+            {
+                HasBattery = true,
+                Source = "Simulation Debug",
+                Name = "Batterie debug Tweakly",
+                Manufacturer = "Tweakly",
+                Chemistry = "Lithium-ion",
+                ChargePercent = percent,
+                RemainingCapacityMWh = remaining,
+                FullChargeCapacityMWh = DebugFullCapacityMWh,
+                DesignCapacityMWh = DebugDesignCapacityMWh,
+                CycleCount = 524,
+                VoltageMv = voltage,
+                RateMw = rate,
+                TemperatureC = Math.Round(temp, 1),
+                OnAcPower = onAc,
+                IsCharging = charging,
+                IsDischarging = discharging,
+                IsCritical = percent <= 5 && phase == BatteryCalibrationPhase.Drain
+            };
+        }
+
+        private static double Lerp(double from, double to, double t)
+            => from + (to - from) * Math.Clamp(t, 0, 1);
+#endif
 
         private void CaptureBatteryIdentity(BatterySnapshot snapshot)
         {
@@ -181,7 +341,7 @@ namespace Optimisation_Tool.Pages
             var gap = DateTime.Now - last.Timestamp;
             if (_session.Phase == BatteryCalibrationPhase.Drain && gap >= TimeSpan.FromMinutes(30))
             {
-                if (gap >= TimeSpan.FromHours(RestHours))
+                if (gap >= RestTargetDuration())
                     SetPhase(BatteryCalibrationPhase.Recharge, save: true);
                 else
                     SetPhase(BatteryCalibrationPhase.Rest, save: true, phaseStartedAt: last.Timestamp);
@@ -196,7 +356,7 @@ namespace Optimisation_Tool.Pages
                     BatteryCalibrationStore.Save(_session);
                 }
 
-                if (DateTime.Now - _session.PhaseStartedAt >= TimeSpan.FromHours(RestHours))
+                if (DateTime.Now - _session.PhaseStartedAt >= RestTargetDuration())
                 {
                     SetPhase(BatteryCalibrationPhase.Recharge, save: true);
                     RestorePowerPlanGuardIfNeeded();
@@ -223,19 +383,28 @@ namespace Optimisation_Tool.Pages
                         _session.PhaseStartedAt = DateTime.Now;
                         BatteryCalibrationStore.Save(_session);
                     }
-                    else if (DateTime.Now - _session.PhaseStartedAt >= TimeSpan.FromHours(BalanceHours))
+                    else if (DateTime.Now - _session.PhaseStartedAt >= BalanceTargetDuration())
                         SetPhase(BatteryCalibrationPhase.Drain, save: true);
                     break;
 
                 case BatteryCalibrationPhase.Drain:
+#if DEBUG
+                    if (_debugSimulationEnabled && snapshot.ChargePercent <= 5)
+                    {
+                        StopDrainLoad();
+                        RestorePowerPlanGuardIfNeeded();
+                        SetPhase(BatteryCalibrationPhase.Rest, save: true);
+                        break;
+                    }
+#endif
                     if (snapshot.OnAcPower == true)
                     {
                         StopDrainLoad();
                         RestorePowerPlanGuardIfNeeded();
                     }
-                    else if (snapshot.TemperatureC >= 50.0)
+                    else if (snapshot.TemperatureC >= DrainHotBatteryC)
                     {
-                        _drainDutyPercent = 20;
+                        _drainDutyPercent = DrainMinDutyPercent;
                         StopDrainLoad();
                         RestorePowerPlanGuardIfNeeded();
                     }
@@ -250,7 +419,7 @@ namespace Optimisation_Tool.Pages
                 case BatteryCalibrationPhase.Rest:
                     StopDrainLoad();
                     RestorePowerPlanGuardIfNeeded();
-                    if (_session.LastSample != null && DateTime.Now - _session.PhaseStartedAt >= TimeSpan.FromHours(RestHours))
+                    if (_session.LastSample != null && DateTime.Now - _session.PhaseStartedAt >= RestTargetDuration())
                         SetPhase(BatteryCalibrationPhase.Recharge, save: true);
                     break;
 
@@ -298,6 +467,85 @@ namespace Optimisation_Tool.Pages
             if (phase is BatteryCalibrationPhase.CellBalance or BatteryCalibrationPhase.Drain or BatteryCalibrationPhase.Rest or BatteryCalibrationPhase.Recharge or BatteryCalibrationPhase.Complete)
                 _session.LastWarning = "";
             if (save) BatteryCalibrationStore.Save(_session);
+            NotifyPhaseActionIfNeeded(phase);
+        }
+
+        private void NotifyPhaseActionIfNeeded(BatteryCalibrationPhase phase)
+        {
+            switch (phase)
+            {
+                case BatteryCalibrationPhase.CellBalance:
+                    if (_session.ChargeFullPromptShown) return;
+                    _session.ChargeFullPromptShown = true;
+                    BatteryCalibrationStore.Save(_session);
+                    ShowCalibrationAlert(
+                        "Charge complète",
+                        $"La batterie est à 100 %. Garde le chargeur branché pendant {BalanceTargetLabel()} pour l'équilibrage des cellules.",
+                        warning: false);
+                    break;
+
+                case BatteryCalibrationPhase.Drain:
+                    if (_session.DrainPromptShown) return;
+                    _session.DrainPromptShown = true;
+                    BatteryCalibrationStore.Save(_session);
+                    ShowCalibrationAlert(
+                        "Débranche le chargeur",
+                        "Équilibrage terminé. Débranche le chargeur maintenant : le drain contrôlé démarre dès que le PC passe sur batterie.",
+                        warning: true);
+                    break;
+
+                case BatteryCalibrationPhase.Recharge:
+                    if (_session.RechargePromptShown) return;
+                    _session.RechargePromptShown = true;
+                    BatteryCalibrationStore.Save(_session);
+                    ShowCalibrationAlert(
+                        "Rebranche le chargeur",
+                        $"Repos terminé. Branche le chargeur maintenant et laisse monter jusqu'à 100 % sans coupure.",
+                        warning: true);
+                    break;
+
+                case BatteryCalibrationPhase.Complete:
+                    if (_session.CompletePromptShown) return;
+                    _session.CompletePromptShown = true;
+                    BatteryCalibrationStore.Save(_session);
+                    ShowCalibrationAlert(
+                        "Calibrage terminé",
+                        "Le protocole est terminé. Tu peux ouvrir le rapport pour vérifier les mesures.",
+                        warning: false);
+                    break;
+            }
+        }
+
+        private void ShowCalibrationAlert(string title, string message, bool warning)
+        {
+            if (warning) UiSound.Warn();
+            else UiSound.Success();
+
+            try
+            {
+                var owner = Window.GetWindow(this);
+                if (owner != null)
+                {
+                    if (owner.WindowState == WindowState.Minimized)
+                        owner.WindowState = WindowState.Normal;
+                    owner.Activate();
+                }
+
+                MessageBox.Show(
+                    owner,
+                    message,
+                    title,
+                    MessageBoxButton.OK,
+                    warning ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            }
+            catch
+            {
+                MessageBox.Show(
+                    message,
+                    title,
+                    MessageBoxButton.OK,
+                    warning ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            }
         }
 
         private void UpdatePowerGuards(BatterySnapshot snapshot)
@@ -342,6 +590,7 @@ namespace Optimisation_Tool.Pages
             {
                 _session.PowerPlanGuardApplied = true;
                 _session.PowerPlanGuardError = "";
+                ClearProtocolWarningPrefix("Action batterie critique Windows");
             }
             else
             {
@@ -363,6 +612,7 @@ namespace Optimisation_Tool.Pages
             {
                 _session.PowerPlanGuardApplied = false;
                 _session.PowerPlanGuardError = "";
+                ClearProtocolWarningPrefix("Restauration du plan d'alimentation");
             }
             else
             {
@@ -377,6 +627,20 @@ namespace Optimisation_Tool.Pages
         {
             if (string.Equals(_session.LastWarning, warning, StringComparison.Ordinal)) return;
             _session.LastWarning = warning;
+        }
+
+        private void ClearProtocolWarningPrefix(string prefix)
+        {
+            if (!string.IsNullOrWhiteSpace(_session.LastWarning) &&
+                _session.LastWarning.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                _session.LastWarning = "";
+        }
+
+        private void ClearResolvedPowerPlanWarning()
+        {
+            if (_session.PowerPlanGuardApplied || !string.IsNullOrWhiteSpace(_session.PowerPlanGuardError)) return;
+            ClearProtocolWarningPrefix("Action batterie critique Windows");
+            ClearProtocolWarningPrefix("Restauration du plan d'alimentation");
         }
 
         private void UpdateBatteryUi(BatterySnapshot s)
@@ -420,14 +684,14 @@ namespace Optimisation_Tool.Pages
 
             TxtStepCharge.Text = $"Charge jusqu'à 100 %. Actuel : {FormatPercent(_lastSnapshot.ChargePercent)}.";
             TxtStepBalance.Text = _session.BalanceInterrupted && _session.Phase == BatteryCalibrationPhase.CellBalance
-                ? $"Maintien branché : compteur réinitialisé après coupure secteur. {ElapsedPhaseText(BatteryCalibrationPhase.CellBalance)} / {BalanceHours} h."
-                : $"Maintien branché : {ElapsedPhaseText(BatteryCalibrationPhase.CellBalance)} / {BalanceHours} h.";
-            TxtStepDrain.Text = _session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.TemperatureC >= 50.0
+                ? $"Maintien branché : compteur réinitialisé après coupure secteur. {ElapsedPhaseText(BatteryCalibrationPhase.CellBalance)} / {BalanceTargetLabel()}."
+                : $"Maintien branché : {ElapsedPhaseText(BatteryCalibrationPhase.CellBalance)} / {BalanceTargetLabel()}.";
+            TxtStepDrain.Text = _session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.TemperatureC >= DrainHotBatteryC
                 ? $"Drain en pause sécurité : température batterie {FormatC(_lastSnapshot.TemperatureC)}."
                 : _session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.OnAcPower == false
                 ? $"Drain CPU contrôlé actif : {_drainThreads.Count} thread(s), intensité {_drainDutyPercent} %. Dernier point : {FormatPercent(_lastSnapshot.ChargePercent)}."
                 : "Débranche le secteur. Tweakly appliquera une charge CPU contrôlée et sauvegardera chaque point.";
-            TxtStepRest.Text = $"Repos total requis : {RestElapsedText()} / {RestHours} h.";
+            TxtStepRest.Text = $"Repos total requis : {RestElapsedText()} / {RestTargetLabel()}.";
             TxtStepRecharge.Text = _session.RechargeInterrupted && _session.Phase == BatteryCalibrationPhase.Recharge
                 ? $"Recharge finale interrompue au moins une fois. Actuel : {FormatPercent(_lastSnapshot.ChargePercent)}."
                 : $"Recharge finale jusqu'à 100 %. Actuel : {FormatPercent(_lastSnapshot.ChargePercent)}.";
@@ -452,10 +716,10 @@ namespace Optimisation_Tool.Pages
             return phase switch
             {
                 BatteryCalibrationPhase.ChargeToFull => _lastSnapshot.ChargePercent ?? 0,
-                BatteryCalibrationPhase.CellBalance => PercentOf(DateTime.Now - _session.PhaseStartedAt, TimeSpan.FromHours(BalanceHours)),
+                BatteryCalibrationPhase.CellBalance => PercentOf(DateTime.Now - _session.PhaseStartedAt, BalanceTargetDuration()),
                 BatteryCalibrationPhase.Drain => _lastSnapshot.ChargePercent.HasValue ? Math.Clamp(100 - _lastSnapshot.ChargePercent.Value, 0, 100) : 0,
                 BatteryCalibrationPhase.Rest => _session.LastSample != null
-                    ? PercentOf(DateTime.Now - _session.PhaseStartedAt, TimeSpan.FromHours(RestHours))
+                    ? PercentOf(DateTime.Now - _session.PhaseStartedAt, RestTargetDuration())
                     : 0,
                 BatteryCalibrationPhase.Recharge => _lastSnapshot.ChargePercent ?? 0,
                 _ => 0
@@ -464,6 +728,38 @@ namespace Optimisation_Tool.Pages
 
         private static double PercentOf(TimeSpan elapsed, TimeSpan target)
             => target.TotalSeconds <= 0 ? 0 : Math.Clamp(elapsed.TotalSeconds * 100.0 / target.TotalSeconds, 0, 100);
+
+        private TimeSpan BalanceTargetDuration()
+        {
+#if DEBUG
+            if (_debugSimulationEnabled) return TimeSpan.FromSeconds(DebugBalanceSeconds);
+#endif
+            return TimeSpan.FromHours(BalanceHours);
+        }
+
+        private TimeSpan RestTargetDuration()
+        {
+#if DEBUG
+            if (_debugSimulationEnabled) return TimeSpan.FromSeconds(DebugRestSeconds);
+#endif
+            return TimeSpan.FromHours(RestHours);
+        }
+
+        private string BalanceTargetLabel()
+        {
+#if DEBUG
+            if (_debugSimulationEnabled) return $"{BalanceHours} h simulees en {DebugBalanceSeconds:0} s";
+#endif
+            return $"{BalanceHours} h";
+        }
+
+        private string RestTargetLabel()
+        {
+#if DEBUG
+            if (_debugSimulationEnabled) return $"{RestHours} h simulees en {DebugRestSeconds:0} s";
+#endif
+            return $"{RestHours} h";
+        }
 
         private static int PhaseOrder(BatteryCalibrationPhase phase) => phase switch
         {
@@ -552,9 +848,8 @@ namespace Optimisation_Tool.Pages
             sb.AppendLine(new string('-', 42));
             sb.AppendLine($"Équilibrage 2 h continu : {YesNo(!_session.BalanceInterrupted)}");
             sb.AppendLine($"Recharge finale continue : {YesNo(!_session.RechargeInterrupted)}");
-            sb.AppendLine($"Action critique Windows restaurée : {YesNo(!_session.PowerPlanGuardApplied)}");
             if (!string.IsNullOrWhiteSpace(_session.PowerPlanGuardError))
-                sb.AppendLine($"Powercfg          : {_session.PowerPlanGuardError}");
+                sb.AppendLine($"Réglage batterie Windows : {_session.PowerPlanGuardError}");
             AppendReportPoint(sb, "Premier point", first);
             AppendReportPoint(sb, "Dernier point", last);
             AppendReportPoint(sb, "Dernier drain", drainLast);
@@ -638,7 +933,7 @@ namespace Optimisation_Tool.Pages
             if (_drainCts != null) return;
 
             _drainCts = new CancellationTokenSource();
-            int workers = Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
+            int workers = Math.Clamp(Environment.ProcessorCount, 2, 8);
             _drainThreads.Clear();
 
             for (int i = 0; i < workers; i++)
@@ -646,7 +941,7 @@ namespace Optimisation_Tool.Pages
                 var thread = new Thread(() => DrainLoop(_drainCts.Token))
                 {
                     IsBackground = true,
-                    Priority = ThreadPriority.BelowNormal,
+                    Priority = ThreadPriority.Normal,
                     Name = "TweaklyBatteryDrain"
                 };
                 _drainThreads.Add(thread);
@@ -669,20 +964,20 @@ namespace Optimisation_Tool.Pages
 
         private void AdjustDrainLoad(BatterySnapshot snapshot)
         {
-            if (snapshot.TemperatureC >= 50.0)
+            if (snapshot.TemperatureC >= DrainHotBatteryC)
             {
-                _drainDutyPercent = 20;
+                _drainDutyPercent = DrainMinDutyPercent;
                 return;
             }
 
-            if (snapshot.TemperatureC >= 45.0)
-                _drainDutyPercent = Math.Min(_drainDutyPercent, 35);
+            if (snapshot.TemperatureC >= DrainWarmBatteryC)
+                _drainDutyPercent = Math.Min(_drainDutyPercent, DrainWarmCapDutyPercent);
 
             var watts = Math.Abs(snapshot.PowerW ?? 0);
             if (watts <= 0) return;
 
-            if (watts < 8.0) _drainDutyPercent = Math.Min(90, _drainDutyPercent + 5);
-            else if (watts > 30.0) _drainDutyPercent = Math.Max(30, _drainDutyPercent - 5);
+            if (watts < DrainTargetMinW) _drainDutyPercent = Math.Min(DrainMaxDutyPercent, _drainDutyPercent + 10);
+            else if (watts > DrainTargetMaxW) _drainDutyPercent = Math.Max(DrainMinDutyPercent, _drainDutyPercent - 10);
         }
 
         private void DrainLoop(CancellationToken token)
@@ -692,7 +987,7 @@ namespace Optimisation_Tool.Pages
 
             while (!token.IsCancellationRequested)
             {
-                int duty = Math.Clamp(_drainDutyPercent, 20, 90);
+                int duty = Math.Clamp(_drainDutyPercent, DrainMinDutyPercent, DrainMaxDutyPercent);
                 int busyMs = cycleMs * duty / 100;
                 var sw = Stopwatch.StartNew();
 
@@ -826,7 +1121,7 @@ namespace Optimisation_Tool.Pages
 
         private string ElapsedPhaseText(BatteryCalibrationPhase phase)
         {
-            if (PhaseOrder(_session.Phase) > PhaseOrder(phase)) return phase == BatteryCalibrationPhase.CellBalance ? $"{BalanceHours} h" : "terminé";
+            if (PhaseOrder(_session.Phase) > PhaseOrder(phase)) return phase == BatteryCalibrationPhase.CellBalance ? BalanceTargetLabel() : "terminé";
             if (_session.Phase != phase) return "0 min";
             var elapsed = DateTime.Now - _session.PhaseStartedAt;
             return FormatDuration(elapsed);
@@ -834,7 +1129,7 @@ namespace Optimisation_Tool.Pages
 
         private string RestElapsedText()
         {
-            if (PhaseOrder(_session.Phase) > PhaseOrder(BatteryCalibrationPhase.Rest)) return $"{RestHours} h";
+            if (PhaseOrder(_session.Phase) > PhaseOrder(BatteryCalibrationPhase.Rest)) return RestTargetLabel();
             var last = _session.LastSample;
             if (last == null || PhaseOrder(_session.Phase) < PhaseOrder(BatteryCalibrationPhase.Rest)) return "0 min";
             return FormatDuration(DateTime.Now - _session.PhaseStartedAt);
@@ -852,7 +1147,7 @@ namespace Optimisation_Tool.Pages
         {
             if (!s.HasBattery) return "Tension : -- V | Puissance : -- W";
             if (s.CycleCount.HasValue || s.TemperatureC.HasValue)
-                return $"Cycles : {FormatCycles(s.CycleCount)} | Température : {FormatC(s.TemperatureC)}";
+                return $"Cycles : {FormatCycles(s.CycleCount)}\nTempérature : {FormatC(s.TemperatureC)}";
             if (s.VoltageV.HasValue || s.PowerW.HasValue)
                 return $"Tension : {FormatV(s.VoltageV)} | Puissance : {FormatW(s.PowerW)}";
             return $"Charge : {FormatPercent(s.ChargePercent)} | Courant : {FormatA(s.CurrentA)}";
@@ -868,7 +1163,7 @@ namespace Optimisation_Tool.Pages
         private static string FormatV(double? value) => value.HasValue ? $"{value.Value:0.000} V" : "-- V";
         private static string FormatW(double? value) => value.HasValue ? $"{value.Value:0.0} W" : "-- W";
         private static string FormatA(double? value) => value.HasValue ? $"{value.Value:0.000} A" : "-- A";
-        private static string FormatC(double? value) => value.HasValue ? $"{value.Value:0.0} °C" : "-- °C";
+        private static string FormatC(double? value) => value.HasValue ? $"{value.Value:0.0} °\u2060C" : "-- °\u2060C";
         private static string FormatMWh(int? value) => value.HasValue ? $"{value.Value:N0} mWh" : "-- mWh";
         private static string FormatCycles(int? value) => value.HasValue ? $"{value.Value} cycle(s)" : "-- cycle(s)";
         private static string FormatHealth(double? value) => value.HasValue ? $"{value.Value:0} %" : "-- %";

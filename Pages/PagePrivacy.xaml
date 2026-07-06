@@ -7,13 +7,13 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <!-- DA optim v1.3.5 : rangées switch/icône/texte (styles dans App.xaml) -->
+            <!-- DA optim v1.3.5 : rangees switch/icone/texte (styles dans App.xaml) -->
             <TextBlock Text="DONN&#201;ES &#201;CHANG&#201;ES AVEC MICROSOFT"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
             <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
                     BorderThickness="1" CornerRadius="12" Padding="8,7">
-                <StackPanel>
+                <StackPanel Grid.IsSharedSizeScope="True">
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkTelemetrie}"
                             MouseLeftButtonUp="Row_Click">
@@ -27,9 +27,32 @@
                                 <TextBlock Text="&#xE774;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="T&#233;l&#233;m&#233;trie Windows" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="AllowTelemetry + services DiagTrack."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="R&#233;duire la t&#233;l&#233;m&#233;trie Windows" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour r&#233;duire les diagnostics envoy&#233;s."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -46,9 +69,32 @@
                                 <TextBlock Text="&#xE71D;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="T&#233;l&#233;m&#233;trie des applications" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="CompatTelRunner / inventaire AppCompat."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver la t&#233;l&#233;m&#233;trie des applications" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour bloquer CompatTelRunner."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -65,9 +111,32 @@
                                 <TextBlock Text="&#xE77B;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Identifiant publicitaire" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="AdvertisingInfo — le profil pub unique de ta machine."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'identifiant publicitaire" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour supprimer l'identifiant publicitaire."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -84,9 +153,32 @@
                                 <TextBlock Text="&#xE823;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Historique d'activit&#233; (Timeline)" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Activity Feed — journal de tes actions partag&#233; entre appareils."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'historique d'activit&#233; (Timeline)" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper le journal d'activit&#233;."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -103,9 +195,32 @@
                                 <TextBlock Text="&#xE721;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Recherches du menu D&#233;marrer vers Bing" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Coupe l'envoi de tes recherches locales en ligne."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Bloquer les recherches Bing du menu D&#233;marrer" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour garder le menu D&#233;marrer local."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -122,9 +237,32 @@
                                 <TextBlock Text="&#xE70F;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Personnalisation de la saisie" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Collecte Ink &amp; Text (frappe et &#233;criture manuscrite)."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver la personnalisation de la saisie" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour limiter la collecte de saisie."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -141,9 +279,32 @@
                                 <TextBlock Text="&#xE707;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Service de localisation" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="DisableLocation — position g&#233;ographique de la machine."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver le service de localisation" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche si tu veux couper la localisation."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -160,9 +321,32 @@
                                 <TextBlock Text="&#xE783;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Rapport d'erreurs Windows" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="WerSvc — l'envoi des rapports de plantage &#224; Microsoft."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'envoi des rapports d'erreurs" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper l'envoi des rapports."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -179,9 +363,32 @@
                                 <TextBlock Text="&#xE734;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Exp&#233;riences personnalis&#233;es" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Tailored Experiences — suggestions bas&#233;es sur tes donn&#233;es de diagnostic."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver les exp&#233;riences personnalis&#233;es" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour couper les suggestions personnalis&#233;es."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>

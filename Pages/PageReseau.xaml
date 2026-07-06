@@ -7,13 +7,13 @@
                   HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="18,14,18,18">
 
-            <!-- DA optim v1.3.5 : rangées switch/icône/texte (styles dans App.xaml) -->
+            <!-- DA optim v1.3.5 : rangees switch/icone/texte (styles dans App.xaml) -->
             <TextBlock Text="TWEAKS R&#201;SEAU"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
             <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
                     BorderThickness="1" CornerRadius="12" Padding="8,7">
-                <StackPanel>
+                <StackPanel Grid.IsSharedSizeScope="True">
 
                     <Border Style="{StaticResource CleanRowStyle}" Tag="{x:Reference ChkNagle}"
                             MouseLeftButtonUp="Row_Click">
@@ -27,9 +27,32 @@
                                 <TextBlock Text="&#xE71B;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver l'algorithme de Nagle" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="TcpAckFrequency — r&#233;duit la latence en jeu."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver l'algorithme de Nagle" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche seulement si un jeu r&#233;agit mal."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -46,9 +69,32 @@
                                 <TextBlock Text="&#xE774;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="DNS rapides" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="1.1.1.1 (Cloudflare), avec 8.8.8.8 (Google) en secours."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Forcer les DNS Cloudflare / Google" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="Au besoin" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour forcer 1.1.1.1 et 8.8.8.8."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -65,9 +111,32 @@
                                 <TextBlock Text="&#xE708;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="Emp&#234;cher la mise en veille de l'adaptateur" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="La carte r&#233;seau reste active — pas de micro-coupures au r&#233;veil."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Emp&#234;cher la veille de l'adaptateur r&#233;seau" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour &#233;viter les micro-coupures."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -84,9 +153,32 @@
                                 <TextBlock Text="&#xE727;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver la d&#233;tection de proxy (WPAD)" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="Supprime une recherche r&#233;seau inutile au d&#233;marrage des connexions."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver la d&#233;tection de proxy (WPAD)" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche sur PC hors domaine/proxy."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -103,9 +195,32 @@
                                 <TextBlock Text="&#xE945;" Style="{StaticResource CleanIconGlyph}"/>
                             </Border>
                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="13,0,4,0">
-                                <TextBlock Text="D&#233;sactiver le bridage r&#233;seau multim&#233;dia" Style="{StaticResource CleanRowTitle}"/>
-                                <TextBlock Text="NetworkThrottlingIndex — Windows limite le d&#233;bit quand du son/vid&#233;o tourne ; inutile en jeu."
-                                           Style="{StaticResource CleanRowDesc}"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto" SharedSizeGroup="CleanBadgeColumn"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="D&#233;sactiver le bridage r&#233;seau multim&#233;dia" Style="{StaticResource CleanRowTitle}" TextTrimming="CharacterEllipsis"/>
+                                    <Border Grid.Column="1" Style="{StaticResource CleanDefaultBadge}">
+                                        <TextBlock Text="&#192; cocher" Style="{StaticResource CleanDefaultText}"/>
+                                    </Border>
+                                </Grid>
+                                <TextBlock Style="{StaticResource CleanRowDesc}">
+                                    <InlineUIContainer BaselineAlignment="Center">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
+                                            </Grid>
+                                        </Border>
+                                    </InlineUIContainer>
+                                    <Run Text="D&#233;faut &#183; "/>
+                                    <Run Text="Coche pour limiter les variations de latence."/>
+                                </TextBlock>
                             </StackPanel>
                         </Grid>
                     </Border>

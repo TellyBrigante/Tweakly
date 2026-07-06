@@ -52,55 +52,7 @@ namespace Optimisation_Tool.Helpers
             }
             catch { }
 
-            // 2. Memory Integrity (HVCI) actif
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-                    "Enabled", null);
-                if (v != null && Convert.ToInt32(v) == 1)
-                    list.Add(new Finding
-                    {
-                        Text = "Memory Integrity (HVCI) est activé — une protection Windows qui coûte "
-                             + "5 à 10 % de fluidité dans certains jeux. La désactiver réduit la sécurité : à toi de choisir.",
-                        ActionLabel = "Voir dans Optimisations > CPU", NavTag = "CPU",
-                    });
-            }
-            catch { }
-
-            // 3. Power Throttling actif (bride les applis d'arrière-plan, peut toucher les jeux fenêtrés)
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
-                    "PowerThrottlingOff", null);
-                if (v == null || Convert.ToInt32(v) != 1)
-                    list.Add(new Finding
-                    {
-                        Text = "Le Power Throttling est actif : Windows bride volontairement les programmes "
-                             + "qu'il juge « en arrière-plan » — parfois à tort.",
-                        ActionLabel = "Corriger dans Optimisations > CPU", NavTag = "CPU",
-                    });
-            }
-            catch { }
-
-            // 4. SystemResponsiveness : part de CPU réservée aux tâches de fond
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
-                    "SystemResponsiveness", null);
-                if (v != null && Convert.ToInt32(v) != 0)
-                    list.Add(new Finding
-                    {
-                        Text = "Windows réserve une part du CPU aux tâches de fond (SystemResponsiveness) "
-                             + "au lieu de tout donner à l'application active.",
-                        ActionLabel = "Corriger dans Optimisations > CPU", NavTag = "CPU",
-                    });
-            }
-            catch { }
-
-            // 5. Game DVR : capture vidéo permanente en arrière-plan
+            // 2. Game DVR : capture vidéo permanente en arrière-plan
             try
             {
                 var v = Registry.GetValue(
