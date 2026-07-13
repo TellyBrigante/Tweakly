@@ -21,6 +21,8 @@ namespace Optimisation_Tool
         private MiniMonitor? _mini;
         private Button?      _returnNav;     // page à restaurer en sortant du mode mini
         public  bool         ShuttingDown { get; private set; }
+        private WindowState   _lastWindowState = WindowState.Normal;
+        private bool          _restoreAfterTaskbarQueued;
 
         // Tray icon (zone de notification Windows) — gérée par TrayIconManager.
         // Null si l'init a échoué (cas rare : RDP sans tray, etc.) → on retombe sur le
@@ -44,6 +46,7 @@ namespace Optimisation_Tool
             "GameSession",
             "CPU",
             "Nvidia",
+            "GpuTuning",
         };
 
         // Settings persistants
@@ -64,6 +67,7 @@ namespace Optimisation_Tool
                 ["Accueil"]   = new Lazy<UserControl>(() => new PageAccueil(this)),
                 ["Nettoyage"] = new Lazy<UserControl>(() => new PageNettoyage(this)),
                 ["Nvidia"]    = new Lazy<UserControl>(() => new PageNvidia(this)),
+                ["GpuTuning"] = new Lazy<UserControl>(() => new PageGpuTuning()),
                 ["CPU"]       = new Lazy<UserControl>(() => new PageCPU(this)),
                 ["Windows"]   = new Lazy<UserControl>(() => new PageWindows(this)),
                 ["Battery"]   = new Lazy<UserControl>(() => new PageBatteryCalibration(this)),
@@ -89,7 +93,7 @@ namespace Optimisation_Tool
                 new NavGroup { Header = BtnNavMonitorGroup, Panel = MonitorGroupPanel, Label = "Surveiller",
                                Tags = new HashSet<string> { "Monitoring", "ReseauMon", "GameSession" } },
                 new NavGroup { Header = BtnNavOptimizeGroup, Panel = OptimizeGroupPanel, Label = "Optimiser",
-                               Tags = new HashSet<string> { "Windows", "Battery", "CPU", "Nvidia", "Reseau", "Privacy" } },
+                               Tags = new HashSet<string> { "Windows", "Battery", "CPU", "Nvidia", "GpuTuning", "Reseau", "Privacy" } },
                 new NavGroup { Header = BtnNavRepairGroup, Panel = RepairGroupPanel, Label = "Réparer",
                                Tags = new HashSet<string> { "WinRepair", "Nettoyage", "Apps" } },
                 new NavGroup { Header = BtnNavPrepareGroup, Panel = PrepareGroupPanel, Label = "Réinstaller",
@@ -110,24 +114,12 @@ namespace Optimisation_Tool
 
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
-                Helpers.CpuStabilityDefaults.ApplyIfNeeded(Settings, Log);
                 Helpers.UiSound.Enabled = Settings.SoundsEnabled;
                 Helpers.CpuTemperature.Enabled = Settings.CpuTempEnabled;
                 var mode = Settings.Theme == "Light" ? ThemeManager.Mode.Light : ThemeManager.Mode.Dark;
                 ApplyTheme(mode, persist: false);
                 ApplyNavigationMode(Settings.NavigationMode, persist: false);
                 try { FitToWorkArea(); } catch { }
-                // Tray déjà initialisé dans le ctor (voir commentaire là-bas). « Démarrer
-                // minimisé » ne s'applique QUE si Windows nous a lancés au boot (--startup) :
-                // un lancement manuel affiche toujours l'app. Quand il s'applique, la fenêtre
-                // est réduite dans la barre des tâches (l'icône tray reste présente — cf.
-                // HideToTray). Voir App.ShouldStartMinimized.
-                if (App.ShouldStartMinimized(Settings.StartMinimized))
-                {
-                    if (_tray?.IsAvailable == true) _tray.HideToTray();
-                    else                            this.WindowState = WindowState.Minimized;
-                }
-
                 // Version affichée = source unique (PageReglages.AppVersion)
                 TxtVersion.Text = "v" + Pages.PageReglages.AppVersion;
 
@@ -138,7 +130,12 @@ namespace Optimisation_Tool
                 try
                 {
                     if (Helpers.SystemMonitor.ShouldLockNvidiaTab())
+                    {
                         LockNavButton(BtnNavNvidia, "Aucune carte graphique Nvidia détectée sur ce PC.");
+                    }
+
+                    if (Helpers.SystemMonitor.ShouldLockGpuTuningTab(out string gpuTuningLockReason))
+                        LockNavButton(BtnNavGpuTuning, gpuTuningLockReason);
                 }
                 catch { }
 
@@ -156,6 +153,25 @@ namespace Optimisation_Tool
 
                 // Démarrage : page d'accueil = Dashboard (v1.4.3)
                 NavigateTo(BtnNavAccueil);
+                ResumeActiveBatteryCalibrationIfNeeded();
+
+                // Démarrage minimisé : réduire après la navigation et le premier cycle UI.
+                // Le faire trop tôt dans Loaded peut laisser Windows avec une fenêtre
+                // minimisée mal restaurée depuis la barre des tâches.
+                if (App.ShouldStartMinimized(Settings.StartMinimized))
+                {
+                    TraceWindowRestore("startup-minimize scheduled");
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            if (_tray?.IsAvailable == true) _tray.HideToTray();
+                            else                            WindowState = WindowState.Minimized;
+                            TraceWindowRestore("startup-minimize applied");
+                        }
+                        catch { }
+                    }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                }
 
                 // Forcer la fenêtre au PREMIER PLAN (pas seulement Topmost flicker, qui ne
                 // suffit pas si une autre app détient le foreground). On utilise
@@ -229,225 +245,26 @@ namespace Optimisation_Tool
             };
         }
 
-        // ── Mise à jour : overlay plein écran ─────────────────────────────────
-
-        private string? _pendingBat;
-        private System.Windows.Threading.DispatcherTimer? _updateWatcher;
-        // « Plus tard » (v1.3.4) : annulation du téléchargement en cours + tag décliné
-        // (le watcher 30 min ne re-propose pas la MÊME version pendant cette session ;
-        // la vérification manuelle dans Réglages la repropose toujours).
-        private System.Threading.CancellationTokenSource? _updCts;
-        private string _declinedTag = "";
-        private string _updTag      = "";
-
-        private async Task CheckUpdateSilentAsync()
+        private void ResumeActiveBatteryCalibrationIfNeeded()
         {
             try
             {
-                await Task.Delay(2500);   // laisser l'UI charger d'abord
-                await TryOfferUpdateAsync();
-            }
-            catch (Exception ex) { Log($"MAJ auto : erreur — {ex.Message}"); }
-        }
+                var session = Helpers.BatteryCalibrationStore.Load();
+                bool active = session.Phase is not Helpers.BatteryCalibrationPhase.Idle
+                    and not Helpers.BatteryCalibrationPhase.Complete;
+                if (!active) return;
 
-        // Vérification périodique « en direct » pendant que l'app reste ouverte
-        private void StartUpdateWatcher()
-        {
-            _updateWatcher = new System.Windows.Threading.DispatcherTimer
-            {
-                Interval = TimeSpan.FromMinutes(30)
-            };
-            _updateWatcher.Tick += async (_, _) => await TryOfferUpdateAsync();
-            _updateWatcher.Start();
-        }
-
-        private async Task TryOfferUpdateAsync()
-        {
-            if (!Settings.AutoUpdate) return;
-            if (UpdateOverlay.Visibility == Visibility.Visible) return; // déjà en cours
-            try
-            {
-                var (hasUpdate, tag, _, assetUrl, sha256, notes) = await PageReglages.CheckForUpdateAsync();
-                if (hasUpdate && !string.IsNullOrEmpty(assetUrl))
-                {
-                    if (tag == _declinedTag) return;   // l'utilisateur a dit « plus tard » pour celle-ci
-                    Log($"Mise à jour disponible : {tag}.");
-                    StartUpdate(assetUrl, tag, sha256, notes);   // overlay + téléchargement direct
-                }
-            }
-            catch (Exception ex) { Log($"MAJ auto : erreur — {ex.Message}"); }
-        }
-
-        /// <summary>Affiche l'overlay, télécharge la MAJ avec progression, puis propose CONTINUER.
-        /// sha256 : hash publié dans le body de la release — vérifié après téléchargement.
-        /// Mismatch OU hash vide = échec propre (aucun fichier remplacé) — fail-closed depuis v1.3.4.</summary>
-        public async void StartUpdate(string assetUrl, string tag, string sha256 = "", string notes = "")
-        {
-            _updTag = tag;
-            _updCts?.Dispose();
-            _updCts = new System.Threading.CancellationTokenSource();
-
-            // L'overlay de MAJ ne sert à rien si la fenêtre est réduite dans la barre des
-            // tâches (ou démarrée minimisée) : l'utilisateur ne la verrait jamais. On la
-            // surface AU PREMIER PLAN avant d'afficher l'overlay — y compris quand
-            // « Démarrer minimisé » est coché (ici on PASSE OUTRE volontairement : une MAJ
-            // disponible est un événement qui mérite d'être vu).
-            try
-            {
-                if (!IsVisible) Show();
-                if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-                Activate();
-                ForceForeground();
-            }
-            catch { }
-
-            UpdateOverlay.Visibility  = Visibility.Visible;
-            TxtUpdTitle.Text          = "Une mise à jour est disponible";
-            RunUpdFrom.Text           = $"v{PageReglages.AppVersion}";
-            RunUpdTo.Text             = $"v{tag.TrimStart('v', 'V')}";
-            TxtUpdStatus.Text         = "Téléchargement de la mise à jour…";
-            BtnUpdContinue.Visibility = Visibility.Collapsed;
-            BtnUpdLater.Visibility    = Visibility.Visible;
-            SetUpdateBar(0);
-
-            // Patch note de la release (sans la ligne SHA256) — la carte n'apparaît que
-            // s'il y a vraiment du contenu à montrer.
-            SetUpdateNotes(notes);
-
-            try
-            {
-                var progress = new Progress<double>(SetUpdateBar);
-                _pendingBat = await PageReglages.PrepareUpdateAsync(assetUrl, progress, sha256, _updCts.Token);
-
-                SetUpdateBar(100);
-                TxtUpdStatus.Text         = "Téléchargement terminé — prête à installer.";
-                BtnUpdContinue.Visibility = Visibility.Visible;
-                Log($"Mise à jour {tag} téléchargée — en attente de redémarrage.");
-            }
-            catch (OperationCanceledException)
-            {
-                // « Plus tard » pendant le téléchargement : BtnUpdLater_Click a déjà fermé
-                // l'overlay et tracé le report. Rien d'autre à faire.
+                if (_pages.TryGetValue("Battery", out var batteryPage)
+                    && batteryPage.Value is PageBatteryCalibration battery)
+                    battery.ResumeActiveSession();
             }
             catch (Exception ex)
             {
-                TxtUpdStatus.Text = $"Échec du téléchargement : {ex.Message}";
-                Log($"MAJ : erreur téléchargement — {ex.Message}");
+                Helpers.AppLog.Error("Calibrage batterie : reprise au démarrage", ex);
             }
         }
 
-        /// <summary>
-        /// « Plus tard » : annule le téléchargement en cours (ou abandonne une MAJ prête),
-        /// nettoie le dossier temporaire (rien ne reste stagé sur disque) et rend la main
-        /// sur la version actuelle. La même version ne sera pas re-proposée automatiquement
-        /// pendant cette session ; au prochain démarrage (ou via Réglages), si.
-        /// </summary>
-        private void BtnUpdLater_Click(object sender, RoutedEventArgs e)
-        {
-            try { _updCts?.Cancel(); } catch { }
-            _pendingBat  = null;
-            _declinedTag = _updTag;
-            UpdateOverlay.Visibility = Visibility.Collapsed;
-            ClearTaskbarProgress();
-            try
-            {
-                var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Tweakly_update");
-                if (System.IO.Directory.Exists(tmp)) System.IO.Directory.Delete(tmp, true);
-            }
-            catch { /* fichier encore verrouillé par le download qui s'annule → retentera au prochain Prepare */ }
-            Log($"Mise à jour {_updTag} reportée — tu restes sur la v{PageReglages.AppVersion}. " +
-                "Elle sera re-proposée au prochain démarrage (ou via Réglages > Vérifier).");
-        }
-
-        /// <summary>
-        /// Remplit la carte « Nouveautés » de l'overlay : chaque ligne du patch note qui
-        /// commence par "- " / "* " / "• " devient une puce colorée (accent bleu), le reste
-        /// est affiché tel quel. Carte masquée si le patch note est vide.
-        /// </summary>
-        private void SetUpdateNotes(string notes)
-        {
-            TxtUpdNotes.Inlines.Clear();
-            if (string.IsNullOrWhiteSpace(notes))
-            {
-                UpdNotesCard.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            bool first = true;
-            foreach (var raw in notes.Replace("\r\n", "\n").Split('\n'))
-            {
-                var line = raw.TrimEnd();
-                if (line.Trim().Length == 0) continue;
-                if (!first) TxtUpdNotes.Inlines.Add(new System.Windows.Documents.LineBreak());
-                first = false;
-
-                var t = line.TrimStart();
-                if (t.StartsWith("- ") || t.StartsWith("* ") || t.StartsWith("• "))
-                {
-                    var bullet = new System.Windows.Documents.Run("•  ")
-                    {
-                        FontWeight = FontWeights.Bold
-                    };
-                    bullet.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "ThAccentIcon");
-                    TxtUpdNotes.Inlines.Add(bullet);
-                    TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run(t.Substring(2).TrimStart()));
-                }
-                else
-                {
-                    TxtUpdNotes.Inlines.Add(new System.Windows.Documents.Run(line));
-                }
-            }
-            UpdNotesCard.Visibility = Visibility.Visible;
-        }
-
-        private void SetUpdateBar(double pct)
-        {
-            pct = Math.Max(0, Math.Min(100, pct));
-            UpdBar.ColumnDefinitions[0].Width = new GridLength(pct,       GridUnitType.Star);
-            UpdBar.ColumnDefinitions[1].Width = new GridLength(100 - pct, GridUnitType.Star);
-            TxtUpdPct.Text = $"{pct:F0} %";
-        }
-
-        /// <summary>
-        /// L'overlay de MAJ couvre TOUTE la fenêtre (barre de titre incluse) → sans ça,
-        /// impossible de déplacer la fenêtre pendant une MAJ. Si les boutons se retrouvent
-        /// hors écran (fenêtre à cheval sur un bord, écran débranché…), l'utilisateur serait
-        /// coincé. Cliquer-glisser n'importe quelle zone vide de l'overlay déplace la fenêtre
-        /// (les boutons interceptent leur clic, donc aucun conflit avec eux).
-        /// </summary>
-        private void UpdateOverlay_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.LeftButton == MouseButtonState.Pressed && WindowState == WindowState.Normal)
-            {
-                try { DragMove(); } catch { /* clic relâché pendant la capture : ignorer */ }
-            }
-        }
-
-        private void BtnUpdContinue_Click(object sender, RoutedEventArgs e)
-        {
-            if (!string.IsNullOrEmpty(_pendingBat))
-                PageReglages.LaunchUpdaterAndExit(_pendingBat);
-        }
-
-        // ── Barre de progression dans la barre des tâches Windows ─────────────
-
-        public void SetTaskbarProgress(double pct)
-        {
-            Dispatcher.BeginInvoke(() =>
-            {
-                TaskbarInfo.ProgressState = TaskbarItemProgressState.Normal;
-                TaskbarInfo.ProgressValue = Math.Max(0, Math.Min(1, pct / 100.0));
-            });
-        }
-
-        public void ClearTaskbarProgress()
-        {
-            Dispatcher.BeginInvoke(() =>
-            {
-                TaskbarInfo.ProgressState = TaskbarItemProgressState.None;
-                TaskbarInfo.ProgressValue = 0;
-            });
-        }
+        // ── Mise à jour : overlay plein écran ─────────────────────────────────
 
         // ── Navigation ────────────────────────────────────────────────────────
 
@@ -625,7 +442,13 @@ namespace Optimisation_Tool
 
         private void SetActivityLogVisibilityForPage(string tag)
         {
-            bool hideBottomLog = string.Equals(tag, "Nettoyage", StringComparison.Ordinal);
+            bool hideBottomLog =
+                string.Equals(tag, "Nettoyage", StringComparison.Ordinal) ||
+                string.Equals(tag, "Windows",   StringComparison.Ordinal) ||
+                string.Equals(tag, "CPU",       StringComparison.Ordinal) ||
+                string.Equals(tag, "GpuTuning", StringComparison.Ordinal) ||
+                string.Equals(tag, "Reseau",    StringComparison.Ordinal) ||
+                string.Equals(tag, "Privacy",   StringComparison.Ordinal);
             ActivityLogPanel.Visibility = hideBottomLog ? Visibility.Collapsed : Visibility.Visible;
             if (!hideBottomLog)
                 LogScroll.Visibility = _logVisible ? Visibility.Visible : Visibility.Collapsed;
@@ -716,26 +539,15 @@ namespace Optimisation_Tool
 
         private void FitToWorkArea()
         {
-            if (WindowState != WindowState.Normal) return;
-
-            var work = SystemParameters.WorkArea;
-            if (work.Width <= 0 || work.Height <= 0) return;
-
-            const double desiredWidth = 1180;
-            const double desiredHeight = 820;
-
-            double minWidth = Math.Min(940, Math.Max(820, work.Width - 40));
-            double minHeight = Math.Min(620, Math.Max(540, work.Height - 40));
-            MinWidth = minWidth;
-            MinHeight = minHeight;
-
-            double width = Math.Min(desiredWidth, Math.Max(minWidth, work.Width * 0.90));
-            double height = Math.Min(desiredHeight, Math.Max(minHeight, work.Height * 0.88));
-
-            Width = width;
-            Height = height;
-            Left = work.Left + Math.Max(0, (work.Width - width) / 2);
-            Top = work.Top + Math.Max(0, (work.Height - height) / 2);
+            Helpers.WindowSizing.FitToCurrentWorkArea(
+                this,
+                desiredWidth: 1180,
+                desiredHeight: 820,
+                standardMinWidth: 940,
+                standardMinHeight: 620,
+                widthRatio: 0.90,
+                heightRatio: 0.88,
+                margin: 12);
         }
 
         private void DragBar_MouseDown(object sender, MouseButtonEventArgs e)
@@ -788,7 +600,10 @@ namespace Optimisation_Tool
         // Marge + glyphe selon l'état (compense l'overhang WindowChrome en plein écran)
         protected override void OnStateChanged(EventArgs e)
         {
+            var previousState = _lastWindowState;
             base.OnStateChanged(e);
+            _lastWindowState = WindowState;
+
             if (WindowState == WindowState.Maximized)
             {
                 RootGrid.Margin     = new Thickness(0);
@@ -798,6 +613,35 @@ namespace Optimisation_Tool
             {
                 RootGrid.Margin     = new Thickness(0);
                 BtnMaximize.Content = "\uE922";   // MDL2 : agrandir
+            }
+
+            TraceWindowRestore($"state {previousState} -> {WindowState}");
+
+            if (!ShuttingDown &&
+                previousState == WindowState.Minimized &&
+                WindowState != WindowState.Minimized &&
+                !_restoreAfterTaskbarQueued)
+            {
+                _restoreAfterTaskbarQueued = true;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        TraceWindowRestore("taskbar-restore begin");
+                        ShowInTaskbar = true;
+                        if (!IsVisible) Show();
+                        ForceForeground();
+                        TraceWindowRestore("taskbar-restore end");
+                    }
+                    catch (Exception ex)
+                    {
+                        Helpers.AppLog.Error("Fenêtre : restauration depuis la barre des tâches", ex);
+                    }
+                    finally
+                    {
+                        _restoreAfterTaskbarQueued = false;
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
         }
 
@@ -813,7 +657,12 @@ namespace Optimisation_Tool
 
             // Init tray APRÈS création du HWND de MainWindow (le tray s'y attache,
             // pas de fenêtre supplémentaire). Voir TrayIconManager pour le pourquoi.
-            try { _tray = new TrayIconManager(this, hwnd); } catch { _tray = null; }
+            try { _tray = new TrayIconManager(this, hwnd); }
+            catch (Exception ex)
+            {
+                _tray = null;
+                Helpers.AppLog.Error("Fenêtre : initialisation de l'icône de notification", ex);
+            }
         }
 
         private IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -824,13 +673,11 @@ namespace Optimisation_Tool
             //    → aucun risque de réagir à autre chose qu'à un nous-même.
             if (msg != 0 && (uint)msg == App.WM_TWEAKLY_SHOW)
             {
-                try
+                try { RestoreFromUserRequest(); }
+                catch (Exception ex)
                 {
-                    if (!IsVisible) Show();
-                    if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-                    EnsureForeground();
+                    Helpers.AppLog.Error("Fenêtre : restauration demandée par une seconde instance", ex);
                 }
-                catch { }
                 handled = true;
                 return IntPtr.Zero;
             }
@@ -1023,6 +870,56 @@ namespace Optimisation_Tool
                     if (attached) AttachThreadInput(foreThread, myThread, false);
                 }
             }
+            catch (Exception ex)
+            {
+                Helpers.AppLog.Error("Fenêtre : RestoreFromUserRequest", ex);
+            }
+        }
+
+        /// <summary>
+        /// Restaure la fenêtre suite à une action explicite utilisateur (barre des tâches,
+        /// 2e lancement, tray). Contrairement à EnsureForeground(), cette méthode ignore le
+        /// flag de démarrage minimisé : après un clic utilisateur, Tweakly doit réapparaître.
+        /// </summary>
+        public void RestoreFromUserRequest()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(RestoreFromUserRequest));
+                return;
+            }
+
+            try
+            {
+                TraceWindowRestore("user-restore begin");
+                if (IsMiniActive())
+                {
+                    ExitMiniMode();
+                    TraceWindowRestore("user-restore mini-exit");
+                    return;
+                }
+
+                ShowInTaskbar = true;
+                if (!IsVisible) Show();
+                if (WindowState == WindowState.Minimized)
+                    WindowState = WindowState.Normal;
+
+                ForceForeground();
+                TraceWindowRestore("user-restore end");
+            }
+            catch (Exception ex)
+            {
+                Helpers.AppLog.Error("Fenêtre : restauration après une action utilisateur", ex);
+            }
+        }
+
+        private void TraceWindowRestore(string step)
+        {
+            try
+            {
+                Helpers.AppLog.Write(
+                    $"Fenetre : {step} | state={WindowState} | visible={IsVisible} | taskbar={ShowInTaskbar} | active={IsActive} | startup={App.LaunchedAtStartup} | afterUpdate={App.LaunchedAfterUpdate}");
+            }
             catch { }
         }
 
@@ -1067,6 +964,11 @@ namespace Optimisation_Tool
                     && batteryPage.IsValueCreated
                     && batteryPage.Value is PageBatteryCalibration battery)
                     battery.PrepareForAppShutdown();
+
+                if (_pages.TryGetValue("WinRepair", out var repairPage)
+                    && repairPage.IsValueCreated
+                    && repairPage.Value is PageWindowsRepair repair)
+                    repair.CancelForAppShutdown();
             }
             catch { }
             // Retire la tray icon AVANT la fermeture (sinon elle reste affichée comme

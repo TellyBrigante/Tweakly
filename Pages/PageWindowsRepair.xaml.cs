@@ -5,10 +5,10 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
@@ -25,9 +25,15 @@ namespace Optimisation_Tool.Pages
             Grid Bar,
             TextBlock Percent,
             string IdleText,
-            string RunningText);
+            string RunningText,
+            TimeSpan Timeout);
 
-        private sealed record CommandResult(int ExitCode, string StdOut, string StdErr);
+        private sealed record CommandResult(
+            int ExitCode,
+            string StdOut,
+            string StdErr,
+            bool Cancelled = false,
+            bool TimedOut = false);
 
         private enum StepVisual { Idle, Running, Done, Skipped, Failed }
 
@@ -35,6 +41,8 @@ namespace Optimisation_Tool.Pages
         private readonly StringBuilder _raw = new();
         private readonly StringBuilder _report = new();
         private bool _running;
+        private CancellationTokenSource? _repairCts;
+        private Process? _activeProcess;
 
         private static readonly Regex PercentRx = new(@"(\d{1,3}(?:[,.]\d+)?)\s*%", RegexOptions.Compiled);
         private static readonly Encoding OutputEncoding;
@@ -56,8 +64,20 @@ namespace Optimisation_Tool.Pages
 
         private async void BtnRunRepair_Click(object sender, RoutedEventArgs e)
         {
-            if (_running) return;
+            if (_running)
+            {
+                BtnRunRepair.IsEnabled = false;
+                BtnRunRepair.Content = "ANNULATION...";
+                _repairCts?.Cancel();
+                return;
+            }
             await RunRepairAsync();
+        }
+
+        public void CancelForAppShutdown()
+        {
+            _repairCts?.Cancel();
+            TryKillActiveProcess();
         }
 
         private void BtnCopyReport_Click(object sender, RoutedEventArgs e)
@@ -69,10 +89,14 @@ namespace Optimisation_Tool.Pages
         private async Task RunRepairAsync()
         {
             _running = true;
-            BtnRunRepair.IsEnabled = false;
+            _repairCts = new CancellationTokenSource();
+            BtnRunRepair.IsEnabled = true;
+            BtnRunRepair.Content = "ANNULER";
             BtnCopyReport.IsEnabled = false;
             BtnCopyReport.Content = "COPIER LE RAPPORT";
 
+            try
+            {
             _raw.Clear();
             _report.Clear();
             ResetUi();
@@ -120,11 +144,14 @@ namespace Optimisation_Tool.Pages
                         SetStepProgress(step, pct.Value);
                         SetTotalProgress(((i + pct.Value / 100.0) * 100.0) / all.Count);
                     }
-                });
+                }, _repairCts.Token);
                 sw.Stop();
 
-                SetStepProgress(step, 100);
-                SetTotalProgress(((i + 1) * 100.0) / all.Count);
+                if (!result.Cancelled && !result.TimedOut)
+                {
+                    SetStepProgress(step, 100);
+                    SetTotalProgress(((i + 1) * 100.0) / all.Count);
+                }
 
                 string human = ExplainResult(step, result, sw.Elapsed);
                 step.Text.Text = human;
@@ -140,7 +167,9 @@ namespace Optimisation_Tool.Pages
                 {
                     SetStepVisual(step, StepVisual.Failed, i + 1);
                     failed = true;
-                    SetCurrent("R\u00e9paration interrompue", human);
+                    SetCurrent(
+                        result.Cancelled ? "R\u00e9paration annul\u00e9e" : "R\u00e9paration interrompue",
+                        human);
                     AddDetail(human);
                     AddReportLine($"{step.Title} : {human}");
                     break;
@@ -159,46 +188,64 @@ namespace Optimisation_Tool.Pages
                 AddReportLine($"Termin\u00e9 : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
             }
 
-            BtnRunRepair.IsEnabled = true;
-            BtnCopyReport.IsEnabled = _report.Length > 0;
-            _running = false;
             _main.Log("R\u00e9paration Windows : s\u00e9quence DISM/SFC termin\u00e9e.");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("R\u00e9paration Windows : s\u00e9quence", ex);
+                SetCurrent("R\u00e9paration interrompue", "Une erreur interne a interrompu l'op\u00e9ration.");
+                SetSummary("La r\u00e9paration a \u00e9t\u00e9 interrompue. Le d\u00e9tail est disponible dans le journal Tweakly.");
+                AddReportLine($"Erreur interne : {ex.Message}");
+            }
+            finally
+            {
+                TryKillActiveProcess();
+                _repairCts.Dispose();
+                _repairCts = null;
+                _running = false;
+                BtnRunRepair.Content = "R\u00c9PARER WINDOWS";
+                BtnRunRepair.IsEnabled = true;
+                BtnCopyReport.IsEnabled = _report.Length > 0;
+            }
         }
 
         private List<RepairStep> Steps() => new()
         {
             new("\u00c9tat connu de Windows",
                 "dism.exe",
-                "/Online /Cleanup-Image /CheckHealth",
+                "/Online /English /Cleanup-Image /CheckHealth",
                 DotCheck,
                 NumCheck,
                 TxtCheck,
                 StepBarCheck,
                 TxtPctCheck,
                 "V\u00e9rification rapide. Si Windows n'a rien d\u00e9j\u00e0 marqu\u00e9 comme ab\u00eem\u00e9, cette \u00e9tape peut durer seulement quelques s.",
-                "Windows fait une v\u00e9rification rapide de l'\u00e9tat connu de son image syst\u00e8me."),
+                "Windows fait une v\u00e9rification rapide de l'\u00e9tat connu de son image syst\u00e8me.",
+                TimeSpan.FromMinutes(5)),
 
             new("Analyse de l'image Windows",
                 "dism.exe",
-                "/Online /Cleanup-Image /ScanHealth",
+                "/Online /English /Cleanup-Image /ScanHealth",
                 DotScan,
                 NumScan,
                 TxtScan,
                 StepBarScan,
                 TxtPctScan,
                 "Analyse compl\u00e8te du magasin de composants utilis\u00e9 pour r\u00e9parer Windows.",
-                "Windows analyse compl\u00e8tement le magasin de composants. Cette \u00e9tape peut prendre plusieurs min."),
+                "Windows analyse compl\u00e8tement le magasin de composants. Cette \u00e9tape peut prendre plusieurs min.",
+                TimeSpan.FromMinutes(45)),
 
             new("R\u00e9paration de l'image Windows",
                 "dism.exe",
-                "/Online /Cleanup-Image /RestoreHealth",
+                "/Online /English /Cleanup-Image /RestoreHealth",
                 DotRestore,
                 NumRestore,
                 TxtRestore,
                 StepBarRestore,
                 TxtPctRestore,
                 "R\u00e9cup\u00e8re les fichiers propres n\u00e9cessaires puis r\u00e9pare l'image Windows.",
-                "Windows r\u00e9pare son image syst\u00e8me avant de lancer SFC."),
+                "Windows r\u00e9pare son image syst\u00e8me avant de lancer SFC.",
+                TimeSpan.FromMinutes(120)),
 
             new("V\u00e9rification des fichiers syst\u00e8me",
                 "sfc.exe",
@@ -209,13 +256,20 @@ namespace Optimisation_Tool.Pages
                 StepBarSfc,
                 TxtPctSfc,
                 "V\u00e9rifie les fichiers syst\u00e8me et remplace ceux qui sont corrompus.",
-                "Windows v\u00e9rifie et r\u00e9pare les fichiers syst\u00e8me avec SFC.")
+                "Windows v\u00e9rifie et r\u00e9pare les fichiers syst\u00e8me avec SFC.",
+                TimeSpan.FromMinutes(60))
         };
 
-        private async Task<CommandResult> RunCommandAsync(RepairStep step, Action<string> onLine)
+        private async Task<CommandResult> RunCommandAsync(
+            RepairStep step,
+            Action<string> onLine,
+            CancellationToken cancellationToken)
         {
             var output = new StringBuilder();
             var error = new StringBuilder();
+            if (cancellationToken.IsCancellationRequested)
+                return new CommandResult(-1, "", "", Cancelled: true);
+
             var psi = new ProcessStartInfo
             {
                 FileName = step.Command,
@@ -227,20 +281,76 @@ namespace Optimisation_Tool.Pages
             };
 
             using var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            using var timeoutCts = new CancellationTokenSource(step.Timeout);
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutCts.Token);
+            Task outTask = Task.CompletedTask;
+            Task errTask = Task.CompletedTask;
 
             try
             {
                 p.Start();
-                var outTask = ReadConsoleStreamAsync(p.StandardOutput.BaseStream, output, onLine);
-                var errTask = ReadConsoleStreamAsync(p.StandardError.BaseStream, error, onLine);
-                await p.WaitForExitAsync();
+                _activeProcess = p;
+                outTask = ReadConsoleStreamAsync(p.StandardOutput.BaseStream, output, onLine);
+                errTask = ReadConsoleStreamAsync(p.StandardError.BaseStream, error, onLine);
+                await p.WaitForExitAsync(linkedCts.Token);
                 await Task.WhenAll(outTask, errTask);
                 return new CommandResult(p.ExitCode, output.ToString(), error.ToString());
+            }
+            catch (OperationCanceledException)
+            {
+                bool cancelled = cancellationToken.IsCancellationRequested;
+                TryKillProcess(p);
+                await WaitForExitBoundedAsync(p, TimeSpan.FromSeconds(5));
+                await Task.WhenAny(Task.WhenAll(outTask, errTask), Task.Delay(TimeSpan.FromSeconds(2)));
+                AppLog.Write(cancelled
+                    ? $"Réparation Windows : {step.Title} annulée par l'utilisateur."
+                    : $"Réparation Windows : {step.Title} arrêtée après le délai de {FormatDuration(step.Timeout)}.");
+                return new CommandResult(
+                    -1,
+                    output.ToString(),
+                    error.ToString(),
+                    Cancelled: cancelled,
+                    TimedOut: !cancelled);
             }
             catch (Exception ex)
             {
                 return new CommandResult(-1, output.ToString(), ex.Message);
             }
+            finally
+            {
+                if (ReferenceEquals(_activeProcess, p)) _activeProcess = null;
+            }
+        }
+
+        private void TryKillActiveProcess()
+        {
+            var process = _activeProcess;
+            if (process != null) TryKillProcess(process);
+        }
+
+        private static void TryKillProcess(Process process)
+        {
+            try
+            {
+                if (!process.HasExited) process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Réparation Windows : arrêt du processus", ex);
+            }
+        }
+
+        private static async Task WaitForExitBoundedAsync(Process process, TimeSpan timeout)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(timeout);
+                await process.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException) { }
+            catch (InvalidOperationException) { }
         }
 
         private async Task ReadConsoleStreamAsync(Stream stream, StringBuilder sink, Action<string> onLine)
@@ -296,6 +406,10 @@ namespace Optimisation_Tool.Pages
             string raw = Normalize(result.StdOut + "\n" + result.StdErr);
             string duration = FormatDuration(elapsed);
 
+            if (result.Cancelled)
+                return $"{step.Title} annul\u00e9e apr\u00e8s {duration}.";
+            if (result.TimedOut)
+                return $"{step.Title} interrompue : d\u00e9lai maximal de {FormatDuration(step.Timeout)} d\u00e9pass\u00e9.";
             if (result.ExitCode != 0)
                 return $"{step.Title} a \u00e9chou\u00e9 en {duration}. Code erreur : {result.ExitCode}.";
 
@@ -311,12 +425,17 @@ namespace Optimisation_Tool.Pages
                 return $"SFC termin\u00e9 sans erreur bloquante. Dur\u00e9e : {duration}.";
             }
 
-            if (ContainsAny(raw, "no component store corruption detected", "aucune corruption du magasin", "aucun endommagement"))
+            var health = DismOutputClassifier.Parse(raw);
+            if (health == DismHealthState.Clean)
                 return $"{step.Title} : aucune corruption d\u00e9tect\u00e9e. Dur\u00e9e : {duration}.";
-            if (ContainsAny(raw, "the restore operation completed successfully", "restauration a ete effectuee", "operation completed successfully"))
-                return $"{step.Title} : r\u00e9paration termin\u00e9e correctement. Dur\u00e9e : {duration}.";
-            if (ContainsAny(raw, "repairable", "reparable"))
+            if (health == DismHealthState.NonRepairable)
+                return $"{step.Title} : le magasin de composants est endommag\u00e9 et DISM ne le d\u00e9clare pas r\u00e9parable. Dur\u00e9e : {duration}.";
+            if (health == DismHealthState.Repairable)
                 return $"{step.Title} : corruption r\u00e9parable d\u00e9tect\u00e9e. Dur\u00e9e : {duration}.";
+            if (IsRestoreHealth(step)
+                && (health == DismHealthState.Repaired
+                    || ContainsAny(raw, "the operation completed successfully", "operation completed successfully")))
+                return $"{step.Title} : r\u00e9paration termin\u00e9e correctement. Dur\u00e9e : {duration}.";
 
             return $"{step.Title} termin\u00e9 sans erreur bloquante. Dur\u00e9e : {duration}.";
         }
@@ -325,10 +444,7 @@ namespace Optimisation_Tool.Pages
         {
             string raw = Normalize(result.StdOut + "\n" + result.StdErr);
 
-            if (ContainsAny(raw, "no component store corruption detected", "aucune corruption du magasin", "aucun endommagement"))
-                return false;
-
-            return true;
+            return DismOutputClassifier.NeedsRestoreHealth(result.ExitCode, result.StdOut, result.StdErr);
         }
 
         private static bool IsScanHealth(RepairStep step)
@@ -472,6 +588,5 @@ namespace Optimisation_Tool.Pages
             return s.Length == 1 && char.IsLetter(s[0]);
         }
 
-        private static SolidColorBrush Solid(byte r, byte g, byte b) => new(Color.FromRgb(r, g, b));
     }
 }

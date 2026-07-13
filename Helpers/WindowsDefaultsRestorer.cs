@@ -81,17 +81,14 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "CPU", "SystemResponsiveness", () =>
         {
-            Registry.SetValue(MmPath, "SystemResponsiveness", 20, RegistryValueKind.DWord);
-            return "20.";
+            Registry.SetValue(MmPath, "SystemResponsiveness",
+                RegistryValueLogic.SystemResponsivenessDefault, RegistryValueKind.DWord);
+            return $"{RegistryValueLogic.SystemResponsivenessDefault}.";
         });
 
         Step(report, "CPU", "Memory Integrity (HVCI)", () =>
         {
-            Registry.SetValue(
-                @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-                "Enabled", 1, RegistryValueKind.DWord);
-            report.NeedsRestart = true;
-            return "Activee, redemarrage requis.";
+            return Skip("Valeur dependante de l'installation Windows; reglage laisse intact.");
         });
     }
 
@@ -130,9 +127,10 @@ public static class WindowsDefaultsRestorer
             const string path =
                 @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
             Registry.SetValue(path, "GPU Priority", 8, RegistryValueKind.DWord);
-            Registry.SetValue(path, "Priority", 6, RegistryValueKind.DWord);
-            Registry.SetValue(path, "Scheduling Category", "High", RegistryValueKind.String);
-            return "8 / 6 / High.";
+            Registry.SetValue(path, "Priority", 2, RegistryValueKind.DWord);
+            Registry.SetValue(path, "Scheduling Category", "Medium", RegistryValueKind.String);
+            Registry.SetValue(path, "SFIO Priority", "Normal", RegistryValueKind.String);
+            return "8 / 2 / Medium / Normal.";
         });
 
         Step(report, "Windows", "Mode MSI GPU", () =>
@@ -141,9 +139,7 @@ public static class WindowsDefaultsRestorer
             if (path == null)
                 return Skip("Aucun GPU Display trouve dans le registre.");
 
-            Registry.SetValue(path, "MSISupported", 0, RegistryValueKind.DWord);
-            report.NeedsRestart = true;
-            return "Desactive, redemarrage requis.";
+            return Skip("Valeur definie par le pilote GPU; reglage laisse intact.");
         });
 
         Step(report, "Windows", "Mode Jeu", () =>
@@ -163,15 +159,12 @@ public static class WindowsDefaultsRestorer
             var raw = key.GetValue("DirectXUserGlobalSettings") as string;
             if (string.IsNullOrWhiteSpace(raw)) return "Aucun override DirectX present.";
 
-            var pairs = raw.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                           .Select(p => p.Trim())
-                           .Where(p => !p.StartsWith("SwapEffectUpgradeEnable=", StringComparison.OrdinalIgnoreCase))
-                           .ToList();
-
-            if (pairs.Count == 0)
+            var updated = RegistryValueLogic.SetSemicolonValue(
+                raw, "SwapEffectUpgradeEnable", null);
+            if (updated == null)
                 key.DeleteValue("DirectXUserGlobalSettings", false);
             else
-                key.SetValue("DirectXUserGlobalSettings", string.Join(";", pairs) + ";", RegistryValueKind.String);
+                key.SetValue("DirectXUserGlobalSettings", updated, RegistryValueKind.String);
 
             return "Override SwapEffectUpgradeEnable retire.";
         });
@@ -225,18 +218,7 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Reseau", "Mise en veille adaptateurs", () =>
         {
-            const string netClass =
-                @"SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}";
-            using var root = Registry.LocalMachine.OpenSubKey(netClass, writable: true);
-            if (root == null) return "Classe reseau introuvable.";
-
-            foreach (var sub in root.GetSubKeyNames())
-            {
-                using var key = root.OpenSubKey(sub, writable: true);
-                if (key?.GetValue("DriverDesc") == null) continue;
-                key.SetValue("PnPCapabilities", 0, RegistryValueKind.DWord);
-            }
-            return "Autorisee.";
+            return Skip("Valeur propre a chaque pilote reseau; reglages laisses intacts.");
         });
 
         Step(report, "Reseau", "WPAD", () =>
@@ -249,9 +231,10 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Reseau", "NetworkThrottlingIndex", () =>
         {
-            Registry.SetValue(MmPath, "NetworkThrottlingIndex", 10, RegistryValueKind.DWord);
+            Registry.SetValue(MmPath, "NetworkThrottlingIndex",
+                RegistryValueLogic.NetworkThrottlingDefault, RegistryValueKind.DWord);
             report.NeedsRestart = true;
-            return "10, redemarrage conseille.";
+            return $"{RegistryValueLogic.NetworkThrottlingDefault}, redemarrage conseille.";
         });
     }
 
@@ -404,7 +387,8 @@ public static class WindowsDefaultsRestorer
         var path = $@"HKEY_CURRENT_USER\Control Panel\Accessibility\{subKey}";
         var raw = Registry.GetValue(path, "Flags", null)?.ToString();
         var flags = int.TryParse(raw, out var parsed) ? parsed : defaultValue;
-        Registry.SetValue(path, "Flags", (flags | 0x4).ToString(), RegistryValueKind.String);
+        Registry.SetValue(path, "Flags",
+            RegistryValueLogic.EnsureBits(flags, 0x4).ToString(), RegistryValueKind.String);
     }
 
     private static void RunCmd(string exe, string args, int timeoutMs, bool throwOnError = true)

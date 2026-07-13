@@ -30,7 +30,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Bd"   Property="Background"  Value="#2E5BA0FF"/>
+                                <Setter TargetName="Bd"   Property="Background"  Value="{DynamicResource ThInfoBorderTint}"/>
                                 <Setter TargetName="Bd"   Property="BorderBrush" Value="{DynamicResource ThBlueGradB}"/>
                                 <Setter TargetName="Tick" Property="Visibility"  Value="Visible"/>
                             </Trigger>
@@ -74,8 +74,8 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background"      Value="#2E5BA0FF"/>
-                    <Setter Property="BorderBrush"     Value="#665BA0FF"/>
+                    <Setter Property="Background"      Value="{DynamicResource ThInfoBorderTint}"/>
+                    <Setter Property="BorderBrush"     Value="{DynamicResource ThInfoStrongTint}"/>
                     <Setter Property="BorderThickness" Value="1"/>
                 </Trigger>
             </Style.Triggers>
@@ -314,10 +314,10 @@
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#1F5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="{DynamicResource ThInfoSelectionColor}"/>
                             <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="{DynamicResource ThBlueGradBColor}"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#145BA0FF"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#805BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{DynamicResource ThInfoFaintColor}"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="{DynamicResource ThInfoTextTintColor}"/>
                         </DataGrid.Resources>
                         <DataGrid.CellStyle>
                             <Style TargetType="DataGridCell">
@@ -416,9 +416,9 @@
                                 <Border Width="110" HorizontalAlignment="Left" CornerRadius="3">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#00FFFFFF" Offset="0"/>
-                                            <GradientStop Color="#66FFFFFF" Offset="0.5"/>
-                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource ThSheenClearColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThSheenMidColor}" Offset="0.5"/>
+                                            <GradientStop Color="{DynamicResource ThSheenClearColor}" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                     <Border.RenderTransform>
@@ -490,12 +490,12 @@
                             Click="BtnPickZip_Click">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource SecondaryBtnStyle}">
-                                <Setter Property="Background"  Value="#12376E"/>
-                                <Setter Property="BorderBrush" Value="#1464A8"/>
-                                <Setter Property="Foreground"  Value="#DCF0FF"/>
+                                <Setter Property="Background"  Value="{DynamicResource ThPrimary}"/>
+                                <Setter Property="BorderBrush" Value="{DynamicResource ThBlueLine}"/>
+                                <Setter Property="Foreground"  Value="{DynamicResource ThPrimaryText}"/>
                                 <Style.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#1A4F9C"/>
+                                        <Setter Property="Background" Value="{DynamicResource ThPrimaryHover}"/>
                                     </Trigger>
                                 </Style.Triggers>
                             </Style>
@@ -555,10 +555,10 @@
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <DataGrid.Resources>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="#1F5BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"           Color="{DynamicResource ThInfoSelectionColor}"/>
                             <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"        Color="{DynamicResource ThBlueGradBColor}"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#145BA0FF"/>
-                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="#805BA0FF"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="{DynamicResource ThInfoFaintColor}"/>
+                            <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="{DynamicResource ThInfoTextTintColor}"/>
                         </DataGrid.Resources>
                         <DataGrid.CellStyle>
                             <Style TargetType="DataGridCell">
@@ -674,9 +674,9 @@
                                 <Border Width="110" HorizontalAlignment="Left" CornerRadius="3">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                            <GradientStop Color="#00FFFFFF" Offset="0"/>
-                                            <GradientStop Color="#66FFFFFF" Offset="0.5"/>
-                                            <GradientStop Color="#00FFFFFF" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource ThSheenClearColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThSheenMidColor}" Offset="0.5"/>
+                                            <GradientStop Color="{DynamicResource ThSheenClearColor}" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                     <Border.RenderTransform>

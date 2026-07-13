@@ -23,6 +23,15 @@ namespace Optimisation_Tool.Pages
             _session = session;
             _snapshot = snapshot;
             InitializeComponent();
+            SourceInitialized += (_, _) => WindowSizing.FitToCurrentWorkArea(
+                this,
+                desiredWidth: 980,
+                desiredHeight: 680,
+                standardMinWidth: 720,
+                standardMinHeight: 460,
+                widthRatio: 0.92,
+                heightRatio: 0.90,
+                margin: 12);
             Loaded += (_, _) =>
             {
                 RenderReport();

@@ -22,12 +22,23 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     public static class GameCrashContextAnalyzer
     {
-        private sealed class Candidate
+        internal sealed class Candidate
         {
             public string App = "";
             public string Path = "";
             public DateTime Time;
+            public int BaseScore;
             public int Score;
+        }
+
+        public sealed class Snapshot
+        {
+            internal readonly List<Candidate> Candidates;
+
+            internal Snapshot(List<Candidate> candidates)
+            {
+                Candidates = candidates;
+            }
         }
 
         private static readonly HashSet<string> InterestingExt = new(StringComparer.OrdinalIgnoreCase)
@@ -36,8 +47,10 @@ namespace Optimisation_Tool.Helpers
         };
 
         public static GameCrashContext Analyze(DateTime start, DateTime end)
+            => Analyze(CreateSnapshot(start, end), start, end);
+
+        public static Snapshot CreateSnapshot(DateTime start, DateTime end)
         {
-            var ctx = new GameCrashContext();
             if (end < start) end = start;
 
             DateTime from = start.AddMinutes(-5);
@@ -53,6 +66,30 @@ namespace Optimisation_Tool.Helpers
 
             string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             AddCandidatesFromRecentTopDirs(candidates, roaming, from, to, maxDepth: 3, maxFilesPerDir: 400);
+
+            return new Snapshot(candidates);
+        }
+
+        public static GameCrashContext Analyze(Snapshot snapshot, DateTime start, DateTime end)
+        {
+            var ctx = new GameCrashContext();
+            if (end < start) end = start;
+
+            DateTime from = start.AddMinutes(-5);
+            DateTime to = end.AddMinutes(5);
+            DateTime candidateFrom = from.AddMinutes(-30);
+            DateTime candidateTo = to.AddMinutes(30);
+            var candidates = snapshot.Candidates
+                .Where(c => c.Time >= candidateFrom && c.Time <= candidateTo)
+                .Select(c => new Candidate
+                {
+                    App = c.App,
+                    Path = c.Path,
+                    Time = c.Time,
+                    BaseScore = c.BaseScore,
+                    Score = c.BaseScore + (c.Time >= from && c.Time <= to ? 100 : 45),
+                })
+                .ToList();
 
             if (candidates.Count == 0) return ctx;
 
@@ -121,15 +158,19 @@ namespace Optimisation_Tool.Helpers
                 string app = GuessAppName(root, file, rootMode);
                 if (app.Length == 0 || IsNoiseApp(app)) continue;
 
-                int score = 0;
-                if (t >= from && t <= to) score += 100;
-                else score += 45;
-                if (rootMode == "MyGames") score += 50;
-                if (LooksLikeGameName(app)) score += 35;
-                if (LooksLikeLogOrConfig(file)) score += 25;
-                if (Path.GetFileName(file).Contains("crash", StringComparison.OrdinalIgnoreCase)) score += 30;
+                int baseScore = 0;
+                if (rootMode == "MyGames") baseScore += 50;
+                if (LooksLikeGameName(app)) baseScore += 35;
+                if (LooksLikeLogOrConfig(file)) baseScore += 25;
+                if (Path.GetFileName(file).Contains("crash", StringComparison.OrdinalIgnoreCase)) baseScore += 30;
 
-                output.Add(new Candidate { App = CleanAppName(app), Path = file, Time = t, Score = score });
+                output.Add(new Candidate
+                {
+                    App = CleanAppName(app),
+                    Path = file,
+                    Time = t,
+                    BaseScore = baseScore,
+                });
             }
         }
 

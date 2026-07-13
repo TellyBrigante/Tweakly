@@ -44,6 +44,7 @@ namespace Optimisation_Tool.Helpers
         public DateTime? CompletedAt { get; set; }
         public int TargetBalanceHours { get; set; } = 2;
         public int TargetRestHours { get; set; } = 8;
+        public double VerifiedRestSeconds { get; set; }
         public int SampleIntervalSeconds { get; set; } = 5;
         public bool BalanceInterrupted { get; set; }
         public bool RechargeInterrupted { get; set; }

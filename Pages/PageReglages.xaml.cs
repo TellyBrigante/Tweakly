@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.4.9";
+        public const string AppVersion = "1.5.0";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -31,7 +31,12 @@ namespace Optimisation_Tool.Pages
         private string _sha256    = "";   // hash SHA-256 publié dans le body (OBLIGATOIRE depuis v1.3.4)
         private string _notes     = "";   // patch note de la release (affiché dans l'overlay)
 
-        private static readonly HttpClient Http = new();
+        private static readonly HttpClient Http = new()
+        {
+            // Chaque operation applique son propre delai. Le client ne doit pas
+            // interrompre a 100 s le telechargement des releases volumineuses.
+            Timeout = Timeout.InfiniteTimeSpan
+        };
 
         public PageReglages(MainWindow main)
         {
@@ -130,7 +135,8 @@ namespace Optimisation_Tool.Pages
                 req.Headers.UserAgent.ParseAdd("Tweakly-Updater");
                 req.Headers.Accept.ParseAdd("application/vnd.github+json");
 
-                using var resp = await Http.SendAsync(req);
+                using var timeoutCts = new CancellationTokenSource(UpdateTransferPolicy.CheckTimeout);
+                using var resp = await Http.SendAsync(req, timeoutCts.Token);
                 if (!resp.IsSuccessStatusCode) return (false, "", "", "", "", "");
 
                 var json = await resp.Content.ReadAsStringAsync();
@@ -307,24 +313,38 @@ namespace Optimisation_Tool.Pages
             Directory.CreateDirectory(tmp);
             var zipPath = Path.Combine(tmp, "update.zip");
 
-            // Téléchargement avec progression (annulable via ct — bouton « Plus tard »)
-            using (var req = new HttpRequestMessage(HttpMethod.Get, assetUrl))
+            // Téléchargement avec progression (annulable via ct — bouton « Plus tard »).
+            // Le délai de 30 min couvre les connexions lentes sans pouvoir bloquer
+            // indéfiniment l'updater.
+            try
             {
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(UpdateTransferPolicy.DownloadTimeout);
+                var downloadCt = timeoutCts.Token;
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, assetUrl);
                 req.Headers.UserAgent.ParseAdd("Tweakly-Updater");
-                using var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                using var resp = await Http.SendAsync(
+                    req, HttpCompletionOption.ResponseHeadersRead, downloadCt);
                 resp.EnsureSuccessStatusCode();
                 var total = resp.Content.Headers.ContentLength ?? -1L;
-                using var stream = await resp.Content.ReadAsStreamAsync(ct);
+                using var stream = await resp.Content.ReadAsStreamAsync(downloadCt);
                 using var fs = File.Create(zipPath);
                 var buffer = new byte[81920];
-                long readTotal = 0; int n;
-                while ((n = await stream.ReadAsync(buffer, 0, buffer.Length, ct)) > 0)
+                long readTotal = 0;
+                int n;
+                while ((n = await stream.ReadAsync(buffer, 0, buffer.Length, downloadCt)) > 0)
                 {
-                    await fs.WriteAsync(buffer, 0, n, ct);
+                    await fs.WriteAsync(buffer, 0, n, downloadCt);
                     readTotal += n;
                     if (total > 0) progress.Report((double)readTotal / total * 100.0);
                 }
                 progress.Report(100);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    "Le téléchargement a dépassé 30 min. Vérifie la connexion puis relance la mise à jour.");
             }
             ct.ThrowIfCancellationRequested();
 
@@ -333,24 +353,11 @@ namespace Optimisation_Tool.Pages
             // filtre déjà les releases sans hash, mais si un autre appelant arrivait ici sans
             // hash, on refuse aussi). Mismatch ou absence → aucun batch écrit, aucun fichier
             // remplacé. L'exception remonte à StartUpdate (catch → message d'échec, app intacte).
-            if (string.IsNullOrEmpty(expectedSha256))
-                throw new Exception(
-                    "Cette mise à jour ne publie pas de hash d'intégrité (SHA-256). " +
-                    "Installation refusée par sécurité.");
-            using (var sha = System.Security.Cryptography.SHA256.Create())
-            using (var zfs = File.OpenRead(zipPath))
-            {
-                var actual = Convert.ToHexString(await sha.ComputeHashAsync(zfs)).ToLowerInvariant();
-                if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
-                    throw new Exception(
-                        "Échec de la vérification d'intégrité du téléchargement (SHA-256 différent). " +
-                        "Mise à jour annulée par sécurité.");
-            }
+            await UpdatePackageValidator.VerifySha256Async(zipPath, expectedSha256, ct);
 
             // Extraction
             var extractDir = Path.Combine(tmp, "extracted");
-            ZipFile.ExtractToDirectory(zipPath, extractDir);
-            var srcDir = FindExeDir(extractDir) ?? throw new Exception("Tweakly.exe introuvable dans l'archive.");
+            var srcDir = UpdatePackageValidator.ExtractAndFindSource(zipPath, extractDir);
 
             var exePath    = Process.GetCurrentProcess().MainModule!.FileName;
             var installDir = Path.GetDirectoryName(exePath)!;
@@ -368,21 +375,8 @@ namespace Optimisation_Tool.Pages
             //   • Pire cas (échec après 20 s) : on relance quand même → comportement IDENTIQUE à l'ancien
             //     batch (aucune régression possible). Au mieux : le blocage antivirus est absorbé.
             var bat = Path.Combine(tmp, "update.bat");
-            var script =
-                "@echo off\r\n" +
-                ":wait\r\n" +
-                "tasklist /fi \"imagename eq Tweakly.exe\" 2>nul | find /i \"Tweakly.exe\" >nul\r\n" +
-                "if not errorlevel 1 (\r\n" +
-                "  timeout /t 1 /nobreak >nul\r\n" +
-                "  goto wait\r\n" +
-                ")\r\n" +
-                "timeout /t 1 /nobreak >nul\r\n" +
-                $"robocopy \"{srcDir}\" \"{installDir}\" /E /R:10 /W:2 /NFL /NDL /NJH /NJS /NP >nul\r\n" +
-                // --after-update : signale à la nouvelle instance qu'elle revient d'une MAJ →
-                // elle se ramène au premier plan même si « Démarrer minimisé » est coché (la
-                // relance via cmd.exe sans fenêtre n'a aucun droit de foreground sinon).
-                $"start \"\" \"{exePath}\" --after-update\r\n" +
-                "del \"%~f0\"\r\n";
+            // --after-update conserve la restauration au premier plan après la relance.
+            var script = UpdatePackageValidator.BuildUpdaterScript(srcDir, installDir, exePath);
             File.WriteAllText(bat, script);
             return bat;
         }
@@ -396,17 +390,6 @@ namespace Optimisation_Tool.Pages
                 CreateNoWindow  = true,
             });
             Application.Current.Shutdown();
-        }
-
-        // Cherche récursivement le dossier contenant Tweakly.exe
-        private static string? FindExeDir(string root)
-        {
-            try
-            {
-                var exe = Directory.GetFiles(root, "Tweakly.exe", SearchOption.AllDirectories).FirstOrDefault();
-                return exe != null ? Path.GetDirectoryName(exe) : null;
-            }
-            catch { return null; }
         }
 
         private static Version? ParseVersion(string tag)
@@ -535,7 +518,8 @@ namespace Optimisation_Tool.Pages
         private async void BtnRestoreWindowsDefaults_Click(object sender, RoutedEventArgs e)
         {
             var confirm = MessageBox.Show(
-                "Tweakly va restaurer les réglages CPU, Windows, réseau et confidentialité qu'il sait modifier.\n\n" +
+                "Tweakly va restaurer les réglages CPU, Windows, réseau et confidentialité qui possèdent une valeur Windows standard.\n\n" +
+                "Les réglages propres au matériel restent inchangés et seront indiqués comme ignorés.\n\n" +
                 "NVIDIA n'est pas inclus. Certains changements peuvent demander un redémarrage.\n\n" +
                 "Continuer ?",
                 "Restaurer les réglages Windows",

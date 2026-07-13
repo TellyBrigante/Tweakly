@@ -40,12 +40,21 @@ namespace Optimisation_Tool.Pages
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
             RefreshHistory();
-            // Animation discrète du dot rouge (pulsation 1.2 s)
+        }
+
+        private void StartRecordingPulse()
+        {
             var pulse = new DoubleAnimationUsingKeyFrames { RepeatBehavior = RepeatBehavior.Forever };
             pulse.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
             pulse.KeyFrames.Add(new LinearDoubleKeyFrame(0.35, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(0.6))));
             pulse.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromSeconds(1.2))));
             RecDot.BeginAnimation(UIElement.OpacityProperty, pulse);
+        }
+
+        private void StopRecordingPulse()
+        {
+            RecDot.BeginAnimation(UIElement.OpacityProperty, null);
+            RecDot.Opacity = 1.0;
         }
 
         /// <summary>
@@ -60,6 +69,7 @@ namespace Optimisation_Tool.Pages
             {
                 _tick?.Stop(); _tick = null;
                 _rec.Abort();
+                StopRecordingPulse();
                 RecOverlay.Visibility = Visibility.Collapsed;
                 AppLog.Write("PageGameSession : capture abandonnée (page quittée).");
             }
@@ -126,6 +136,7 @@ namespace Optimisation_Tool.Pages
             }
             _recStart = DateTime.UtcNow;
             RecOverlay.Visibility = Visibility.Visible;
+            StartRecordingPulse();
             TxtRecElapsed.Text = "00:00";
             LiveFps.Text = "—";
             _fpsHist.Clear();
@@ -236,6 +247,7 @@ namespace Optimisation_Tool.Pages
             }
             finally
             {
+                StopRecordingPulse();
                 RecOverlay.Visibility = Visibility.Collapsed;
                 BtnStopRec.IsEnabled = true; BtnStopRec.Content = "ARRÊTER ET ANALYSER";
                 BtnRec.Content = "ENREGISTRER UNE SESSION";

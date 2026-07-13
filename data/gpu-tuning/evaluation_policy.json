@@ -1,0 +1,14 @@
+{
+  "samplingIntervalMs": 500,
+  "minimumTelemetryCoveragePercent": 85.0,
+  "minimumPerformanceRetentionPercent": 97.0,
+  "maximumBenchmarkVariancePercent": 2.0,
+  "minimumBaselineWorkloadSeconds": 30,
+  "shortValidationMinutes": 10,
+  "longValidationMinutes": 60,
+  "voltageStepMv": 25,
+  "performanceWeight": 0.35,
+  "efficiencyWeight": 0.45,
+  "thermalWeight": 0.20,
+  "requiredValidationWorkloads": ["Graphics", "RayTracing", "Vram", "Transient"]
+}

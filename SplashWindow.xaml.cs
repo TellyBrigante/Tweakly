@@ -100,7 +100,7 @@ namespace Optimisation_Tool
                 // Paie les démarrages à froid utiles à l'accueil (WMI CPU, LHM, NvAPI) ICI plutôt
                 // qu'à la première visite. Borné : au-delà de 3 s on ouvre
                 // l'app, le préchauffage finit tout seul en arrière-plan.
-                var warm = Task.Run(() => { try { Helpers.SystemMonitor.Collect(Helpers.MonCollectParts.Light); } catch { } });
+                var warm = WarmMonitoringAsync();
                 await Task.WhenAny(warm, Task.Delay(3000));
 
                 SetStep(95, "Lancement de l'interface…");
@@ -114,6 +114,12 @@ namespace Optimisation_Tool
             {
                 OpenMainAndClose();
             }
+        }
+
+        private static async Task WarmMonitoringAsync()
+        {
+            try { await Helpers.SystemMonitor.CollectAsync(Helpers.MonCollectParts.Light); }
+            catch { }
         }
 
         private void SetStep(double pct, string label)

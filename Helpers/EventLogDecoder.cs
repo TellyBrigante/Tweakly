@@ -96,7 +96,7 @@ namespace Optimisation_Tool.Helpers
     ///  • vue « par incident » : corrèle les events proches dans le temps, déduit la cause racine
     ///    et produit un conseil de correction raisonné. Aucune écriture, aucune dépendance.
     /// </summary>
-    public static class EventLogDecoder
+    public static partial class EventLogDecoder
     {
         // Lecture brute des events (partagée par les deux vues)
         private static List<RawEvent> ReadRaw(int days)
@@ -171,9 +171,22 @@ namespace Optimisation_Tool.Helpers
 
         /// <summary>Vue « par source » : regroupe par Provider+EventID.</summary>
         public static List<LogEntry> Scan(int days)
+            => BuildSourceView(ReadRaw(days));
+
+        /// <summary>
+        /// Construit les deux vues depuis une seule lecture des journaux Windows.
+        /// </summary>
+        public static (List<LogEntry> BySource, List<Incident> ByIncident) ScanAll(
+            int days, int gapSeconds = 90)
+        {
+            var all = ReadRaw(days);
+            return (BuildSourceView(all), BuildIncidentView(all, gapSeconds));
+        }
+
+        private static List<LogEntry> BuildSourceView(IReadOnlyList<RawEvent> all)
         {
             var groups = new Dictionary<string, LogEntry>();
-            foreach (var ev in ReadRaw(days))
+            foreach (var ev in all)
             {
                 string key = ev.Provider + "|" + ev.Id;
                 if (!groups.TryGetValue(key, out var e))
@@ -190,9 +203,26 @@ namespace Optimisation_Tool.Helpers
 
         /// <summary>Vue « par incident » : corrèle les events proches dans le temps.</summary>
         public static List<Incident> ScanIncidents(int days, int gapSeconds = 90)
+            => BuildIncidentView(ReadRaw(days), gapSeconds);
+
+        private static List<Incident> BuildIncidentView(
+            IReadOnlyList<RawEvent> all, int gapSeconds)
         {
-            var all = ReadRaw(days);
             var incidents = new List<Incident>();
+            GameCrashContextAnalyzer.Snapshot? gameCrashSnapshot = null;
+            WindowsCrashEvidenceIndex.Snapshot? windowsCrashSnapshot = null;
+            if (all.Count > 0 && all.Any(IsGpuResetSignal))
+            {
+                gameCrashSnapshot = GameCrashContextAnalyzer.CreateSnapshot(
+                    all.Min(e => e.Time),
+                    all.Max(e => e.Time));
+            }
+            if (all.Count > 0 && all.Any(HasLocalCrashEvidence))
+            {
+                windowsCrashSnapshot = WindowsCrashEvidenceIndex.Create(
+                    all.Min(e => e.Time),
+                    all.Max(e => e.Time));
+            }
 
             // ── RÉCURRENCE par type de problème (v1.3.3) ────────────────────────
             // Nb de JOURS DISTINCTS où chaque Kind apparaît sur la période. C'est ce
@@ -210,14 +240,14 @@ namespace Optimisation_Tool.Helpers
             {
                 if (prev != null && (ev.Time - prev.Value).TotalSeconds > gapSeconds)
                 {
-                    var inc = Analyze(cluster, recurrenceDays);
+                    var inc = Analyze(cluster, recurrenceDays, gameCrashSnapshot, windowsCrashSnapshot);
                     if (inc != null) incidents.Add(inc);
                     cluster = new List<RawEvent>();
                 }
                 cluster.Add(ev);
                 prev = ev.Time;
             }
-            var last = Analyze(cluster, recurrenceDays);
+            var last = Analyze(cluster, recurrenceDays, gameCrashSnapshot, windowsCrashSnapshot);
             if (last != null) incidents.Add(last);
 
             // ─── PASSE 2 : récurrence horaire = événement programmé ────────────
@@ -230,115 +260,12 @@ namespace Optimisation_Tool.Helpers
             return MergeNearbyRepeatedIncidents(filtered).OrderByDescending(i => i.Start).ToList();
         }
 
-        // Retire les incidents qui ressemblent à une exécution programmée à heure fixe.
-        // Critères STRICTS pour éviter les faux négatifs sur de vraies pannes :
-        //   • même titre approximatif (les premiers mots significatifs)
-        //   • même heure du jour ±15 min
-        //   • ≥3 jours distincts (1 occurrence ou 2 ne suffit pas — vraie panne possible)
-        private static List<Incident> FilterRecurringScheduled(List<Incident> all)
-        {
-            if (all.Count < 3) return all;
-
-            // Clé de regroupement : « heure du jour arrondie à 15 min » + premier mot du titre
-            string KeyOf(Incident i)
-            {
-                int slot = (int)Math.Round(i.Start.TimeOfDay.TotalMinutes / 15.0);
-                string firstWord = (i.Title ?? "").Split(' ').FirstOrDefault() ?? "";
-                return $"{slot}|{firstWord}";
-            }
-
-            var groups = all.GroupBy(KeyOf).ToList();
-            var toRemove = new HashSet<Incident>();
-            foreach (var g in groups)
-            {
-                int distinctDays = g.Select(i => i.Start.Date).Distinct().Count();
-                if (distinctDays < 3) continue;
-                foreach (var inc in g) toRemove.Add(inc);
-            }
-            return all.Where(i => !toRemove.Contains(i)).ToList();
-        }
-
-        // Regroupe les rafales identiques proches dans le temps.
-        // Exemple réel : plusieurs TDR nvlddmkm + LiveKernelEvent 141 à 2 min d'écart
-        // doivent former une seule carte "2 séquences", pas deux pavés quasi identiques.
-        private static List<Incident> MergeNearbyRepeatedIncidents(List<Incident> all)
-        {
-            if (all.Count < 2) return all;
-
-            const int mergeWindowSeconds = 10 * 60;
-            var merged = new List<Incident>();
-            foreach (var inc in all.OrderBy(i => i.Start))
-            {
-                var prev = merged.LastOrDefault();
-                if (prev != null
-                    && SameIncidentSignature(prev, inc)
-                    && (inc.Start - prev.End).TotalSeconds <= mergeWindowSeconds)
-                {
-                    MergeInto(prev, inc);
-                    continue;
-                }
-
-                merged.Add(inc);
-            }
-            return merged;
-        }
-
-        private static bool SameIncidentSignature(Incident a, Incident b)
-        {
-            if (a.Sev != b.Sev) return false;
-            if (!string.Equals(NormalizeKey(a.Title), NormalizeKey(b.Title), StringComparison.OrdinalIgnoreCase))
-                return false;
-            return string.Equals(EventSignature(a), EventSignature(b), StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string EventSignature(Incident i)
-        {
-            return string.Join("|", i.Events
-                .Select(e => NormalizeKey(e.title))
-                .Where(s => s.Length > 0)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(s => s)
-                .Take(6));
-        }
-
-        private static string NormalizeKey(string value)
-            => Regex.Replace(value ?? "", @"\s+", " ").Trim();
-
-        private static void MergeInto(Incident target, Incident next)
-        {
-            int previousEpisodes = Math.Max(1, target.Episodes);
-            target.Episodes = previousEpisodes + Math.Max(1, next.Episodes);
-            target.Count += next.Count;
-            target.Start = target.Start <= next.Start ? target.Start : next.Start;
-            target.End   = target.End   >= next.End   ? target.End   : next.End;
-            target.Sev   = (LogSev)Math.Min((int)target.Sev, (int)next.Sev);
-
-            target.Events.AddRange(next.Events);
-            target.Events = target.Events.OrderBy(e => e.time).ToList();
-
-            // On garde la narration la plus récente, puis on ajoute une ligne claire de regroupement.
-            // Cela évite une carte énorme tout en signalant que le problème s'est répété.
-            string prefix = $"Regroupement : {target.Episodes} séquences similaires entre {target.Start:HH:mm:ss} et {target.End:HH:mm:ss}.";
-            target.Title   = next.Title;
-            target.Icon    = next.Icon;
-            target.Chain   = next.Chain.Length > 0 ? next.Chain : target.Chain;
-            target.Advice  = PrefixOnce(next.Advice.Length > 0 ? next.Advice : target.Advice, prefix);
-            target.Steps   = next.Steps.Count > 0 ? next.Steps : target.Steps;
-            target.Actions = next.Actions.Count > 0 ? next.Actions : target.Actions;
-        }
-
-        private static string PrefixOnce(string text, string prefix)
-        {
-            if (text.StartsWith("Regroupement :", StringComparison.OrdinalIgnoreCase))
-            {
-                int nl = text.IndexOf('\n');
-                return nl >= 0 ? prefix + text.Substring(nl) : prefix;
-            }
-            return string.IsNullOrWhiteSpace(text) ? prefix : prefix + "\n" + text;
-        }
-
         // ── Analyse d'un cluster → incident (cause racine + conseil) ───────────
-        private static Incident? Analyze(List<RawEvent> cluster, Dictionary<Kind, int>? recurrenceDays = null)
+        private static Incident? Analyze(
+            List<RawEvent> cluster,
+            Dictionary<Kind, int>? recurrenceDays = null,
+            GameCrashContextAnalyzer.Snapshot? gameCrashSnapshot = null,
+            WindowsCrashEvidenceIndex.Snapshot? windowsCrashSnapshot = null)
         {
             if (cluster.Count == 0) return null;
 
@@ -393,7 +320,7 @@ namespace Optimisation_Tool.Helpers
             // FaultingModule, ErrorSource WHEA…). Si une narration matche les FAITS
             // observés chez ce client → on l'utilise. Sinon → fallback sur Recommend
             // (logique générique pré-existante). Le narrateur ne dit que ce qu'il VOIT.
-            var narration = IncidentNarrator.Narrate(cluster);
+            var narration = IncidentNarrator.Narrate(cluster, gameCrashSnapshot, windowsCrashSnapshot);
             // Suppress = le narrateur a la PREUVE FORMELLE que ce n'est pas un vrai incident
             // (ex. arrêt programmé pris à tort pour un BSOD parce qu'on voyait juste un
             // Kernel-Power 41). On jette le cluster → aucune carte affichée.
@@ -425,6 +352,25 @@ namespace Optimisation_Tool.Helpers
             if (p == "service control manager")       return Kind.Service;
             if (p.Contains("distributedcom") || p.Contains("perflib") || p.Contains("user profiles")) return Kind.Benign;
             return Kind.Other;
+        }
+
+        private static bool IsGpuResetSignal(RawEvent ev)
+        {
+            return ev.Provider.IndexOf("nvlddmkm", StringComparison.OrdinalIgnoreCase) >= 0
+                || ev.Provider.IndexOf("amdkmdag", StringComparison.OrdinalIgnoreCase) >= 0
+                || ev.Provider.IndexOf("amdwddmg", StringComparison.OrdinalIgnoreCase) >= 0
+                || (ev.Provider.Equals("Display", StringComparison.OrdinalIgnoreCase) && ev.Id == 4101)
+                || (ev.Provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase)
+                    && ev.Id == 1001
+                    && ev.RawFull.IndexOf("LiveKernelEvent", StringComparison.OrdinalIgnoreCase) >= 0
+                    && Regex.IsMatch(ev.RawFull, @"P1\s*:\s*141", RegexOptions.IgnoreCase));
+        }
+
+        private static bool HasLocalCrashEvidence(RawEvent ev)
+        {
+            return IsGpuResetSignal(ev)
+                || ev.Provider.Equals("Application Error", StringComparison.OrdinalIgnoreCase)
+                || (ev.Provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase) && ev.Id == 1001);
         }
 
         // Plus le rang est élevé, plus l'event est une CAUSE (vs un effet)
@@ -894,8 +840,9 @@ namespace Optimisation_Tool.Helpers
                 {
                     e.Sev = LogSev.Warning;
                     e.Icon = "";
-                    var app    = Extract(raw, @"(?:application défaillante|application name|faulting application name)\s*:?\s*([^\s,]+)");
-                    var modul  = Extract(raw, @"(?:module défaillant|faulting module name)\s*:?\s*([^\s,]+)");
+                    string message = rawFull.Length > 0 ? rawFull : raw;
+                    var app    = Extract(message, @"(?:application défaillante|application name|faulting application name)\s*:?\s*([^\s,]+)");
+                    var modul  = Extract(message, @"(?:module défaillant|faulting module name)\s*:?\s*([^\s,]+)");
                     e.Title = app.Length > 0 ? $"Plantage d'application — {app}" : "Plantage d'application";
                     e.What  = "Une application s'est arrêtée à cause d'une erreur (crash)." + (modul.Length > 0 ? $" Module fautif identifié : {modul}." : "");
                     bool sysModule = modul.Length > 0 && Regex.IsMatch(modul.ToLowerInvariant(),
@@ -1148,6 +1095,7 @@ namespace Optimisation_Tool.Helpers
 
                 // -- BSOD (BugCheck) -----------------------------------------
                 case "microsoft-windows-windowserror reporting":
+                case "microsoft-windows-wer-systemerrorreporting":
                 case "bugcheck":
                 {
                     e.Sev   = LogSev.Serious;

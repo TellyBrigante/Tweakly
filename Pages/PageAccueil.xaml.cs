@@ -359,7 +359,7 @@ namespace Optimisation_Tool.Pages
             _hwBusy = true;
             try
             {
-                var s = await Task.Run(() => SystemMonitor.Collect(MonCollectParts.Light));
+                var s = await SystemMonitor.CollectAsync(MonCollectParts.Light);
                 TxtHwCpu.Text = $"{s.CpuUsage:F0} %";
                 SetHwBar(HwCpuBar, s.CpuUsage);
                 TxtHwGpu.Text = s.GpuOk ? $"{s.GpuUsage:F0} %" : "—";

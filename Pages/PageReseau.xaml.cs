@@ -12,6 +12,7 @@ namespace Optimisation_Tool.Pages
 {
     public partial class PageReseau : UserControl
     {
+        private const int AdapterPowerDisableMask = 0x18;
         private readonly MainWindow _main;
         private bool _loaded = false;
 
@@ -93,7 +94,7 @@ namespace Optimisation_Tool.Pages
                     {
                         using var k = root.OpenSubKey(sub);
                         var v = k?.GetValue("PnPCapabilities");
-                        if (v != null && Convert.ToInt32(v) == 24)
+                        if (v != null && (Convert.ToInt32(v) & AdapterPowerDisableMask) == AdapterPowerDisableMask)
                         { adapterPower = true; break; }
                     }
                 }
@@ -164,9 +165,19 @@ namespace Optimisation_Tool.Pages
                 ApplyChanges(chNagle, chDNS, chPower, chWPAD, chThr,
                              msg => { _main.Log(msg); msgs.Add(msg); }));
 
-            _state = (ChkNagle.IsChecked == true, ChkNetDNS.IsChecked == true,
-                      ChkAdapterPower.IsChecked == true, ChkWPAD.IsChecked == true,
-                      ChkNetThrottle.IsChecked == true);
+            var actual = await Task.Run(ReadState);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Nagle", chNagle, actual.Nagle);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "DNS", chDNS, actual.NetDNS);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Mise en veille adaptateur", chPower, actual.AdapterPower);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "WPAD", chWPAD, actual.WPAD);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Bridage reseau", chThr, actual.NetThrottle);
+
+            ChkNagle.IsChecked = actual.Nagle;
+            ChkNetDNS.IsChecked = actual.NetDNS;
+            ChkAdapterPower.IsChecked = actual.AdapterPower;
+            ChkWPAD.IsChecked = actual.WPAD;
+            ChkNetThrottle.IsChecked = actual.NetThrottle;
+            _state = actual;
             _main.Log("Réseau : tweaks appliqués.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Tweaks réseau appliqués");
             BtnAppliquer.IsEnabled = true;
@@ -187,7 +198,8 @@ namespace Optimisation_Tool.Pages
                     if (doThrottle == true)
                         Registry.SetValue(mmPath, "NetworkThrottlingIndex", unchecked((int)0xFFFFFFFF), RegistryValueKind.DWord);
                     else
-                        Registry.SetValue(mmPath, "NetworkThrottlingIndex", 10, RegistryValueKind.DWord);
+                        Registry.SetValue(mmPath, "NetworkThrottlingIndex",
+                            Helpers.RegistryValueLogic.NetworkThrottlingDefault, RegistryValueKind.DWord);
                     log($"Bridage réseau multimédia : {(doThrottle == true ? "DÉSACTIVÉ" : "restauré (défaut Windows)")} — redémarrage conseillé.");
                 }
                 catch (Exception ex) { log($"Bridage réseau : erreur — {ex.Message}"); }
@@ -277,14 +289,18 @@ namespace Optimisation_Tool.Pages
                 using var root = Registry.LocalMachine.OpenSubKey(netClass, writable: true);
                 if (root != null)
                 {
-                    int pnpVal = doPower.Value ? 24 : 0;
                     foreach (var sub in root.GetSubKeyNames())
                     {
                         try
                         {
                             using var k = root.OpenSubKey(sub, writable: true);
                             if (k?.GetValue("DriverDesc") == null) continue;
-                            k.SetValue("PnPCapabilities", pnpVal, RegistryValueKind.DWord);
+                            var raw = k.GetValue("PnPCapabilities");
+                            int current = raw == null ? 0 : Convert.ToInt32(raw);
+                            int updated = Helpers.RegistryValueLogic.SetMaskedBits(
+                                current, AdapterPowerDisableMask, doPower.Value);
+                            if (updated != current)
+                                k.SetValue("PnPCapabilities", updated, RegistryValueKind.DWord);
                         }
                         catch { }
                     }
@@ -297,12 +313,27 @@ namespace Optimisation_Tool.Pages
             if (doWPAD.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp",
-                    "DisableWpad", doWPAD.Value ? 1 : 0, RegistryValueKind.DWord);
+                if (doWPAD.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp",
+                        "DisableWpad", 1, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp",
+                        "DisableWpad");
+                }
                 log($"WPAD : {(doWPAD.Value ? "DÉSACTIVÉ" : "ACTIVÉ (par défaut)")}.");
             }
             catch (Exception ex) { log($"WPAD : erreur — {ex.Message}"); }
+        }
+
+        private static void DeleteRegistryValue(RegistryKey root, string subKey, string name)
+        {
+            using var key = root.OpenSubKey(subKey, writable: true);
+            key?.DeleteValue(name, throwOnMissingValue: false);
         }
 
         // ── Vider le cache DNS ────────────────────────────────────────────────

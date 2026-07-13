@@ -284,7 +284,7 @@
                                            FontFamily="{StaticResource AppFont}"
                                            FontSize="16" FontWeight="SemiBold"
                                            VerticalAlignment="Center"/>
-                                <Border x:Name="GameKnownBadge" Background="#22315FA0" BorderBrush="{DynamicResource ThAccentIcon}"
+                                <Border x:Name="GameKnownBadge" Background="{DynamicResource ThInfoTint}" BorderBrush="{DynamicResource ThAccentIcon}"
                                         BorderThickness="1" CornerRadius="6" Padding="6,1" Margin="10,0,0,0"
                                         VerticalAlignment="Center" Visibility="Collapsed">
                                     <TextBlock Text="reconnu" Foreground="{DynamicResource ThAccentIcon}"
@@ -495,7 +495,7 @@
                     MaxWidth="600" VerticalAlignment="Center" HorizontalAlignment="Center">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <Ellipse x:Name="RecDot" Width="12" Height="12" Fill="#E05555" VerticalAlignment="Center"/>
+                        <Ellipse x:Name="RecDot" Width="12" Height="12" Fill="{DynamicResource ThCrit}" VerticalAlignment="Center"/>
                         <TextBlock Text="Enregistrement en cours"
                                    Foreground="{DynamicResource ThTextTitle}"
                                    FontFamily="{StaticResource AppFont}" FontSize="17" FontWeight="SemiBold"

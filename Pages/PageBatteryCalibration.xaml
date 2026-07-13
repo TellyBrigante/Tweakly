@@ -21,6 +21,10 @@
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
 
+        <Style x:Key="BatteryMetricCard" TargetType="Border" BasedOn="{StaticResource BatteryCard}">
+            <Setter Property="Padding" Value="12,12"/>
+        </Style>
+
         <Style x:Key="BatteryMetricValue" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource ThTextTitle}"/>
             <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
@@ -63,10 +67,11 @@
         </Grid.RowDefinitions>
 
         <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
             <StackPanel>
                 <TextBlock Text="Calibrage batterie"
@@ -82,7 +87,12 @@
                            Margin="0,5,0,0"/>
             </StackPanel>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+            <StackPanel x:Name="DebugSimulationHost" Grid.Row="1"
+                        Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="0,10,0,0" Visibility="Collapsed"/>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal"
+                        HorizontalAlignment="Right" Margin="0,10,0,0">
                 <Button x:Name="BtnRefresh"
                         Content="ACTUALISER"
                         Style="{StaticResource SecondaryBtnStyle}"
@@ -127,8 +137,8 @@
                     </StackPanel>
                 </Border>
 
-                <UniformGrid Columns="4" Rows="1" Margin="0,0,0,14">
-                    <Border Style="{StaticResource BatteryCard}" Margin="0,0,10,0">
+                <UniformGrid x:Name="MetricsGrid" Columns="4" Rows="1" Margin="0,0,0,14">
+                    <Border Style="{StaticResource BatteryMetricCard}" Margin="0,0,6,0">
                         <StackPanel>
                             <TextBlock Text="CHARGE" Style="{StaticResource BatteryMetricLabel}"/>
                             <TextBlock x:Name="TxtCharge" Text="-- %" Style="{StaticResource BatteryMetricValue}" Margin="0,5,0,4"/>
@@ -142,7 +152,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource BatteryCard}" Margin="0,0,10,0">
+                    <Border Style="{StaticResource BatteryMetricCard}" Margin="0,0,6,0">
                         <StackPanel>
                             <TextBlock Text="SANTÉ" Style="{StaticResource BatteryMetricLabel}"/>
                             <TextBlock x:Name="TxtHealth" Text="-- %" Style="{StaticResource BatteryMetricValue}" Margin="0,5,0,4"/>
@@ -154,7 +164,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource BatteryCard}" Margin="0,0,10,0">
+                    <Border Style="{StaticResource BatteryMetricCard}" Margin="0,0,6,0">
                         <StackPanel>
                             <TextBlock Text="TENSION" Style="{StaticResource BatteryMetricLabel}"/>
                             <TextBlock x:Name="TxtVoltage" Text="-- V" Style="{StaticResource BatteryMetricValue}" Margin="0,5,0,4"/>
@@ -166,7 +176,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Style="{StaticResource BatteryCard}" Margin="0">
+                    <Border Style="{StaticResource BatteryMetricCard}" Margin="0">
                         <StackPanel>
                             <TextBlock Text="CONTR&#212;LEUR BATTERIE" Style="{StaticResource BatteryMetricLabel}"/>
                             <TextBlock x:Name="TxtSource" Text="--" Style="{StaticResource BatteryMetricValue}" FontSize="17" Margin="0,7,0,5"/>
@@ -191,14 +201,19 @@
                     </Border>
                 </UniformGrid>
 
-                <Grid>
+                <Grid x:Name="DetailsGrid">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="0"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1.02*"/>
                         <ColumnDefinition Width="14"/>
                         <ColumnDefinition Width="0.98*"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0">
+                    <StackPanel x:Name="StepsColumn" Grid.Column="0">
                         <Border Style="{StaticResource BatteryCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -321,7 +336,7 @@
                         </Border>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2">
+                    <StackPanel x:Name="ReportColumn" Grid.Column="2">
                         <Border Style="{StaticResource BatteryCard}" Margin="0,0,0,14">
                             <StackPanel>
                                 <Grid>

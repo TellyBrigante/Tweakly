@@ -185,7 +185,10 @@ namespace Optimisation_Tool.Helpers
                 if (!_main.IsVisible) _main.Show();
                 _main.WindowState = WindowState.Minimized;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.Error("Tray : réduction de la fenêtre", ex);
+            }
         }
 
         /// <summary>Restaure MainWindow au premier plan (depuis le tray ou le mode mini).</summary>
@@ -193,22 +196,8 @@ namespace Optimisation_Tool.Helpers
         {
             _main.Dispatcher.Invoke(() =>
             {
-                try
-                {
-                    if (_main.IsMiniActive())
-                    {
-                        _main.ExitMiniMode();
-                    }
-                    else
-                    {
-                        _main.Show();
-                        if (_main.WindowState == WindowState.Minimized)
-                            _main.WindowState = WindowState.Normal;
-                    }
-                    _main.Activate();
-                    try { _main.Topmost = true; _main.Topmost = false; } catch { }
-                }
-                catch { }
+                try { _main.RestoreFromUserRequest(); }
+                catch (Exception ex) { AppLog.Error("Tray : restauration de la fenêtre", ex); }
             });
         }
 
@@ -222,7 +211,7 @@ namespace Optimisation_Tool.Helpers
                     if (!_main.IsVisible) _main.Show();
                     _main.EnterMiniMode();
                 }
-                catch { }
+                catch (Exception ex) { AppLog.Error("Tray : ouverture du mode mini", ex); }
             });
         }
 

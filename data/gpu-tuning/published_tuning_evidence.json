@@ -1,0 +1,1022 @@
+[
+  {
+    "evidenceId": "sffnetwork-4070s-zotac-1000mv",
+    "independentUnitId": "sffnetwork-zotac-4070s-twin-edge-oc-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "ZOTAC GAMING GeForce RTX 4070 SUPER Twin Edge OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "20 consecutive 3DMark Time Spy passes at fixed 40% fan speed",
+    "stablePasses": 20,
+    "stock": {
+      "clockMhz": 2670,
+      "powerW": 220,
+      "temperatureC": 81.0
+    },
+    "tuned": {
+      "voltageMv": 1000,
+      "clockMhz": 2745,
+      "memoryOffsetMhz": 0,
+      "powerLimitPercent": 100,
+      "powerW": 198,
+      "temperatureC": 77.0
+    },
+    "source": {
+      "url": "https://smallformfactor.net/articles/zotac-gaming-geforce-rtx-4070-super-twin-edge-oc-card-review-an-excellent-graphics-card-for-sff/",
+      "publisher": "SFF.Network",
+      "retrievedOn": "2026-07-11",
+      "evidenceType": "direct-review",
+      "title": "ZOTAC GAMING GeForce RTX 4070 SUPER Twin Edge OC Card Review",
+      "measurementProtocol": "MSI Afterburner reported board power; fixed 40% fan; 3DMark Time Spy"
+    }
+  },
+  {
+    "evidenceId": "sffnetwork-4070s-zotac-985mv",
+    "independentUnitId": "sffnetwork-zotac-4070s-twin-edge-oc-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "ZOTAC GAMING GeForce RTX 4070 SUPER Twin Edge OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "20 consecutive 3DMark Time Spy passes at fixed 40% fan speed",
+    "stablePasses": 20,
+    "stock": {
+      "clockMhz": 2670,
+      "powerW": 220,
+      "temperatureC": 81.0
+    },
+    "tuned": {
+      "voltageMv": 985,
+      "clockMhz": 2745,
+      "memoryOffsetMhz": 0,
+      "powerLimitPercent": 100,
+      "powerW": 190,
+      "temperatureC": 73.5
+    },
+    "source": {
+      "url": "https://smallformfactor.net/articles/zotac-gaming-geforce-rtx-4070-super-twin-edge-oc-card-review-an-excellent-graphics-card-for-sff/",
+      "publisher": "SFF.Network",
+      "retrievedOn": "2026-07-11",
+      "evidenceType": "direct-review",
+      "title": "ZOTAC GAMING GeForce RTX 4070 SUPER Twin Edge OC Card Review",
+      "measurementProtocol": "MSI Afterburner reported board power; fixed 40% fan; 3DMark Time Spy"
+    }
+  },
+  {
+    "evidenceId": "digitaltrends-4090-945mv",
+    "independentUnitId": "digitaltrends-4090-sff-sample-1",
+    "model": "GeForce RTX 4090",
+    "vramMiB": 24576,
+    "boardModel": "not reported",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Cinebench 2024 GPU benchmark, 10-minute run",
+    "durationSeconds": 600,
+    "stock": {
+      "clockMhz": 2775,
+      "score": 33254,
+      "scoreUnit": "Cinebench 2024 GPU points",
+      "powerW": 344,
+      "temperatureC": 62.2
+    },
+    "tuned": {
+      "voltageMv": 945,
+      "clockMhz": 2775,
+      "score": 33190,
+      "scoreUnit": "Cinebench 2024 GPU points",
+      "powerW": 326,
+      "temperatureC": 59.6
+    },
+    "source": {
+      "url": "https://www.digitaltrends.com/computing/rtx-4090-small-form-factor/",
+      "publisher": "Digital Trends",
+      "retrievedOn": "2026-07-11",
+      "evidenceType": "direct-review",
+      "title": "The RTX 4090 has finally met its match",
+      "measurementProtocol": "Cinebench 2024 GPU, stock versus 0.945 V at 2775 MHz"
+    }
+  },
+  {
+    "evidenceId": "tomshardware-4090-80pct-power",
+    "independentUnitId": "tomshardware-4090-fe-sample-1",
+    "model": "GeForce RTX 4090",
+    "vramMiB": 24576,
+    "boardModel": "NVIDIA GeForce RTX 4090 Founders Edition",
+    "formFactor": "desktop",
+    "method": "power-limit",
+    "benchmark": "Geometric mean of eight demanding 4K game tests",
+    "stock": {
+      "score": 100,
+      "scoreUnit": "relative performance index",
+      "powerW": 402.3
+    },
+    "tuned": {
+      "powerLimitPercent": 80,
+      "clockMhz": 2611,
+      "score": 97.7,
+      "scoreUnit": "relative performance index",
+      "powerW": 353.8
+    },
+    "source": {
+      "url": "https://www.tomshardware.com/news/improving-nvidia-rtx-4090-efficiency-through-power-limiting",
+      "publisher": "Tom's Hardware",
+      "retrievedOn": "2026-07-11",
+      "evidenceType": "direct-review",
+      "title": "Improving Nvidia RTX 4090 Efficiency Through Power Limiting",
+      "measurementProtocol": "Eight game tests at 4K; stock and 80% power limit"
+    }
+  },
+  {
+    "evidenceId": "hardwareluxx-3080-fe-850mv",
+    "independentUnitId": "hardwareluxx-3080-fe-sample-1",
+    "model": "GeForce RTX 3080",
+    "vramMiB": 10240,
+    "boardModel": "NVIDIA GeForce RTX 3080 Founders Edition",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Seven-game raster benchmark suite at 2560x1440 and 3840x2160; separate load power and temperature measurements",
+    "stock": {
+      "voltageMv": 1037,
+      "clockMhz": 1995,
+      "powerW": 331.7,
+      "temperatureC": 76.0
+    },
+    "tuned": {
+      "voltageMv": 850,
+      "clockMhz": 1935,
+      "powerW": 277.2,
+      "temperatureC": 69.0
+    },
+    "source": {
+      "url": "https://www.hardwareluxx.de/index.php/artikel/hardware/grafikkarten/54251-weniger-ist-manchmal-mehr-geforce-rtx-3080-im-undervolting-test.html",
+      "publisher": "Hardwareluxx",
+      "retrievedOn": "2026-07-11",
+      "evidenceType": "direct-review",
+      "title": "Weniger ist manchmal mehr: GeForce RTX 3080 im Undervolting-Test",
+      "measurementProtocol": "MSI Afterburner voltage-frequency curve; seven raster games; GPU-only load power and temperature"
+    }
+  },
+  {
+    "evidenceId": "hardwareluxx-3080-fe-800mv",
+    "independentUnitId": "hardwareluxx-3080-fe-sample-1",
+    "model": "GeForce RTX 3080",
+    "vramMiB": 10240,
+    "boardModel": "NVIDIA GeForce RTX 3080 Founders Edition",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Seven-game raster benchmark suite at 2560x1440 and 3840x2160; separate load power and temperature measurements",
+    "stock": {
+      "voltageMv": 1037,
+      "clockMhz": 1995,
+      "powerW": 331.7,
+      "temperatureC": 76.0
+    },
+    "tuned": {
+      "voltageMv": 800,
+      "clockMhz": 1850,
+      "powerW": 247.6,
+      "temperatureC": 67.0
+    },
+    "source": {
+      "url": "https://www.hardwareluxx.de/index.php/artikel/hardware/grafikkarten/54251-weniger-ist-manchmal-mehr-geforce-rtx-3080-im-undervolting-test.html",
+      "publisher": "Hardwareluxx",
+      "retrievedOn": "2026-07-11",
+      "evidenceType": "direct-review",
+      "title": "Weniger ist manchmal mehr: GeForce RTX 3080 im Undervolting-Test",
+      "measurementProtocol": "MSI Afterburner voltage-frequency curve; seven raster games; GPU-only load power and temperature"
+    }
+  },
+  {
+    "evidenceId": "computerbase-4070s-inno3d-940mv-failed-later",
+    "independentUnitId": "computerbase-inno3d-4070s-twin-x2-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "INNO3D GeForce RTX 4070 SUPER Twin X2",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Unigine Superposition 1080p Extreme and 3DMark Steel Nomad followed by gaming",
+    "outcome": "failed-later",
+    "outcomeNotes": "Artifacts appeared after several hours of gaming; the user raised the voltage to 950 mV.",
+    "driverVersion": "580.88",
+    "stock": {
+      "score": 4506,
+      "scoreUnit": "3DMark Steel Nomad points",
+      "powerW": 220,
+      "temperatureC": 73.7
+    },
+    "tuned": {
+      "voltageMv": 940,
+      "clockMhz": 2700,
+      "memoryOffsetMhz": 1200,
+      "score": 4650,
+      "scoreUnit": "3DMark Steel Nomad points",
+      "powerW": 208,
+      "temperatureC": 71.1
+    },
+    "source": {
+      "url": "https://www.computerbase.de/forum/threads/4070-super-sobald-curve-editor-spannung-unter-last-immer-0-925v.2248925/",
+      "publisher": "ComputerBase Forum",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "4070 SUPER sobald Curve Editor = Spannung unter Last immer 0.925V",
+      "measurementProtocol": "Stock and tuned Steel Nomad plus Unigine; later gaming exposed artifacts"
+    }
+  },
+  {
+    "evidenceId": "computerbase-4070s-inno3d-950mv",
+    "independentUnitId": "computerbase-inno3d-4070s-twin-x2-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "INNO3D GeForce RTX 4070 SUPER Twin X2",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad after the 940 mV profile produced artifacts in games",
+    "outcome": "reported-stable",
+    "outcomeNotes": "Fallback profile reported stable after the lower-voltage profile produced artifacts.",
+    "driverVersion": "580.88",
+    "stock": {
+      "score": 4506,
+      "scoreUnit": "3DMark Steel Nomad points"
+    },
+    "tuned": {
+      "voltageMv": 950,
+      "clockMhz": 2700,
+      "memoryOffsetMhz": 1200,
+      "score": 4653,
+      "scoreUnit": "3DMark Steel Nomad points"
+    },
+    "source": {
+      "url": "https://www.computerbase.de/forum/threads/4070-super-sobald-curve-editor-spannung-unter-last-immer-0-925v.2248925/",
+      "publisher": "ComputerBase Forum",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "4070 SUPER sobald Curve Editor = Spannung unter Last immer 0.925V",
+      "measurementProtocol": "Steel Nomad retest after increasing the failed 940 mV profile to 950 mV"
+    }
+  },
+  {
+    "evidenceId": "reddit-4070s-asus-dual-950mv",
+    "independentUnitId": "reddit-asus-4070s-dual-oc-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "ASUS Dual GeForce RTX 4070 SUPER OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Unigine Superposition, 3DMark Time Spy and 3DMark Port Royal",
+    "stablePasses": 3,
+    "outcome": "short-pass",
+    "stock": {},
+    "tuned": {
+      "voltageMv": 950,
+      "clockMhz": 2760,
+      "memoryOffsetMhz": 1600
+    },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/19beebq/rtx_4070_super_undervolting_and_clockspeed/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 4070 Super Undervolting and Clockspeed",
+      "measurementProtocol": "Three named benchmark comparisons; exact numeric results were supplied as linked images"
+    }
+  },
+  {
+    "evidenceId": "reddit-4070s-fe-950mv-2760-failed",
+    "independentUnitId": "reddit-4070s-fe-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "NVIDIA GeForce RTX 4070 SUPER Founders Edition",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Time Spy",
+    "outcome": "failed",
+    "outcomeNotes": "The borrowed 950 mV at 2760 MHz profile could not complete Time Spy.",
+    "stock": {},
+    "tuned": {
+      "voltageMv": 950,
+      "clockMhz": 2760,
+      "memoryOffsetMhz": 1600
+    },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/19beebq/rtx_4070_super_undervolting_and_clockspeed/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 4070 Super Undervolting and Clockspeed",
+      "measurementProtocol": "Time Spy failure on a second physical card using another user's values"
+    }
+  },
+  {
+    "evidenceId": "reddit-4070s-fe-950mv-2700",
+    "independentUnitId": "reddit-4070s-fe-sample-1",
+    "model": "GeForce RTX 4070 SUPER",
+    "vramMiB": 12288,
+    "boardModel": "NVIDIA GeForce RTX 4070 SUPER Founders Edition",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Three different benchmarks after the 2760 MHz profile failed Time Spy",
+    "stablePasses": 3,
+    "outcome": "short-pass",
+    "stock": {},
+    "tuned": {
+      "voltageMv": 950,
+      "clockMhz": 2700,
+      "memoryOffsetMhz": 1500
+    },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/19beebq/rtx_4070_super_undervolting_and_clockspeed/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 4070 Super Undervolting and Clockspeed",
+      "measurementProtocol": "Three benchmark passes after reducing target clock from the failed profile"
+    }
+  },
+  {
+    "evidenceId": "reddit-4070ti-msi-1000mv",
+    "independentUnitId": "reddit-msi-4070ti-ventus3x-sample-1",
+    "model": "GeForce RTX 4070 Ti",
+    "vramMiB": 12288,
+    "boardModel": "MSI GeForce RTX 4070 Ti Ventus 3X",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Port Royal",
+    "outcome": "short-pass",
+    "stock": { "score": 14026, "scoreUnit": "3DMark Port Royal points", "powerW": 257 },
+    "tuned": { "voltageMv": 1000, "clockMhz": 2820, "score": 14033, "scoreUnit": "3DMark Port Royal points", "powerW": 214 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/11kmraz/my_4070_ti_undervolt_results/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "My 4070 Ti Undervolt Results",
+      "measurementProtocol": "Port Royal voltage sweep in 25 mV increments; a few runs per point"
+    }
+  },
+  {
+    "evidenceId": "reddit-4080-palit-1000mv",
+    "independentUnitId": "reddit-palit-4080-gamerock-sample-1",
+    "model": "GeForce RTX 4080",
+    "vramMiB": 16384,
+    "boardModel": "Palit GeForce RTX 4080 GameRock non-OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Port Royal plus Cyberpunk 2077 and Dying Light 2 with ray tracing",
+    "outcome": "short-pass",
+    "stock": { "score": 18078, "scoreUnit": "3DMark Port Royal points", "powerW": 319, "temperatureC": 67 },
+    "tuned": { "voltageMv": 1000, "clockMhz": 2850, "memoryOffsetMhz": 1000, "score": 18207, "scoreUnit": "3DMark Port Royal points", "powerW": 295, "temperatureC": 65 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/106tmqx/palit_gamerock_4080_undervolting_results/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "Palit GameRock 4080 Undervolting Results",
+      "measurementProtocol": "Three GPU-bound tests; power fields use the reported maximum of each range"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060-gigabyte-900mv-2800",
+    "independentUnitId": "reddit-gigabyte-5060-windforce-sample-1",
+    "model": "GeForce RTX 5060",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 5060 WINDFORCE 8G",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Unigine Heaven 1920x1080 Ultra, Extreme tessellation, 8xAA",
+    "outcome": "short-pass",
+    "stock": { "clockMhz": 2497, "score": 100, "scoreUnit": "relative performance index", "temperatureC": 73 },
+    "tuned": { "voltageMv": 900, "clockMhz": 2800, "powerLimitPercent": 103, "score": 91.5, "scoreUnit": "relative performance index", "temperatureC": 60 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/1pn0osi/rtx_5060_undervolting_results_which_profile/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5060 undervolting results",
+      "measurementProtocol": "Heaven benchmark normalized to stock; memory left at stock; all undervolt profiles used a 103% Power Limit"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060-gigabyte-900mv-2850",
+    "independentUnitId": "reddit-gigabyte-5060-windforce-sample-1",
+    "model": "GeForce RTX 5060",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 5060 WINDFORCE 8G",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Unigine Heaven 1920x1080 Ultra, Extreme tessellation, 8xAA",
+    "outcome": "short-pass",
+    "stock": { "clockMhz": 2497, "score": 100, "scoreUnit": "relative performance index", "temperatureC": 73 },
+    "tuned": { "voltageMv": 900, "clockMhz": 2850, "powerLimitPercent": 103, "score": 96.8, "scoreUnit": "relative performance index", "temperatureC": 63 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/1pn0osi/rtx_5060_undervolting_results_which_profile/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5060 undervolting results",
+      "measurementProtocol": "Heaven benchmark normalized to stock; memory left at stock; all undervolt profiles used a 103% Power Limit"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060-gigabyte-900mv-2900",
+    "independentUnitId": "reddit-gigabyte-5060-windforce-sample-1",
+    "model": "GeForce RTX 5060",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 5060 WINDFORCE 8G",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Unigine Heaven 1920x1080 Ultra, Extreme tessellation, 8xAA",
+    "outcome": "short-pass",
+    "stock": { "clockMhz": 2497, "score": 100, "scoreUnit": "relative performance index", "temperatureC": 73 },
+    "tuned": { "voltageMv": 900, "clockMhz": 2900, "powerLimitPercent": 103, "score": 98.2, "scoreUnit": "relative performance index", "temperatureC": 63 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/1pn0osi/rtx_5060_undervolting_results_which_profile/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5060 undervolting results",
+      "measurementProtocol": "Heaven benchmark normalized to stock; memory left at stock; all undervolt profiles used a 103% Power Limit"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060-gigabyte-950mv",
+    "independentUnitId": "reddit-gigabyte-5060-windforce-sample-1",
+    "model": "GeForce RTX 5060",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 5060 WINDFORCE 8G",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Unigine Heaven 1920x1080 Ultra, Extreme tessellation, 8xAA",
+    "outcome": "short-pass",
+    "stock": { "clockMhz": 2497, "score": 100, "scoreUnit": "relative performance index", "temperatureC": 73 },
+    "tuned": { "voltageMv": 950, "clockMhz": 2900, "powerLimitPercent": 103, "score": 99.5, "scoreUnit": "relative performance index", "temperatureC": 65 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/1pn0osi/rtx_5060_undervolting_results_which_profile/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5060 undervolting results",
+      "measurementProtocol": "Heaven benchmark normalized to stock; memory left at stock; all undervolt profiles used a 103% Power Limit"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060-zotac-945mv-3090",
+    "independentUnitId": "reddit-zotac-5060-twin-edge-oc-sample-1",
+    "model": "GeForce RTX 5060",
+    "vramMiB": 8192,
+    "boardModel": "ZOTAC GAMING GeForce RTX 5060 Twin Edge OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Stress testing followed by demanding games",
+    "outcome": "short-pass",
+    "outcomeNotes": "No comparable stock benchmark, memory offset or Power Limit was reported. This point is stored for coverage only and is not advisory evidence.",
+    "stock": {},
+    "tuned": { "voltageMv": 945, "clockMhz": 3090, "powerW": 115, "temperatureC": 67 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1sn1tbg/overclocking_rtx_5060_zotac/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "Overclocking RTX 5060 Zotac",
+      "measurementProtocol": "Reported stress-test temperature and 105-115 W draw in demanding games"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060-galax-945mv-3100",
+    "independentUnitId": "reddit-galax-5060-oc-sample-1",
+    "model": "GeForce RTX 5060",
+    "vramMiB": 8192,
+    "boardModel": "GALAX GeForce RTX 5060 OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad followed by several named games for multiple hours",
+    "outcome": "reported-stable",
+    "outcomeNotes": "No comparable stock result and no unambiguous memory offset were reported. This point is stored for coverage only and is not advisory evidence.",
+    "stock": {},
+    "tuned": { "voltageMv": 945, "clockMhz": 3100, "temperatureC": 55 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1r6olxz/overclocking_rtx_5060_non_ti/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "Overclocking RTX 5060 non-Ti",
+      "measurementProtocol": "Steel Nomad record attempt followed by Dying Light: The Beast, Horizon Forbidden West and Assetto Corsa"
+    }
+  },
+  {
+    "evidenceId": "reddit-5070-gigabyte-930mv",
+    "independentUnitId": "reddit-gigabyte-5070-windforce-sff-sample-1",
+    "model": "GeForce RTX 5070",
+    "vramMiB": 12288,
+    "boardModel": "Gigabyte GeForce RTX 5070 Windforce SFF",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Cyberpunk 2077 1440p RT Overdrive, DLSS Balanced, frame generation off",
+    "outcome": "short-pass",
+    "driverVersion": "591.44",
+    "stock": { "voltageMv": 1095, "clockMhz": 2835, "score": 59.46, "scoreUnit": "average FPS", "powerW": 230, "temperatureC": 72 },
+    "tuned": { "voltageMv": 930, "clockMhz": 2835, "memoryOffsetMhz": 2000, "powerLimitPercent": 100, "score": 58.43, "scoreUnit": "average FPS", "powerW": 155, "temperatureC": 60 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1pugt5e/rtx_5070_undervolting_did_i_lose_the_silicon/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5070 Undervolting: Did I lose the silicon lottery?",
+      "measurementProtocol": "Two Cyberpunk benchmark runs per point; second run retained for conservative comparison"
+    }
+  },
+  {
+    "evidenceId": "reddit-5070-gigabyte-970mv",
+    "independentUnitId": "reddit-gigabyte-5070-windforce-sff-sample-1",
+    "model": "GeForce RTX 5070",
+    "vramMiB": 12288,
+    "boardModel": "Gigabyte GeForce RTX 5070 Windforce SFF",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Cyberpunk 2077 1440p RT Overdrive, DLSS Balanced, frame generation off",
+    "outcome": "short-pass",
+    "driverVersion": "591.44",
+    "outcomeNotes": "The author also reports a stable +2000 MHz memory offset; the table does not isolate its contribution.",
+    "stock": { "voltageMv": 1095, "clockMhz": 2835, "score": 59.46, "scoreUnit": "average FPS", "powerW": 230, "temperatureC": 72 },
+    "tuned": { "voltageMv": 970, "clockMhz": 2925, "memoryOffsetMhz": 2000, "powerLimitPercent": 100, "score": 59.65, "scoreUnit": "average FPS", "powerW": 174, "temperatureC": 62 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1pugt5e/rtx_5070_undervolting_did_i_lose_the_silicon/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5070 Undervolting: Did I lose the silicon lottery?",
+      "measurementProtocol": "Two Cyberpunk benchmark runs per point; second run retained for conservative comparison"
+    }
+  },
+  {
+    "evidenceId": "reddit-5070-gigabyte-995mv",
+    "independentUnitId": "reddit-gigabyte-5070-windforce-sff-sample-1",
+    "model": "GeForce RTX 5070",
+    "vramMiB": 12288,
+    "boardModel": "Gigabyte GeForce RTX 5070 Windforce SFF",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Cyberpunk 2077 1440p RT Overdrive, DLSS Balanced, frame generation off",
+    "outcome": "short-pass",
+    "driverVersion": "591.44",
+    "outcomeNotes": "The author also reports a stable +2000 MHz memory offset; the table does not isolate its contribution.",
+    "stock": { "voltageMv": 1095, "clockMhz": 2835, "score": 59.46, "scoreUnit": "average FPS", "powerW": 230, "temperatureC": 72 },
+    "tuned": { "voltageMv": 995, "clockMhz": 3007, "memoryOffsetMhz": 2000, "powerLimitPercent": 100, "score": 61.05, "scoreUnit": "average FPS", "powerW": 188, "temperatureC": 65 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1pugt5e/rtx_5070_undervolting_did_i_lose_the_silicon/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5070 Undervolting: Did I lose the silicon lottery?",
+      "measurementProtocol": "Two Cyberpunk benchmark runs per point; second run retained for conservative comparison"
+    }
+  },
+  {
+    "evidenceId": "reddit-5070-gigabyte-sample2-950mv",
+    "independentUnitId": "reddit-gigabyte-5070-windforce-oc-sff-sample-2",
+    "model": "GeForce RTX 5070",
+    "vramMiB": 12288,
+    "boardModel": "Gigabyte GeForce RTX 5070 Windforce OC SFF",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Cyberpunk 2077 1440p RT Overdrive, DLSS Balanced, frame generation off",
+    "outcome": "short-pass",
+    "driverVersion": "591.86",
+    "outcomeNotes": "Second physical card from the same author. The author reports +3000 MHz memory, so the core result is not isolated.",
+    "stock": { "voltageMv": 1080, "clockMhz": 2865, "score": 56.99, "scoreUnit": "average FPS", "powerW": 210, "temperatureC": 73 },
+    "tuned": { "voltageMv": 950, "clockMhz": 3045, "memoryOffsetMhz": 3000, "powerLimitPercent": 100, "score": 58.36, "scoreUnit": "average FPS", "powerW": 164, "temperatureC": 65 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1pugt5e/rtx_5070_undervolting_did_i_lose_the_silicon/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5070 Undervolting: Did I lose the silicon lottery?",
+      "measurementProtocol": "Second physical card; two Cyberpunk benchmark runs at the tuned point"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-fe-925mv",
+    "independentUnitId": "reddit-5080-fe-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "NVIDIA GeForce RTX 5080 Founders Edition",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "3DMark Steel Nomad",
+    "outcome": "short-pass",
+    "ambientTemperatureC": 19.5,
+    "stock": { "voltageMv": 1000, "clockMhz": 2677, "score": 8186, "scoreUnit": "3DMark Steel Nomad points", "powerW": 332.494 },
+    "tuned": { "voltageMv": 925, "clockMhz": 2864, "memoryOffsetMhz": 500, "powerLimitPercent": 108, "score": 8620, "scoreUnit": "3DMark Steel Nomad points", "powerW": 297.181, "temperatureC": 62.1 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1iqs8sc/rtx_5080_overclockundervolt_benchmark_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5080 Overclock/Undervolt Benchmark Results",
+      "measurementProtocol": "Steel Nomad repeated multiple times; HWInfo monitoring; default fan control"
+    }
+  },
+  {
+    "evidenceId": "reddit-5090-fe-900mv-85pct",
+    "independentUnitId": "reddit-5090-fe-sample-1",
+    "model": "GeForce RTX 5090",
+    "vramMiB": 32768,
+    "boardModel": "NVIDIA GeForce RTX 5090 Founders Edition",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "3DMark Steel Nomad stress test, 20 loops",
+    "durationSeconds": 1200,
+    "stablePasses": 20,
+    "outcome": "reported-stable",
+    "ambientTemperatureC": 21,
+    "stock": { "clockMhz": 2502, "score": 13563, "scoreUnit": "3DMark Steel Nomad worst-loop points", "powerW": 555, "temperatureC": 78 },
+    "tuned": { "voltageMv": 900, "clockMhz": 2900, "memoryOffsetMhz": 1000, "powerLimitPercent": 85, "score": 13388, "scoreUnit": "3DMark Steel Nomad worst-loop points", "powerW": 464, "temperatureC": 71.5 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1il307h/rtx_5090_stock_performance_84_power_draw/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5090: stock performance at 84% power draw",
+      "measurementProtocol": "Steel Nomad stress test, 20 loops; worst-loop score retained"
+    }
+  },
+  {
+    "evidenceId": "reddit-3070-colorful-925mv",
+    "independentUnitId": "reddit-colorful-3070-igame-sample-1",
+    "model": "GeForce RTX 3070",
+    "vramMiB": 8192,
+    "boardModel": "Colorful iGame GeForce RTX 3070 8GB",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Time Spy plus Heaven, FurMark and Fire Strike",
+    "stablePasses": 4,
+    "outcome": "short-pass",
+    "driverVersion": "460.89",
+    "stock": { "voltageMv": 1000, "clockMhz": 1950, "score": 11517, "scoreUnit": "3DMark Time Spy points", "temperatureC": 84 },
+    "tuned": { "voltageMv": 925, "clockMhz": 1950, "score": 11471, "scoreUnit": "3DMark Time Spy points", "temperatureC": 75 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/kkms8t/rtx_3070rtx_3000_detailedstepbystep_undervolt/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 3070 detailed undervolt guide with benchmarks and data",
+      "measurementProtocol": "Four named benchmark comparisons on the same physical card"
+    }
+  },
+  {
+    "evidenceId": "reddit-3070ti-gigabyte-900mv",
+    "independentUnitId": "reddit-gigabyte-3070ti-gaming-oc-sample-1",
+    "model": "GeForce RTX 3070 Ti",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 3070 Ti Gaming OC 8GB",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Unigine Heaven 4.0 followed by Ghost Recon Wildlands, Red Dead Redemption 2 and Bannerlord",
+    "outcome": "reported-stable",
+    "stock": { "voltageMv": 1075, "clockMhz": 1935, "score": 5608, "scoreUnit": "Unigine Heaven points", "powerW": 300, "temperatureC": 86 },
+    "tuned": { "voltageMv": 900, "clockMhz": 1905, "score": 5458, "scoreUnit": "Unigine Heaven points", "powerW": 208, "temperatureC": 71 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/o2ejcv/your_3070ti_overclockundervolts/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "Your 3070 Ti overclock/undervolts",
+      "measurementProtocol": "Unigine Heaven comparison followed by Ghost Recon Wildlands, Red Dead Redemption 2 and Mount & Blade II: Bannerlord"
+    }
+  },
+  {
+    "evidenceId": "reddit-3060ti-gigabyte-938mv",
+    "independentUnitId": "reddit-gigabyte-3060ti-gaming-oc-pro-sample-1",
+    "model": "GeForce RTX 3060 Ti",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 3060 Ti Gaming OC Pro 8GB",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Five synthetic benchmarks and five ray-traced games",
+    "stablePasses": 10,
+    "outcome": "reported-stable",
+    "outcomeNotes": "The author reports one week of stability work. The post states that most tested profiles used 8000 MHz memory instead of the 7000 MHz stock value, so the memory offset is retained as a confounding setting.",
+    "stock": { "voltageMv": 1081, "clockMhz": 1920, "score": 100, "scoreUnit": "aggregate relative performance index", "powerW": 240, "temperatureC": 61 },
+    "tuned": { "voltageMv": 938, "clockMhz": 1920, "memoryOffsetMhz": 1000, "score": 102.41, "scoreUnit": "aggregate relative performance index", "powerW": 160, "temperatureC": 56 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/lzd8mz/rtx_3060ti_comparison_with_stock_undervolt/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 3060 Ti comparison with stock, undervolt and overclock on 5 benchmarks and 5 games",
+      "measurementProtocol": "Same physical card and conditions; five named synthetic benchmarks plus five named ray-traced games"
+    }
+  },
+  {
+    "evidenceId": "reddit-3060ti-gigabyte-975mv",
+    "independentUnitId": "reddit-gigabyte-3060ti-gaming-oc-pro-sample-1",
+    "model": "GeForce RTX 3060 Ti",
+    "vramMiB": 8192,
+    "boardModel": "Gigabyte GeForce RTX 3060 Ti Gaming OC Pro 8GB",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Five synthetic benchmarks and five ray-traced games",
+    "stablePasses": 10,
+    "outcome": "reported-stable",
+    "outcomeNotes": "The author reports one week of stability work. The post states that most tested profiles used 8000 MHz memory instead of the 7000 MHz stock value, so the memory offset is retained as a confounding setting.",
+    "stock": { "voltageMv": 1081, "clockMhz": 1920, "score": 100, "scoreUnit": "aggregate relative performance index", "powerW": 240, "temperatureC": 61 },
+    "tuned": { "voltageMv": 975, "clockMhz": 1950, "memoryOffsetMhz": 1000, "score": 105.18, "scoreUnit": "aggregate relative performance index", "powerW": 200, "temperatureC": 59 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/lzd8mz/rtx_3060ti_comparison_with_stock_undervolt/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 3060 Ti comparison with stock, undervolt and overclock on 5 benchmarks and 5 games",
+      "measurementProtocol": "Same physical card and conditions; five named synthetic benchmarks plus five named ray-traced games"
+    }
+  },
+  {
+    "evidenceId": "wccftech-3090-zotac-850mv",
+    "independentUnitId": "wccftech-zotac-3090-trinity-sample-1",
+    "model": "GeForce RTX 3090",
+    "vramMiB": 24576,
+    "boardModel": "ZOTAC GAMING GeForce RTX 3090 Trinity",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Extended graphics-card load used in the review",
+    "outcome": "reported-stable",
+    "stock": { "clockMhz": 1850, "powerW": 369, "temperatureC": 77 },
+    "tuned": { "voltageMv": 850, "clockMhz": 1850, "powerW": 280, "temperatureC": 71.7 },
+    "source": {
+      "url": "https://wccftech.com/review/zotac-geforce-rtx-3090-trinity-lighter-and-brighter-than-founders/10/",
+      "publisher": "Wccftech",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-review",
+      "title": "Zotac GeForce RTX 3090 Trinity undervolt",
+      "measurementProtocol": "Reviewer voltage/frequency tuning with power, temperature and sustained clock traces"
+    }
+  },
+  {
+    "evidenceId": "reddit-5070ti-gigabyte-865mv",
+    "independentUnitId": "reddit-gigabyte-5070ti-gaming-oc-sample-1",
+    "model": "GeForce RTX 5070 Ti",
+    "vramMiB": 16384,
+    "boardModel": "Gigabyte GeForce RTX 5070 Ti Gaming OC 16GB",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad after approximately 12 hours of tuning and stability checks",
+    "outcome": "reported-stable",
+    "outcomeNotes": "The core result is combined with a +2000 MHz memory offset, so Tweakly does not treat it as an isolated core measurement.",
+    "stock": { "voltageMv": 1045, "clockMhz": 2782, "score": 6733, "scoreUnit": "3DMark Steel Nomad points", "powerW": 303, "temperatureC": 72 },
+    "tuned": { "voltageMv": 865, "clockMhz": 2782, "memoryOffsetMhz": 2000, "score": 6921, "scoreUnit": "3DMark Steel Nomad points", "powerW": 225, "temperatureC": 61 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1kmppp6/the_5070ti_is_insane_for_undervolting/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "The 5070 Ti is insane for undervolting",
+      "measurementProtocol": "Same-card Steel Nomad stock and tuned comparison after approximately 12 hours of stability work"
+    }
+  },
+  {
+    "evidenceId": "reddit-5060ti16-palit-930mv",
+    "independentUnitId": "reddit-palit-5060ti16-sample-1",
+    "model": "GeForce RTX 5060 Ti 16GB",
+    "vramMiB": 16384,
+    "boardModel": "Palit GeForce RTX 5060 Ti 16GB (exact SKU not reported)",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "User-reported benchmark comparison followed by daily gaming",
+    "outcome": "reported-stable",
+    "outcomeNotes": "The author reported an 8% performance gain, 115 W and 68 C. The reported 1975 MHz memory value is ambiguous and is not converted into an offset.",
+    "stock": { "score": 100, "scoreUnit": "relative performance index" },
+    "tuned": { "voltageMv": 930, "clockMhz": 2995, "score": 108, "scoreUnit": "relative performance index", "powerW": 115, "temperatureC": 68 },
+    "source": {
+      "url": "https://www.reddit.com/r/nvidia/comments/1r6etto/5060ti_overclocking_and_undervolting/",
+      "publisher": "Reddit r/nvidia",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "5060 Ti overclocking and undervolting",
+      "measurementProtocol": "Separate physical Palit 16 GB card reported in the results discussion"
+    }
+  },
+  {
+    "evidenceId": "reddit-5070ti-pny-870mv",
+    "independentUnitId": "reddit-pny-5070ti-epic-x-oc-sample-1",
+    "model": "GeForce RTX 5070 Ti",
+    "vramMiB": 16384,
+    "boardModel": "PNY GeForce RTX 5070 Ti EPIC-X RGB OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Five consecutive Cyberpunk 2077 benchmark runs, Steel Nomad stress test and long gaming sessions",
+    "outcome": "reported-stable",
+    "longTermStabilityReported": true,
+    "outcomeNotes": "The author selected this as the daily profile after several days of tuning. The reported 95% refers to maximum tested performance, not a clean stock baseline, so no stock score is stored.",
+    "stock": {},
+    "tuned": { "voltageMv": 870, "clockMhz": 2815, "memoryOffsetMhz": 1000, "score": 234, "scoreUnit": "Cyberpunk 2077 average FPS", "powerW": 211, "temperatureC": 56 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1my8b15/overclockingundervolting_journey_on_my_5070_ti/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "Overclocking/Undervolting journey on my 5070 Ti",
+      "measurementProtocol": "Five back-to-back Cyberpunk runs at 1440p max settings plus Steel Nomad and long gaming sessions"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-msi-expert-900mv",
+    "independentUnitId": "reddit-msi-5080-expert-oc-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "MSI GeForce RTX 5080 EXPERT OC",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "Unigine Heaven, 3DMark Time Spy, three Steel Nomad runs and several hours in three games",
+    "stablePasses": 3,
+    "outcome": "short-pass",
+    "outcomeNotes": "The author later reported several hours in Arc Raiders, Star Citizen and Battlefield 6 without problems. No same-card stock result or memory setting was reported.",
+    "stock": {},
+    "tuned": { "voltageMv": 900, "clockMhz": 2900, "powerLimitPercent": 111, "powerW": 333, "temperatureC": 71 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1peqq9u/rtx_5080_uvoc_results_900_mv_2900_mhz_stable/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5080 UV/OC results at 900 mV",
+      "measurementProtocol": "Heaven, Time Spy, three full Steel Nomad runs and subsequent game testing"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-zotac-solid-925mv",
+    "independentUnitId": "reddit-zotac-5080-solid-oc-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "ZOTAC GAMING GeForce RTX 5080 SOLID OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad",
+    "outcome": "short-pass",
+    "outcomeNotes": "The source reports stock at 330 W and 8100-8200 points versus 300 W and 8600-8700 points tuned. Ranges are retained here instead of inventing midpoint scores.",
+    "stock": { "clockMhz": 2700, "powerW": 330 },
+    "tuned": { "voltageMv": 925, "clockMhz": 2980, "memoryOffsetMhz": 2000, "powerW": 300 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1jhztb1/what_are_your_5080_undervolt_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "What are your 5080 undervolt results?",
+      "measurementProtocol": "Same-card stock and tuned Steel Nomad score and power ranges"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-asus-tuf-920mv",
+    "independentUnitId": "reddit-asus-5080-tuf-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "ASUS TUF Gaming GeForce RTX 5080",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Unigine Heaven",
+    "outcome": "short-pass",
+    "outcomeNotes": "Power figures in the source are whole-system draw and are intentionally not stored as GPU power.",
+    "stock": { "voltageMv": 1040, "clockMhz": 2850, "score": 100, "scoreUnit": "relative Heaven performance", "temperatureC": 61 },
+    "tuned": { "voltageMv": 920, "clockMhz": 3000, "memoryOffsetMhz": 2000, "score": 102.2, "scoreUnit": "relative Heaven performance", "temperatureC": 58 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1jhztb1/what_are_your_5080_undervolt_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "What are your 5080 undervolt results?",
+      "measurementProtocol": "Same-card Heaven stock and tuned comparison with temperatures"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-unknown-910mv",
+    "independentUnitId": "reddit-5080-unreported-board-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "GeForce RTX 5080 (exact board not reported)",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad",
+    "outcome": "short-pass",
+    "outcomeNotes": "Memory was explicitly left untouched. Board model, stock baseline and validation duration were not reported; coverage only.",
+    "stock": {},
+    "tuned": { "voltageMv": 910, "clockMhz": 2895, "memoryOffsetMhz": 0, "score": 90.06, "scoreUnit": "Steel Nomad average FPS", "powerW": 305 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1jhztb1/what_are_your_5080_undervolt_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "What are your 5080 undervolt results?",
+      "measurementProtocol": "Voltage sweep on one physical card with memory unchanged"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-unknown-875mv",
+    "independentUnitId": "reddit-5080-unreported-board-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "GeForce RTX 5080 (exact board not reported)",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad",
+    "outcome": "short-pass",
+    "outcomeNotes": "Memory was explicitly left untouched. Board model, stock baseline and validation duration were not reported; coverage only.",
+    "stock": {},
+    "tuned": { "voltageMv": 875, "clockMhz": 2895, "memoryOffsetMhz": 0, "score": 88.83, "scoreUnit": "Steel Nomad average FPS", "powerW": 282 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1jhztb1/what_are_your_5080_undervolt_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "What are your 5080 undervolt results?",
+      "measurementProtocol": "Voltage sweep on one physical card with memory unchanged"
+    }
+  },
+  {
+    "evidenceId": "reddit-5080-unknown-845mv",
+    "independentUnitId": "reddit-5080-unreported-board-sample-1",
+    "model": "GeForce RTX 5080",
+    "vramMiB": 16384,
+    "boardModel": "GeForce RTX 5080 (exact board not reported)",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "3DMark Steel Nomad",
+    "outcome": "short-pass",
+    "outcomeNotes": "Memory was explicitly left untouched. Board model, stock baseline and validation duration were not reported; coverage only.",
+    "stock": {},
+    "tuned": { "voltageMv": 845, "clockMhz": 2745, "memoryOffsetMhz": 0, "score": 88.06, "scoreUnit": "Steel Nomad average FPS", "powerW": 269 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1jhztb1/what_are_your_5080_undervolt_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "What are your 5080 undervolt results?",
+      "measurementProtocol": "Voltage sweep on one physical card with memory unchanged"
+    }
+  },
+  {
+    "evidenceId": "reddit-5090-fe-900mv-100pct",
+    "independentUnitId": "reddit-5090-fe-sample-1",
+    "model": "GeForce RTX 5090",
+    "vramMiB": 32768,
+    "boardModel": "NVIDIA GeForce RTX 5090 Founders Edition",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "3DMark Steel Nomad stress test, 20 loops",
+    "durationSeconds": 1200,
+    "stablePasses": 20,
+    "outcome": "reported-stable",
+    "stock": { "clockMhz": 2502, "score": 13563, "scoreUnit": "3DMark Steel Nomad worst-loop points", "powerW": 555, "temperatureC": 78 },
+    "tuned": { "voltageMv": 900, "clockMhz": 2900, "memoryOffsetMhz": 1000, "powerLimitPercent": 100, "score": 14321, "scoreUnit": "3DMark Steel Nomad worst-loop points", "powerW": 524, "temperatureC": 75.3 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1il307h/rtx_5090_stock_performance_84_power_draw/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "RTX 5090 stock performance at 84% power draw",
+      "measurementProtocol": "Steel Nomad stress test, 20 loops; worst-loop score retained"
+    }
+  },
+  {
+    "evidenceId": "reddit-5090-fe-sample2-895mv",
+    "independentUnitId": "reddit-5090-fe-sample-2",
+    "model": "GeForce RTX 5090",
+    "vramMiB": 32768,
+    "boardModel": "NVIDIA GeForce RTX 5090 Founders Edition",
+    "formFactor": "desktop",
+    "method": "mixed",
+    "benchmark": "3DMark Steel Nomad followed by Kingdom Come Deliverance 2 at 4K",
+    "outcome": "reported-stable",
+    "outcomeNotes": "The source reports more than 100 W lower draw in the game, but GPU power was not recorded under the same workload as the Steel Nomad score and is not stored as a comparison pair.",
+    "stock": { "score": 14101, "scoreUnit": "3DMark Steel Nomad points" },
+    "tuned": { "voltageMv": 895, "clockMhz": 2880, "memoryOffsetMhz": 1000, "powerLimitPercent": 85, "score": 14094, "scoreUnit": "3DMark Steel Nomad points" },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1ikh0eg/5090_undervolting_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "5090 Undervolting Results",
+      "measurementProtocol": "Same-card Steel Nomad stock and tuned scores followed by 4K gaming"
+    }
+  },
+  {
+    "evidenceId": "reddit-5090-msi-ventus-880mv",
+    "independentUnitId": "reddit-msi-5090-ventus-3x-oc-sample-1",
+    "model": "GeForce RTX 5090",
+    "vramMiB": 32768,
+    "boardModel": "MSI GeForce RTX 5090 VENTUS 3X OC",
+    "formFactor": "desktop",
+    "method": "vf-curve",
+    "benchmark": "Cyberpunk 2077 benchmark followed by several days of Rivals and Overwatch",
+    "outcome": "reported-stable",
+    "longTermStabilityReported": true,
+    "outcomeNotes": "No same-card stock score, stock temperature or unambiguous Power Limit was reported; this point documents long-term stability only.",
+    "stock": {},
+    "tuned": { "voltageMv": 880, "clockMhz": 2655, "memoryOffsetMhz": 1500 },
+    "source": {
+      "url": "https://www.reddit.com/r/overclocking/comments/1ikh0eg/5090_undervolting_results/",
+      "publisher": "Reddit r/overclocking",
+      "retrievedOn": "2026-07-13",
+      "evidenceType": "direct-user-test",
+      "title": "5090 Undervolting Results",
+      "measurementProtocol": "Cyberpunk benchmark and several days of gaming on one MSI Ventus sample"
+    }
+  }
+]

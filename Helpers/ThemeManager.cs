@@ -73,7 +73,14 @@ namespace Optimisation_Tool.Helpers
             ["ThWarnTint"]    = ("#33F5C24A", "#1AA87900"),   // ambre / brun profond très léger en clair
             ["ThCritTint"]    = ("#33E05555", "#1AC0392B"),   // rouge / rouge profond très léger en clair
             ["ThInfoTint"]    = ("#22315FA0", "#1A1F4E94"),   // bleu très léger
+            ["ThInfoBorderTint"] = ("#2E5BA0FF", "#332A62C4"),
+            ["ThInfoStrongTint"] = ("#505BA0FF", "#442A62C4"),
             ["ThNeutralTint"] = ("#22A0A0A0", "#1A4A4D52"),   // gris très léger
+            ["ThNeutralBorderTint"] = ("#55B4BBE0", "#554A4D52"),
+            ["ThFaintBorder"] = ("#1A808080", "#264A4D52"),
+            ["ThScrollThumb"] = ("#4A5285", "#6D7480"),
+            ["ThScrollThumbHover"] = ("#5E68A8", "#596270"),
+            ["ThScrollThumbDragging"] = ("#6E78BE", "#465162"),
             // Couleurs de statut — vives en sombre, ASSOMBRIES en clair pour rester lisibles
             ["ThOk"]        = ("#2EC46A", "#0D6334"),
             ["ThOkTint"]    = ("#225FD98C", "#220D6334"),
@@ -82,7 +89,15 @@ namespace Optimisation_Tool.Helpers
             ["ThOkButtonHover"] = ("#28A050", "#0D6334"),
             ["ThOkButtonPressed"] = ("#16602E", "#0D6334"),
             ["ThWarn"]      = ("#F5C24A", "#A87900"),   // amber foncé en clair (le jaune vif était illisible)
+            ["ThWarnBorderTint"] = ("#55F5C24A", "#55A87900"),
+            ["ThWarnButton"] = ("#B5781E", "#8E5E16"),
+            ["ThWarnButtonHover"] = ("#D8941E", "#A87900"),
+            ["ThWarnButtonPressed"] = ("#8E5E16", "#704A10"),
             ["ThCrit"]      = ("#E05555", "#C0392B"),
+            ["ThCritBorderTint"] = ("#55E05555", "#55C0392B"),
+            ["ThCritButton"] = ("#7A1E1E", "#8F2B25"),
+            ["ThCritButtonHover"] = ("#9E2828", "#A9362E"),
+            ["ThCritButtonPressed"] = ("#5E1818", "#70211D"),
             ["ThViolet"]    = ("#C08CF0", "#7A3FB8"),   // RAM / accent violet — assombri en clair (le mauve clair était illisible sur fond clair)
             ["ThCyan"]      = ("#29C7D6", "#0E7C8A"),   // débits réseau — assombri en clair
             ["ThOrange"]    = ("#F5A623", "#C26A12"),   // classement « ta mesure » — vif en sombre, brûlé profond en clair (l'orange vif était illisible/criard sur le bleu-ardoise clair)
@@ -134,6 +149,37 @@ namespace Optimisation_Tool.Helpers
             ["ThWhiteColor"]          = ("#FFFFFF", "#FFFFFF"),
             ["ThBlackColor"]          = ("#000000", "#000000"),
             ["ThBlackAlpha18Color"]   = ("#00000018", "#00000018"),
+            ["ThInfoSelectionColor"]  = ("#1F5BA0FF", "#1F2A62C4"),
+            ["ThInfoFaintColor"]      = ("#145BA0FF", "#142A62C4"),
+            ["ThInfoTextTintColor"]   = ("#805BA0FF", "#802A62C4"),
+            ["ThInfoGradientColor"]   = ("#3D5BA0FF", "#3D2A62C4"),
+            ["ThSheenClearColor"]     = ("#00FFFFFF", "#00FFFFFF"),
+            ["ThSheenMidColor"]       = ("#66FFFFFF", "#4DFFFFFF"),
+            ["ThGlassHighlightStrongColor"] = ("#26FFFFFF", "#26FFFFFF"),
+            ["ThGlassHighlightFaintColor"] = ("#08FFFFFF", "#08FFFFFF"),
+            ["ThGlassShadowFaintColor"] = ("#0A000000", "#0A000000"),
+            ["ThBoardVoidColor"] = ("#0E1526", "#626B78"),
+            ["ThBoardOutlineColor"] = ("#46557F", "#56647A"),
+            ["ThBoardContactColor"] = ("#384670", "#657187"),
+            ["ThBoardModuleColor"] = ("#243052", "#7E8794"),
+            ["ThBoardAccentStrokeColor"] = ("#56689E", "#415A82"),
+            ["ThBoardTraceColor"] = ("#27335C", "#687386"),
+            ["ThBoardScrewFillColor"] = ("#3A4870", "#737D8B"),
+            ["ThBoardInnerColor"] = ("#33406A", "#69758A"),
+            ["ThBoardSlotColor"] = ("#2C3962", "#77818F"),
+            ["ThBoardPortColor"] = ("#1C2747", "#737D8C"),
+            ["ThBoardStrongOutlineColor"] = ("#4C5C94", "#4E5F7B"),
+            ["ThBoardLabelColor"] = ("#8193CC", "#304A78"),
+            ["ThBoardSocketLineColor"] = ("#5468A8", "#3F5A8C"),
+            ["ThBoardCpuEdgeColor"] = ("#3C4B7A", "#65718A"),
+            ["ThBoardModuleHighlightColor"] = ("#243056", "#87909C"),
+            ["ThBoardLabelDimColor"] = ("#54659C", "#465A7E"),
+            ["ThBoardChipTopColor"] = ("#2F3C66", "#7F8997"),
+            ["ThBoardCpuFrameColor"] = ("#4A5880", "#526178"),
+            ["ThBoardCpuAreaColor"] = ("#1B2440", "#747D89"),
+            ["ThBoardBaseBottomColor"] = ("#131D38", "#828A96"),
+            ["ThBoardBaseTopColor"] = ("#1A2542", "#8E95A0"),
+            ["ThBoardCpuCoreColor"] = ("#2B3860", "#727C8A"),
         };
 
         /// <summary>Couleur courante d'un rôle (pour le code-behind).</summary>

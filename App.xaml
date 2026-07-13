@@ -34,7 +34,14 @@
         <SolidColorBrush x:Key="ThWarnTint"    Color="#33F5C24A"/>
         <SolidColorBrush x:Key="ThCritTint"    Color="#33E05555"/>
         <SolidColorBrush x:Key="ThInfoTint"    Color="#22315FA0"/>
+        <SolidColorBrush x:Key="ThInfoBorderTint" Color="#2E5BA0FF"/>
+        <SolidColorBrush x:Key="ThInfoStrongTint" Color="#505BA0FF"/>
         <SolidColorBrush x:Key="ThNeutralTint" Color="#22A0A0A0"/>
+        <SolidColorBrush x:Key="ThNeutralBorderTint" Color="#55B4BBE0"/>
+        <SolidColorBrush x:Key="ThFaintBorder" Color="#1A808080"/>
+        <SolidColorBrush x:Key="ThScrollThumb" Color="#4A5285"/>
+        <SolidColorBrush x:Key="ThScrollThumbHover" Color="#5E68A8"/>
+        <SolidColorBrush x:Key="ThScrollThumbDragging" Color="#6E78BE"/>
         <SolidColorBrush x:Key="ThLogText"   Color="#5FD98C"/>
         <SolidColorBrush x:Key="ThOk"        Color="#2EC46A"/>
         <SolidColorBrush x:Key="ThOkTint"    Color="#225FD98C"/>
@@ -43,7 +50,15 @@
         <SolidColorBrush x:Key="ThOkButtonHover" Color="#28A050"/>
         <SolidColorBrush x:Key="ThOkButtonPressed" Color="#16602E"/>
         <SolidColorBrush x:Key="ThWarn"      Color="#F5C24A"/>
+        <SolidColorBrush x:Key="ThWarnBorderTint" Color="#55F5C24A"/>
+        <SolidColorBrush x:Key="ThWarnButton" Color="#B5781E"/>
+        <SolidColorBrush x:Key="ThWarnButtonHover" Color="#D8941E"/>
+        <SolidColorBrush x:Key="ThWarnButtonPressed" Color="#8E5E16"/>
         <SolidColorBrush x:Key="ThCrit"      Color="#E05555"/>
+        <SolidColorBrush x:Key="ThCritBorderTint" Color="#55E05555"/>
+        <SolidColorBrush x:Key="ThCritButton" Color="#7A1E1E"/>
+        <SolidColorBrush x:Key="ThCritButtonHover" Color="#9E2828"/>
+        <SolidColorBrush x:Key="ThCritButtonPressed" Color="#5E1818"/>
         <SolidColorBrush x:Key="ThPrimary"        Color="#1870CC"/>
         <SolidColorBrush x:Key="ThPrimaryHover"   Color="#2080E0"/>
         <SolidColorBrush x:Key="ThPrimaryPressed" Color="#1260AA"/>
@@ -85,6 +100,37 @@
         <Color x:Key="ThWhiteColor">#FFFFFF</Color>
         <Color x:Key="ThBlackColor">#000000</Color>
         <Color x:Key="ThBlackAlpha18Color">#00000018</Color>
+        <Color x:Key="ThInfoSelectionColor">#1F5BA0FF</Color>
+        <Color x:Key="ThInfoFaintColor">#145BA0FF</Color>
+        <Color x:Key="ThInfoTextTintColor">#805BA0FF</Color>
+        <Color x:Key="ThInfoGradientColor">#3D5BA0FF</Color>
+        <Color x:Key="ThSheenClearColor">#00FFFFFF</Color>
+        <Color x:Key="ThSheenMidColor">#66FFFFFF</Color>
+        <Color x:Key="ThGlassHighlightStrongColor">#26FFFFFF</Color>
+        <Color x:Key="ThGlassHighlightFaintColor">#08FFFFFF</Color>
+        <Color x:Key="ThGlassShadowFaintColor">#0A000000</Color>
+        <Color x:Key="ThBoardVoidColor">#0E1526</Color>
+        <Color x:Key="ThBoardOutlineColor">#46557F</Color>
+        <Color x:Key="ThBoardContactColor">#384670</Color>
+        <Color x:Key="ThBoardModuleColor">#243052</Color>
+        <Color x:Key="ThBoardAccentStrokeColor">#56689E</Color>
+        <Color x:Key="ThBoardTraceColor">#27335C</Color>
+        <Color x:Key="ThBoardScrewFillColor">#3A4870</Color>
+        <Color x:Key="ThBoardInnerColor">#33406A</Color>
+        <Color x:Key="ThBoardSlotColor">#2C3962</Color>
+        <Color x:Key="ThBoardPortColor">#1C2747</Color>
+        <Color x:Key="ThBoardStrongOutlineColor">#4C5C94</Color>
+        <Color x:Key="ThBoardLabelColor">#8193CC</Color>
+        <Color x:Key="ThBoardSocketLineColor">#5468A8</Color>
+        <Color x:Key="ThBoardCpuEdgeColor">#3C4B7A</Color>
+        <Color x:Key="ThBoardModuleHighlightColor">#243056</Color>
+        <Color x:Key="ThBoardLabelDimColor">#54659C</Color>
+        <Color x:Key="ThBoardChipTopColor">#2F3C66</Color>
+        <Color x:Key="ThBoardCpuFrameColor">#4A5880</Color>
+        <Color x:Key="ThBoardCpuAreaColor">#1B2440</Color>
+        <Color x:Key="ThBoardBaseBottomColor">#131D38</Color>
+        <Color x:Key="ThBoardBaseTopColor">#1A2542</Color>
+        <Color x:Key="ThBoardCpuCoreColor">#2B3860</Color>
 
         <!-- ── Toggle switch premium (shared par toutes les pages Optimisations) ── -->
         <Style x:Key="TweakChkStyle" TargetType="CheckBox">
@@ -459,13 +505,13 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
                         <Border x:Name="T" CornerRadius="4"
-                                Background="#4A5285" Margin="2"/>
+                                Background="{DynamicResource ThScrollThumb}" Margin="2"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="T" Property="Background" Value="#5E68A8"/>
+                                <Setter TargetName="T" Property="Background" Value="{DynamicResource ThScrollThumbHover}"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
-                                <Setter TargetName="T" Property="Background" Value="#6E78BE"/>
+                                <Setter TargetName="T" Property="Background" Value="{DynamicResource ThScrollThumbDragging}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -526,7 +572,7 @@
             <Setter Property="Cursor"       Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#145BA0FF"/>
+                    <Setter Property="Background" Value="{DynamicResource ThInfoTint}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -534,14 +580,14 @@
             <Setter Property="Width"  Value="34"/>
             <Setter Property="Height" Value="34"/>
             <Setter Property="CornerRadius" Value="9"/>
-            <Setter Property="BorderBrush" Value="#2E5BA0FF"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThInfoBorderTint}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Background">
                 <Setter.Value>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                        <GradientStop Color="#3D5BA0FF" Offset="0"/>
-                        <GradientStop Color="#145BA0FF" Offset="1"/>
+                        <GradientStop Color="{DynamicResource ThInfoGradientColor}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource ThInfoFaintColor}" Offset="1"/>
                     </LinearGradientBrush>
                 </Setter.Value>
             </Setter>
@@ -810,28 +856,26 @@
                                             <GradientStop Color="#00BFDCFF" Offset="-0.05"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
-                                    <Border.Triggers>
-                                        <EventTrigger RoutedEvent="Border.Loaded">
-                                            <BeginStoryboard>
-                                                <Storyboard RepeatBehavior="Forever">
-                                                    <DoubleAnimation Storyboard.TargetName="Sheen"
-                                                                     Storyboard.TargetProperty="(Border.Background).(LinearGradientBrush.GradientStops)[0].(GradientStop.Offset)"
-                                                                     From="-0.45" To="1.05" Duration="0:0:2.8"/>
-                                                    <DoubleAnimation Storyboard.TargetName="Sheen"
-                                                                     Storyboard.TargetProperty="(Border.Background).(LinearGradientBrush.GradientStops)[1].(GradientStop.Offset)"
-                                                                     From="-0.25" To="1.25" Duration="0:0:2.8"/>
-                                                    <DoubleAnimation Storyboard.TargetName="Sheen"
-                                                                     Storyboard.TargetProperty="(Border.Background).(LinearGradientBrush.GradientStops)[2].(GradientStop.Offset)"
-                                                                     From="-0.05" To="1.45" Duration="0:0:2.8"/>
-                                                </Storyboard>
-                                            </BeginStoryboard>
-                                        </EventTrigger>
-                                    </Border.Triggers>
                                 </Border>
                                 <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Sheen"
+                                                         Storyboard.TargetProperty="(Border.Background).(LinearGradientBrush.GradientStops)[0].(GradientStop.Offset)"
+                                                         From="-0.45" To="1.05" Duration="0:0:0.8"/>
+                                        <DoubleAnimation Storyboard.TargetName="Sheen"
+                                                         Storyboard.TargetProperty="(Border.Background).(LinearGradientBrush.GradientStops)[1].(GradientStop.Offset)"
+                                                         From="-0.25" To="1.25" Duration="0:0:0.8"/>
+                                        <DoubleAnimation Storyboard.TargetName="Sheen"
+                                                         Storyboard.TargetProperty="(Border.Background).(LinearGradientBrush.GradientStops)[2].(GradientStop.Offset)"
+                                                         From="-0.05" To="1.45" Duration="0:0:0.8"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bg" Property="Background">
                                     <Setter.Value>

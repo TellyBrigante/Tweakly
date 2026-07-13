@@ -53,8 +53,7 @@ namespace Optimisation_Tool.Pages
 
             try
             {
-                var (src, inc) = await Task.Run(() =>
-                    (EventLogDecoder.Scan(_days), EventLogDecoder.ScanIncidents(_days)));
+                var (src, inc) = await Task.Run(() => EventLogDecoder.ScanAll(_days));
                 _bySource   = src;
                 _byIncident = inc;
             }
@@ -273,22 +272,6 @@ namespace Optimisation_Tool.Pages
             Grid.SetColumn(card, 1); wrapper.Children.Add(card);
             ResultsPanel.Children.Add(wrapper);
             Anim.FadeSlideIn(wrapper, 14, 240, idx++ * 55);
-        }
-
-        private StackPanel Labeled(string label, string value, bool accent = false)
-        {
-            var sp = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
-            var lbl = new TextBlock
-            {
-                Text = label + " : ",
-                FontFamily = (FontFamily)FindResource("AppFont"), FontSize = 12.5, FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Top,
-            };
-            if (accent) lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThAccentIcon");
-            else        lbl.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
-            sp.Children.Add(lbl);
-            sp.Children.Add(Tb(value, "ThTextBody", 12.5, wrap: true, maxWidth: 720));
-            return sp;
         }
 
         private StackPanel BuildAdviceBlock(string text)

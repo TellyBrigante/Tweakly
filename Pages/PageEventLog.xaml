@@ -31,19 +31,21 @@
         <!-- ══ CARTE D'EN-TÊTE ══ -->
         <Border Grid.Row="0" Style="{StaticResource DTile}">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <StackPanel VerticalAlignment="Center">
                     <TextBlock Text="ERREURS WINDOWS" Style="{StaticResource DCat}" Margin="0,0,0,8"/>
                     <TextBlock x:Name="TxtSummary" Text="Lecture des journaux Windows (System + Application)…"
                                Foreground="{DynamicResource ThTextBody}"
-                               FontFamily="{StaticResource AppFont}" FontSize="13"/>
+                               FontFamily="{StaticResource AppFont}" FontSize="13"
+                               TextWrapping="Wrap"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Row="1" Orientation="Horizontal"
+                            HorizontalAlignment="Right" Margin="0,12,0,0">
                     <Button x:Name="BtnViewIncident" Content="Par incident" Style="{StaticResource SecondaryBtnStyle}"
                             Padding="14,8" Margin="0,0,8,0" Click="BtnViewIncident_Click"/>
                     <Button x:Name="BtnViewSource" Content="Par source" Style="{StaticResource SecondaryBtnStyle}"

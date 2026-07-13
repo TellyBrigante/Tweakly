@@ -73,7 +73,7 @@
                         <TextBlock Text="ms" Foreground="{DynamicResource ThAccentIcon}" FontSize="16" FontWeight="Bold"
                                    FontFamily="{StaticResource AppFont}" VerticalAlignment="Bottom" Margin="2,0,0,5"/>
                         <Border x:Name="PillVerdict" CornerRadius="9" Padding="10,3" Margin="12,0,0,5"
-                                VerticalAlignment="Bottom" Background="#3B456E">
+                                VerticalAlignment="Bottom" Background="{DynamicResource ThSecBtn}">
                             <TextBlock x:Name="TxtVerdict" Text="&#8212;" Foreground="{DynamicResource ThWhite}"
                                        FontFamily="{StaticResource AppFont}" FontSize="11" FontWeight="Bold"/>
                         </Border>
@@ -193,7 +193,7 @@
                         <Ellipse Width="8" Height="8" Fill="{DynamicResource ThBlueLine}" VerticalAlignment="Center"/>
                         <TextBlock Text="Ping" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
-                        <Ellipse Width="8" Height="8" Fill="#E05555" VerticalAlignment="Center"/>
+                        <Ellipse Width="8" Height="8" Fill="{DynamicResource ThCrit}" VerticalAlignment="Center"/>
                         <TextBlock Text="Perte" Foreground="{DynamicResource ThTextNav}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11" Margin="5,0,14,0" VerticalAlignment="Center"/>
                         <TextBlock x:Name="TxtScale" Text="&#8212;" Foreground="{DynamicResource ThTextDim}"

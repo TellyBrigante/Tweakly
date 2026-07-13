@@ -329,7 +329,7 @@
                         <TextBlock Text="Restaurer les r&#233;glages Windows"
                                    Foreground="{DynamicResource ThTextBody}"
                                    FontFamily="{StaticResource AppFont}" FontSize="13" FontWeight="SemiBold"/>
-                        <TextBlock Text="Remet les optimisations CPU, Windows, r&#233;seau et confidentialit&#233; aux valeurs standard. NVIDIA reste &#224; part."
+                        <TextBlock Text="Restaure les r&#233;glages qui poss&#232;dent une valeur Windows standard. Les r&#233;glages propres au mat&#233;riel restent inchang&#233;s. NVIDIA reste &#224; part."
                                    Foreground="{DynamicResource ThTextDim}"
                                    FontFamily="{StaticResource AppFont}" FontSize="11.5"
                                    Margin="0,3,0,0" TextWrapping="Wrap"/>

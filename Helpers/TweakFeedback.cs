@@ -64,6 +64,20 @@ namespace Optimisation_Tool.Helpers
             return cur != was ? cur : (bool?)null;
         }
 
+        /// <summary>
+        /// Compare l'etat demande avec l'etat relu apres application. Une divergence
+        /// devient une vraie erreur visible au lieu de laisser le switch sur un faux succes.
+        /// </summary>
+        public static void VerifyApplied(ICollection<string> messages, Action<string> log,
+                                         string label, bool? requested, bool actual)
+        {
+            if (!requested.HasValue || requested.Value == actual) return;
+
+            string message = $"{label} : erreur - le réglage n'a pas été appliqué. La case a été remise sur l'état détecté.";
+            messages.Add(message);
+            log(message);
+        }
+
         // ── Cœur : contenu + animation d'entrée (+ auto-disparition) ───────────
         private static void Run(Border banner, Ellipse dot, TextBlock text,
                                 Level level, string msg, bool emphasize, bool autoHide)

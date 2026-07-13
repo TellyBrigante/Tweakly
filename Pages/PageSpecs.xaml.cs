@@ -5,6 +5,8 @@ using System.Globalization;
 using System.Linq;
 using System.Management;
 using System.Text.RegularExpressions;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,6 +25,26 @@ namespace Optimisation_Tool.Pages
         public string Info      { get; set; } = "";
         public string Badge     { get; set; } = "";
         public string Role      { get; set; } = "ThTextDim";
+        public string ProgressRole { get; set; } = "ThTextDim";
+        public string Status    { get; set; } = "";
+        public double Percent   { get; set; } = 0;
+    }
+
+    internal sealed class NvmeDiskInfo
+    {
+        public string Name { get; set; } = "";
+        public string PnpDeviceId { get; set; } = "";
+    }
+
+    internal sealed class NvmeControllerInfo
+    {
+        public string FriendlyName { get; set; } = "";
+        public string InstanceId { get; set; } = "";
+        public string[] Children { get; set; } = Array.Empty<string>();
+        public int CurrentLinkSpeed { get; set; }
+        public int CurrentLinkWidth { get; set; }
+        public int MaxLinkSpeed { get; set; }
+        public int MaxLinkWidth { get; set; }
     }
 
     // Ligne de l'onglet "Réglages BIOS" : lecture seule, preuve locale, aucune déduction agressive.
@@ -491,102 +513,6 @@ namespace Optimisation_Tool.Pages
                 Role = role,
             };
 
-        private static readonly string[] FirmwareTrackedKeys =
-        {
-            "Carte mère|BIOS",
-            "Démarrage|Mode firmware",
-            "Démarrage|Secure Boot",
-            "Sécurité|TPM",
-            "CPU|Virtualisation firmware",
-            "Windows|Hyperviseur actif",
-            "Windows|VBS / Device Guard",
-            "Windows|Intégrité mémoire (HVCI)",
-            "Mémoire|Fréquence RAM actuelle",
-            "Mémoire|Profil mémoire",
-        };
-
-        private static Helpers.FirmwareSnapshot CreateFirmwareSnapshot(List<FirmwareSettingItem> items)
-        {
-            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var i in items)
-                values[SnapshotKey(i)] = i.Value;
-
-            return new Helpers.FirmwareSnapshot
-            {
-                CapturedAtUtc = DateTime.UtcNow,
-                Values = values,
-            };
-        }
-
-        private void RenderFirmwareChanges(Helpers.FirmwareSnapshot? previous, Helpers.FirmwareSnapshot current, List<FirmwareSettingItem> items)
-        {
-            if (previous == null)
-            {
-                BiosChangeList.ItemsSource = Array.Empty<FirmwareChangeItem>();
-                TxtBiosChangesTitle.Text = "Référence créée";
-                TxtBiosChangesSub.Text = "La prochaine lecture affichera les changements BIOS/firmware détectés depuis cette base.";
-                return;
-            }
-
-            var roleByKey = items.ToDictionary(SnapshotKey, i => i.Role, StringComparer.OrdinalIgnoreCase);
-            var changes = new List<FirmwareChangeItem>();
-
-            foreach (string key in FirmwareTrackedKeys)
-            {
-                previous.Values.TryGetValue(key, out string? before);
-                current.Values.TryGetValue(key, out string? after);
-                before = CleanSnapshotValue(before);
-                after = CleanSnapshotValue(after);
-                if (before.Length == 0 || after.Length == 0) continue;
-                if (before.Equals(after, StringComparison.OrdinalIgnoreCase)) continue;
-
-                string role = roleByKey.TryGetValue(key, out var r) ? r : "ThAccentIcon";
-                changes.Add(new FirmwareChangeItem
-                {
-                    Title = SnapshotTitle(key),
-                    Before = before,
-                    After = after,
-                    Role = role,
-                });
-            }
-
-            BiosChangeList.ItemsSource = changes;
-            string previousLocal = previous.CapturedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture);
-
-            if (changes.Count == 0)
-            {
-                TxtBiosChangesTitle.Text = "Aucun changement détecté";
-                TxtBiosChangesSub.Text = $"Comparé à la lecture du {previousLocal}.";
-            }
-            else
-            {
-                TxtBiosChangesTitle.Text = $"{changes.Count} changement(s) détecté(s)";
-                TxtBiosChangesSub.Text = $"Comparé à la lecture du {previousLocal}.";
-            }
-        }
-
-        private static string SnapshotKey(FirmwareSettingItem item) => $"{item.Group}|{item.Title}";
-
-        private static string SnapshotTitle(string key)
-        {
-            int idx = key.IndexOf('|');
-            return idx >= 0 && idx + 1 < key.Length ? key[(idx + 1)..] : key;
-        }
-
-        private static string CleanSnapshotValue(string? value)
-            => (value ?? "").Replace("\r", " ").Replace("\n", " ").Trim();
-
-        private static bool StartsActive(string value)
-            => value.StartsWith("Activé", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("Activée", StringComparison.OrdinalIgnoreCase)
-            || value.StartsWith("Actif", StringComparison.OrdinalIgnoreCase);
-
-        private static string Shorten(string value, int maxChars)
-        {
-            if (string.IsNullOrWhiteSpace(value) || value.Length <= maxChars) return value;
-            return value[..Math.Max(0, maxChars - 1)].TrimEnd() + "…";
-        }
-
         private static (string Value, string Detail, string Source, string Role) Info(string value, string detail, string source, string role)
             => (value, detail, source, role);
 
@@ -904,90 +830,162 @@ namespace Optimisation_Tool.Pages
         private static readonly Dictionary<int, double> BwLane = new()
             { {1,0.25}, {2,0.50}, {3,0.985}, {4,1.969}, {5,3.938} };  // Go/s par voie
 
-        // Table de specs constructeur des SSD NVMe courants (regex → gen, voies)
-        private static readonly (string pat, int gen, int w)[] NvmeLut =
-        {
-            ("990 ?PRO",4,4), ("980 ?PRO",4,4), ("970 ?EVO ?Plus",3,4), ("970 ?EVO",3,4),
-            ("970 ?PRO",3,4), ("Samsung.*980",3,4),
-            ("SN850X",4,4), ("SN850",4,4), ("SN770",4,4), ("SN750",3,4), ("SN570",3,4), ("SN530",3,4),
-            ("CS3030",3,4), ("CS2230",3,4), ("CS1030",3,4),
-            ("FireCuda 530",4,4), ("FireCuda 520",4,4), ("FireCuda 510",3,4),
-            ("T700",5,4), ("T500",4,4), ("P5 ?Plus",4,4), ("P3 ?Plus",4,4), ("P5",3,4), ("P3",3,4), ("P2",3,4),
-            ("Platinum P41",4,4), ("Gold P31",3,4), ("P41",4,4), ("P31",3,4),
-            ("S70",4,4), ("S50 ?Lite",4,4), ("S50",4,4), ("S40G",3,4),
-            ("Rocket 4 ?Plus",4,4), ("Rocket 4",4,4), ("Rocket ?Plus",4,4), ("Rocket",3,4),
-            ("MP700",5,4), ("MP600",4,4), ("MP510",3,4),
-            ("Kioxia",3,4), ("Lexar NM790",4,4), ("Lexar",4,4), ("VP4300",4,4), ("US70",4,4),
-        };
-
         private async Task LoadCompatAsync()
         {
-            // ── GPU PCIe (nvidia-smi) ──
-            var g = await Task.Run(GetGpuPcie);
-            TxtCompatGpuName.Text = string.IsNullOrEmpty(g.name) ? "Aucune carte graphique détectée" : g.name;
-
-            if (g.maxGen > 0 && g.curGen > 0)
+            SetCompatLoading(false, 0, "");
+            try
             {
-                double maxBw = Math.Round(BwLane.GetValueOrDefault(g.maxGen) * g.maxWidth, 1);
-                double curBw = Math.Round(BwLane.GetValueOrDefault(g.curGen) * g.curWidth, 1);
-                double pct   = maxBw > 0 ? Math.Min(100, curBw / maxBw * 100) : 0;
+                // ── GPU PCIe (nvidia-smi) ──
+                var g = await Task.Run(GetGpuPcie);
+                TxtCompatGpuName.Text = string.IsNullOrEmpty(g.name) ? "Aucune carte graphique détectée" : g.name;
 
-                TxtCompatGpuGen.Text = $"Actuel : {GenName[g.curGen]} x{g.curWidth}     •     GPU max : {GenName[g.maxGen]} x{g.maxWidth}";
-                TxtCompatGpuBw.Text  = $"Bande passante : {curBw} Go/s  /  max théorique {maxBw} Go/s";
-                SetBarPct(CompatGpuBar, pct);
+                if (g.maxGen > 0 && g.curGen > 0)
+                {
+                    double maxBw = Math.Round(BwLane.GetValueOrDefault(g.maxGen) * g.maxWidth, 1);
+                    double curBw = Math.Round(BwLane.GetValueOrDefault(g.curGen) * g.curWidth, 1);
+                    double pct   = maxBw > 0 ? Math.Min(100, curBw / maxBw * 100) : 0;
 
-                string role; string status;
-                if (g.curGen == g.maxGen && g.curWidth == g.maxWidth)
-                {
-                    role = "ThOk";
-                    status = $"OPTIMAL — le GPU tourne à pleine vitesse ({pct:F0} %)";
-                }
-                else if (g.atRest)
-                {
-                    // Driver Nvidia downclock le lien PCIe quand le GPU est inactif (ASPM). Comportement
-                    // NORMAL : la vraie vitesse revient en charge. On l'affiche en bleu informatif,
-                    // PAS en jaune alerte — sinon on inquiète l'utilisateur pour rien.
-                    role = "ThAccentIcon";
-                    status = $"GPU AU REPOS — le lien descend à {GenName[g.curGen]} x{g.curWidth} pour économiser. " +
-                             $"En charge, il revient à {GenName[g.maxGen]} x{g.maxWidth}.";
-                    // On gonfle la barre au max pour refléter la capacité réelle, pas le repos
-                    SetBarPct(CompatGpuBar, 100);
-                }
-                else if (g.curGen < g.maxGen)
-                {
-                    role = "ThWarn";
-                    status = $"SLOT LIMITÉ — actuel {GenName[g.curGen]} x{g.curWidth}, le GPU supporte {GenName[g.maxGen]} x{g.maxWidth} ({pct:F0} %)";
+                    TxtCompatGpuCurrent.Text = $"{GenName[g.curGen]} x{g.curWidth}";
+                    TxtCompatGpuMax.Text = $"{GenName[g.maxGen]} x{g.maxWidth}";
+                    TxtCompatGpuBandwidth.Text = $"{curBw} / {maxBw} Go/s";
+                    SetBarPct(CompatGpuBar, pct);
+
+                    string role; string verdict; string status;
+                    if (g.curGen == g.maxGen && g.curWidth == g.maxWidth)
+                    {
+                        role = "ThOk";
+                        verdict = "Optimal";
+                        status = $"OPTIMAL — le GPU tourne à pleine vitesse ({pct:F0} %)";
+                    }
+                    else if (g.atRest)
+                    {
+                        // Driver Nvidia downclock le lien PCIe quand le GPU est inactif (ASPM). Comportement
+                        // NORMAL : la vraie vitesse revient en charge. On l'affiche en bleu informatif,
+                        // PAS en jaune alerte — sinon on inquiète l'utilisateur pour rien.
+                        role = "ThAccentIcon";
+                        verdict = "Au repos";
+                        status = $"GPU AU REPOS — le lien descend à {GenName[g.curGen]} x{g.curWidth} pour économiser. " +
+                                 $"En charge, il revient à {GenName[g.maxGen]} x{g.maxWidth}.";
+                        // On gonfle la barre au max pour refléter la capacité réelle, pas le repos
+                        SetBarPct(CompatGpuBar, 100);
+                    }
+                    else if (g.curGen < g.maxGen)
+                    {
+                        role = "ThWarn";
+                        verdict = "Slot limité";
+                        status = $"SLOT LIMITÉ — actuel {GenName[g.curGen]} x{g.curWidth}, le GPU supporte {GenName[g.maxGen]} x{g.maxWidth} ({pct:F0} %)";
+                    }
+                    else
+                    {
+                        role = "ThWarn";
+                        verdict = "Voies réduites";
+                        status = $"VOIES RÉDUITES — x{g.curWidth} actuel / max x{g.maxWidth} ({pct:F0} %)";
+                    }
+                    CompatGpuFill.SetResourceReference(Border.BackgroundProperty, role);
+                    TxtCompatGpuStatus.SetResourceReference(TextBlock.ForegroundProperty, role);
+                    TxtCompatGpuVerdict.SetResourceReference(TextBlock.ForegroundProperty, role);
+                    TxtCompatGpuVerdict.Text = verdict;
+                    TxtCompatGpuStatus.Text = status;
                 }
                 else
                 {
-                    role = "ThWarn";
-                    status = $"VOIES RÉDUITES — x{g.curWidth} actuel / max x{g.maxWidth} ({pct:F0} %)";
+                    TxtCompatGpuCurrent.Text = "Indisponible";
+                    TxtCompatGpuMax.Text = "Indisponible";
+                    TxtCompatGpuBandwidth.Text = "GPU NVIDIA requis";
+                    TxtCompatGpuVerdict.Text = "Indisponible";
+                    TxtCompatGpuStatus.Text = "";
+                    TxtCompatGpuVerdict.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
+                    CompatGpuFill.SetResourceReference(Border.BackgroundProperty, "ThTextDim");
+                    SetBarPct(CompatGpuBar, 0);
                 }
-                CompatGpuFill.SetResourceReference(Border.BackgroundProperty, role);
-                TxtCompatGpuStatus.SetResourceReference(TextBlock.ForegroundProperty, role);
-                TxtCompatGpuStatus.Text = status;
-            }
-            else
-            {
-                TxtCompatGpuGen.Text = "Données PCIe indisponibles (GPU NVIDIA + pilotes requis).";
-                TxtCompatGpuBw.Text  = "";
-                TxtCompatGpuStatus.Text = "";
-                CompatGpuFill.SetResourceReference(Border.BackgroundProperty, "ThTextDim");
-                SetBarPct(CompatGpuBar, 0);
-            }
 
-            // ── NVMe (WMI + table de specs) ──
-            var disks = await Task.Run(GetNvmeCompat);
-            if (disks.Count == 0)
+                // ── NVMe (WMI + table de specs + lien PCIe réel) ──
+                TxtCompatNvmeEmpty.Text = "Analyse des SSD NVMe...";
+                TxtCompatNvmeEmpty.Visibility = Visibility.Visible;
+                CompatNvmeList.ItemsSource = null;
+
+                SetCompatLoading(true, 0, "Analyse NVMe");
+                await Dispatcher.Yield(DispatcherPriority.Background);
+
+                var nvmeDisks = await RunCompatLoadingStepAsync(
+                    0, 25,
+                    "Détection des SSD NVMe",
+                    GetNvmeDisks);
+
+                var controllers = await RunCompatLoadingStepAsync(
+                    25, 82,
+                    "Lecture des contrôleurs PCIe NVMe",
+                    GetNvmeControllers);
+
+                var nvmeItems = await RunCompatLoadingStepAsync(
+                    82, 96,
+                    "Association SSD / port M.2",
+                    () => BuildNvmeCompat(nvmeDisks, controllers));
+
+                if (nvmeItems.Count == 0)
+                {
+                    TxtCompatNvmeEmpty.Text = "Aucun disque NVMe détecté.";
+                    TxtCompatNvmeEmpty.Visibility = Visibility.Visible;
+                    CompatNvmeList.ItemsSource = null;
+                }
+                else
+                {
+                    TxtCompatNvmeEmpty.Visibility = Visibility.Collapsed;
+                    CompatNvmeList.ItemsSource = nvmeItems;
+                }
+
+                SetCompatLoading(true, 100, "Analyse NVMe terminée");
+            }
+            catch
             {
-                TxtCompatNvmeEmpty.Text = "Aucun disque NVMe détecté.";
+                _compatLoaded = false;
+                TxtCompatNvmeEmpty.Text = "Analyse PCIe / M.2 interrompue.";
                 TxtCompatNvmeEmpty.Visibility = Visibility.Visible;
             }
-            else
+            finally
             {
-                TxtCompatNvmeEmpty.Visibility = Visibility.Collapsed;
-                CompatNvmeList.ItemsSource = disks;
+                SetCompatLoading(false, 0, "");
             }
+        }
+
+        private void SetCompatLoading(bool visible, double pct, string label)
+        {
+            CompatLoadingHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            if (!visible) return;
+
+            double clamped = Math.Max(0, Math.Min(100, pct));
+            CompatLoadingProgress.Value = clamped;
+            TxtCompatLoadingPct.Text = $"{clamped:F0} %";
+            TxtCompatLoadingTitle.Text = label;
+        }
+
+        private async Task<T> RunCompatLoadingStepAsync<T>(
+            double startPct,
+            double endPct,
+            string label,
+            Func<T> work)
+        {
+            double current = Math.Max(0, Math.Min(100, startPct));
+            double cap = Math.Max(current, Math.Min(99, endPct - 1));
+            SetCompatLoading(true, current, label);
+
+            var task = Task.Run(work);
+            while (!task.IsCompleted)
+            {
+                await Task.WhenAny(task, Task.Delay(120));
+                if (task.IsCompleted) break;
+
+                double remaining = cap - current;
+                if (remaining > 0)
+                {
+                    current = Math.Min(cap, current + Math.Max(0.35, remaining * 0.16));
+                    SetCompatLoading(true, current, label);
+                }
+            }
+
+            var result = await task;
+            SetCompatLoading(true, endPct, label);
+            return result;
         }
 
         private static void SetBarPct(Grid bar, double pct)
@@ -1071,80 +1069,256 @@ namespace Optimisation_Tool.Pages
             return ("", 0, 0, 0, 0, -1);
         }
 
-        // Brush figé → utilisable depuis un thread de fond (cross-thread safe)
-        private static Brush FrozenBrush(Color c)
+        private static List<NvmeItem> BuildNvmeCompat(
+            IReadOnlyCollection<NvmeDiskInfo> disks,
+            IReadOnlyCollection<NvmeControllerInfo> controllers)
         {
-            var b = new SolidColorBrush(c);
-            b.Freeze();
-            return b;
-        }
-
-        // Disques NVMe + correspondance table de specs
-        private static List<NvmeItem> GetNvmeCompat()
-        {
-            var list  = new List<NvmeItem>();
-            var names = new List<string>();
-            try
+            var list = new List<NvmeItem>();
+            foreach (var disk in disks.Take(4))
             {
-                using var q = new ManagementObjectSearcher(
-                    @"root\Microsoft\Windows\Storage",
-                    "SELECT FriendlyName, BusType FROM MSFT_PhysicalDisk");
-                foreach (ManagementObject o in q.Get())
-                {
-                    // BusType 17 = NVMe
-                    if (Convert.ToInt32(o["BusType"] ?? 0) == 17)
-                    {
-                        var n = o["FriendlyName"]?.ToString()?.Trim();
-                        if (!string.IsNullOrEmpty(n)) names.Add(n);
-                    }
-                    o.Dispose();
-                }
-            }
-            catch { }
+                var item = new NvmeItem { Name = disk.Name };
+                var link = FindControllerForDisk(disk, controllers);
+                var reference = NvmeReference.Match(disk.Name);
+                int specGen = link?.MaxLinkSpeed > 0
+                    ? link.MaxLinkSpeed
+                    : reference?.PcieGen ?? 0;
+                int specWidth = link?.MaxLinkWidth > 0
+                    ? link.MaxLinkWidth
+                    : reference?.Lanes ?? 0;
 
-            // Fallback : Win32_DiskDrive si MSFT_PhysicalDisk indispo
-            if (names.Count == 0)
-            {
-                try
+                if (specGen > 0 && specWidth > 0)
                 {
-                    using var q = new ManagementObjectSearcher("SELECT Model FROM Win32_DiskDrive");
-                    foreach (ManagementObject o in q.Get())
-                    {
-                        var m = o["Model"]?.ToString()?.Trim();
-                        if (!string.IsNullOrEmpty(m) && Regex.IsMatch(m, "NVMe|NVM", RegexOptions.IgnoreCase))
-                            names.Add(m);
-                        o.Dispose();
-                    }
-                }
-                catch { }
-            }
-
-            foreach (var name in names.Take(4))
-            {
-                var item = new NvmeItem { Name = name };
-                var spec = NvmeLut.FirstOrDefault(e => Regex.IsMatch(name, e.pat, RegexOptions.IgnoreCase));
-                if (spec.gen > 0)
-                {
-                    double bw = Math.Round(BwLane.GetValueOrDefault(spec.gen) * spec.w, 1);
-                    item.Info  = $"Spec constructeur : {GenName[spec.gen]} x{spec.w}  ({bw} Go/s théorique)";
-                    item.Badge = $"{GenName[spec.gen]} x{spec.w}";
-                    item.Role = spec.gen switch
+                    double specBw = Math.Round(BwLane.GetValueOrDefault(specGen) * specWidth, 1);
+                    item.Role = specGen switch
                     {
                         5 => "ThWarn",
                         4 => "ThOk",
                         3 => "ThAccentIcon",
                         _ => "ThTextDim",
                     };
+
+                    if (link is not null && link.CurrentLinkSpeed > 0 && link.CurrentLinkWidth > 0)
+                    {
+                        int actualGen = link.CurrentLinkSpeed;
+                        int actualWidth = link.CurrentLinkWidth;
+                        double actualBw = Math.Round(BwLane.GetValueOrDefault(actualGen) * actualWidth, 1);
+                        double pct = specBw > 0 ? Math.Min(100, actualBw / specBw * 100) : 0;
+
+                        item.Info = $"SSD : {GenName.GetValueOrDefault(specGen, $"PCIe {specGen}.0")} x{specWidth} ({specBw} Go/s)  •  Port : {GenName.GetValueOrDefault(actualGen, $"PCIe {actualGen}.0")} x{actualWidth} ({actualBw} Go/s)";
+                        item.Badge = $"{GenName.GetValueOrDefault(actualGen, $"PCIe {actualGen}.0")} x{actualWidth}";
+                        item.Percent = pct;
+
+                        if (pct >= 95)
+                        {
+                            item.Status = "Optimal — port adapté au SSD";
+                            item.ProgressRole = "ThOk";
+                        }
+                        else if (pct >= 50)
+                        {
+                            item.Status = $"Limité — SSD {GenName.GetValueOrDefault(specGen, $"PCIe {specGen}.0")} x{specWidth} sur port {GenName.GetValueOrDefault(actualGen, $"PCIe {actualGen}.0")} x{actualWidth}";
+                            item.ProgressRole = "ThWarn";
+                            item.Role = "ThWarn";
+                        }
+                        else
+                        {
+                            item.Status = $"Fortement bridé — SSD {GenName.GetValueOrDefault(specGen, $"PCIe {specGen}.0")} x{specWidth} sur port {GenName.GetValueOrDefault(actualGen, $"PCIe {actualGen}.0")} x{actualWidth}";
+                            item.ProgressRole = "ThCrit";
+                            item.Role = "ThCrit";
+                        }
+                    }
+                    else
+                    {
+                        item.Info = $"Spec SSD : {GenName.GetValueOrDefault(specGen, $"PCIe {specGen}.0")} x{specWidth} ({specBw} Go/s théorique)";
+                        item.Badge = $"{GenName.GetValueOrDefault(specGen, $"PCIe {specGen}.0")} x{specWidth}";
+                        item.Status = "Lien réel non exposé par Windows";
+                        item.Percent = 0;
+                        item.ProgressRole = "ThTextDim";
+                    }
                 }
                 else
                 {
-                    item.Info  = "Modèle non répertorié — consulter les specs du fabricant";
-                    item.Badge = "?";
-                    item.Role = "ThTextDim";
+                    if (link is not null && link.CurrentLinkSpeed > 0 && link.CurrentLinkWidth > 0)
+                    {
+                        int actualGen = link.CurrentLinkSpeed;
+                        int actualWidth = link.CurrentLinkWidth;
+                        double actualBw = Math.Round(BwLane.GetValueOrDefault(actualGen) * actualWidth, 1);
+                        item.Info = $"Port détecté : {GenName.GetValueOrDefault(actualGen, $"PCIe {actualGen}.0")} x{actualWidth} ({actualBw} Go/s)";
+                        item.Badge = $"{GenName.GetValueOrDefault(actualGen, $"PCIe {actualGen}.0")} x{actualWidth}";
+                        item.Status = "Spec SSD non répertoriée";
+                        item.Percent = 0;
+                        item.ProgressRole = "ThTextDim";
+                        item.Role = "ThAccentIcon";
+                    }
+                    else
+                    {
+                        item.Info = "Modèle non répertorié — consulter les specs du fabricant";
+                        item.Badge = "?";
+                        item.Status = "Spec non reconnue";
+                        item.Percent = 0;
+                        item.ProgressRole = "ThTextDim";
+                        item.Role = "ThTextDim";
+                    }
                 }
+
                 list.Add(item);
             }
+
             return list;
+        }
+
+        private static List<NvmeDiskInfo> GetNvmeDisks()
+        {
+            var disks = new List<NvmeDiskInfo>();
+            try
+            {
+                using var q = new ManagementObjectSearcher("SELECT Model, PNPDeviceID FROM Win32_DiskDrive");
+                foreach (ManagementObject o in q.Get())
+                {
+                    var model = o["Model"]?.ToString()?.Trim();
+                    var pnp = o["PNPDeviceID"]?.ToString()?.Trim();
+                    if (!string.IsNullOrEmpty(model) &&
+                        !string.IsNullOrEmpty(pnp) &&
+                        (Regex.IsMatch(model, "NVMe|NVM", RegexOptions.IgnoreCase) ||
+                         Regex.IsMatch(pnp, @"SCSI\\DISK&VEN_NVME", RegexOptions.IgnoreCase)))
+                        disks.Add(new NvmeDiskInfo { Name = model, PnpDeviceId = pnp });
+                    o.Dispose();
+                }
+            }
+            catch { }
+
+            if (disks.Count == 0)
+            {
+                try
+                {
+                    using var q = new ManagementObjectSearcher(
+                        @"root\Microsoft\Windows\Storage",
+                        "SELECT FriendlyName, BusType FROM MSFT_PhysicalDisk");
+                    foreach (ManagementObject o in q.Get())
+                    {
+                        if (Convert.ToInt32(o["BusType"] ?? 0) == 17)
+                        {
+                            var n = o["FriendlyName"]?.ToString()?.Trim();
+                            if (!string.IsNullOrEmpty(n))
+                                disks.Add(new NvmeDiskInfo { Name = n });
+                        }
+                        o.Dispose();
+                    }
+                }
+                catch { }
+            }
+
+            return disks;
+        }
+
+        private static NvmeControllerInfo? FindControllerForDisk(NvmeDiskInfo disk, IReadOnlyCollection<NvmeControllerInfo> controllers)
+        {
+            if (string.IsNullOrWhiteSpace(disk.PnpDeviceId)) return null;
+            string diskId = NormalizePnpId(disk.PnpDeviceId);
+
+            foreach (var controller in controllers)
+            {
+                foreach (var child in controller.Children ?? Array.Empty<string>())
+                {
+                    string childId = NormalizePnpId(child);
+                    if (childId.Contains(diskId, StringComparison.OrdinalIgnoreCase) ||
+                        diskId.Contains(childId, StringComparison.OrdinalIgnoreCase))
+                        return controller;
+                }
+            }
+
+            return null;
+        }
+
+        private static string NormalizePnpId(string value)
+            => Regex.Replace(value ?? "", @"[^A-Z0-9]", "", RegexOptions.IgnoreCase).ToUpperInvariant();
+
+        private static List<NvmeControllerInfo> GetNvmeControllers()
+        {
+            const string script = @"
+$ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
+$InformationPreference = 'SilentlyContinue'
+$VerbosePreference = 'SilentlyContinue'
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+$devices = Get-PnpDevice -PresentOnly | Where-Object {
+    $_.InstanceId -like 'PCI\VEN_*' -and (
+        $_.FriendlyName -match 'NVM|NVMe' -or
+        $_.Class -eq 'SCSIAdapter'
+    )
+}
+$rows = foreach ($d in $devices) {
+    $props = @(Get-PnpDeviceProperty -InstanceId $d.InstanceId)
+    function V($name) {
+        $p = $props | Where-Object { $_.KeyName -eq $name } | Select-Object -First 1
+        if ($null -eq $p) { return $null }
+        return $p.Data
+    }
+    $base = V 'DEVPKEY_PciDevice_BaseClass'
+    $sub = V 'DEVPKEY_PciDevice_SubClass'
+    if ($base -ne 1 -or $sub -ne 8) { continue }
+    [pscustomobject]@{
+        FriendlyName = $d.FriendlyName
+        InstanceId = $d.InstanceId
+        Children = @((V 'DEVPKEY_Device_Children'))
+        CurrentLinkSpeed = [int](V 'DEVPKEY_PciDevice_CurrentLinkSpeed')
+        CurrentLinkWidth = [int](V 'DEVPKEY_PciDevice_CurrentLinkWidth')
+        MaxLinkSpeed = [int](V 'DEVPKEY_PciDevice_MaxLinkSpeed')
+        MaxLinkWidth = [int](V 'DEVPKEY_PciDevice_MaxLinkWidth')
+    }
+}
+@($rows) | ConvertTo-Json -Compress -Depth 5
+";
+
+            try
+            {
+                string encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+                using var p = Process.Start(new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -ExecutionPolicy Bypass -EncodedCommand " + encodedScript)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                });
+                if (p == null) return new List<NvmeControllerInfo>();
+
+                var stdoutTask = p.StandardOutput.ReadToEndAsync();
+                var stderrTask = p.StandardError.ReadToEndAsync();
+                if (!p.WaitForExit(9000))
+                {
+                    try { p.Kill(entireProcessTree: true); } catch { }
+                    try { p.WaitForExit(2000); } catch { }
+                    try { Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult(); } catch { }
+                    return new List<NvmeControllerInfo>();
+                }
+
+                string json = stdoutTask.GetAwaiter().GetResult();
+                _ = stderrTask.GetAwaiter().GetResult();
+                json = ExtractJsonArray(json);
+                if (string.IsNullOrWhiteSpace(json)) return new List<NvmeControllerInfo>();
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
+                    return JsonSerializer.Deserialize<List<NvmeControllerInfo>>(json, options) ?? new List<NvmeControllerInfo>();
+
+                var one = JsonSerializer.Deserialize<NvmeControllerInfo>(json, options);
+                return one is null ? new List<NvmeControllerInfo>() : new List<NvmeControllerInfo> { one };
+            }
+            catch
+            {
+                return new List<NvmeControllerInfo>();
+            }
+        }
+
+        private static string ExtractJsonArray(string output)
+        {
+            if (string.IsNullOrWhiteSpace(output)) return "";
+            int start = output.IndexOf('[', StringComparison.Ordinal);
+            int end = output.LastIndexOf(']');
+            if (start < 0 || end < start) return output.Trim();
+            return output.Substring(start, end - start + 1);
         }
     }
 }

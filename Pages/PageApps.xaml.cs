@@ -235,19 +235,6 @@ namespace Optimisation_Tool.Pages
             return dict;
         }
 
-        // Trouve la position du premier tableau JSON ('[') qui précède un objet ('{').
-        // Ignore les '[' qui proviennent de codes ANSI résiduels ou de texte de progression.
-        private static int FindJsonArrayStart(string s)
-        {
-            for (int k = s.IndexOf('['); k >= 0; k = s.IndexOf('[', k + 1))
-            {
-                var after = s.Substring(k + 1).TrimStart(' ', '\r', '\n');
-                if (after.StartsWith("{") || after.StartsWith("]"))
-                    return k;
-            }
-            return -1;
-        }
-
         // Lance winget et retourne sa sortie.
         // Tente d'abord en contexte utilisateur (de-élevé) car winget ne fonctionne pas bien
         // dans un process admin. chcp 65001 force UTF-8 pour éviter les problèmes d'encodage.

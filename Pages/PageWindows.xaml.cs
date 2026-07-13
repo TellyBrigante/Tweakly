@@ -14,6 +14,8 @@ namespace Optimisation_Tool.Pages
     {
         private readonly MainWindow _main;
         private bool _loaded = false;
+        private const string GamesTaskRegistryPath =
+            @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
 
         // État lu au chargement → sert de référence pour n'appliquer que ce qui change
         private (bool HAGS, bool DisableGameBar, bool DisableDVR, bool GPUPriority,
@@ -84,7 +86,8 @@ namespace Optimisation_Tool.Pages
             {
                 var v = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences",
                                           "DirectXUserGlobalSettings", null) as string;
-                windowedOpt = v != null && v.Contains("SwapEffectUpgradeEnable=1");
+                windowedOpt = Helpers.RegistryValueLogic.HasSemicolonValue(
+                    v, "SwapEffectUpgradeEnable", "1");
             }
             catch { }
 
@@ -157,10 +160,7 @@ namespace Optimisation_Tool.Pages
             bool gpuPriority = false;
             try
             {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games",
-                    "GPU Priority", null);
-                gpuPriority = v != null && Convert.ToInt32(v) >= 8;
+                gpuPriority = IsForcedGpuPriorityProfile();
             }
             catch { }
 
@@ -258,12 +258,31 @@ namespace Optimisation_Tool.Pages
                              msg => { _main.Log(msg); msgs.Add(msg); });
             });
 
-            _state = (ChkHAGS.IsChecked == true, ChkDisableGameBar.IsChecked == true,
-                      ChkDisableDVR.IsChecked == true, ChkGPUPriority.IsChecked == true,
-                      ChkMSIMode.IsChecked == true, ChkDiscordHWAccel.IsChecked == true,
-                      ChkSteamOverlay.IsChecked == true);
-            _state2 = (ChkGameMode.IsChecked == true, ChkWindowedOpt.IsChecked == true,
-                       ChkNoAccessPopups.IsChecked == true);
+            var actual = await Task.Run(() => (Main: ReadState(), Extra: ReadState2()));
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "HAGS", chHAGS, actual.Main.HAGS);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Barre de jeu Xbox", chGameBar, actual.Main.DisableGameBar);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Enregistrement DVR", chDVR, actual.Main.DisableDVR);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Priorite GPU jeux", chGPU, actual.Main.GPUPriority);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Mode MSI GPU", chMSI, actual.Main.MSIMode);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Acceleration materielle Discord", chDiscord, actual.Main.DiscordHWAccel);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Overlay Steam", chSteam, actual.Main.SteamOverlay);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Mode Jeu Windows", chGMode, actual.Extra.GameMode);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Optimisations jeux fenetres", chWinOpt, actual.Extra.WindowedOpt);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Popups d'accessibilite", chNoPop, actual.Extra.NoAccessPopups);
+
+            ChkHAGS.IsChecked = actual.Main.HAGS;
+            ChkDisableGameBar.IsChecked = actual.Main.DisableGameBar;
+            ChkDisableDVR.IsChecked = actual.Main.DisableDVR;
+            ChkGPUPriority.IsChecked = actual.Main.GPUPriority;
+            ChkMSIMode.IsChecked = actual.Main.MSIMode;
+            ChkDiscordHWAccel.IsChecked = actual.Main.DiscordHWAccel;
+            ChkSteamOverlay.IsChecked = actual.Main.SteamOverlay;
+            _state = actual.Main;
+
+            ChkGameMode.IsChecked = actual.Extra.GameMode;
+            ChkWindowedOpt.IsChecked = actual.Extra.WindowedOpt;
+            ChkNoAccessPopups.IsChecked = actual.Extra.NoAccessPopups;
+            _state2 = actual.Extra;
             _main.Log("Windows : optimisations appliquées.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Optimisations Windows appliquées");
             BtnAppliquer.IsEnabled = true;
@@ -287,7 +306,8 @@ namespace Optimisation_Tool.Pages
             }
 
             // Optimisations jeux fenêtrés (Win11) : chaîne à paires « k=v; » — on remplace
-            // UNIQUEMENT la paire SwapEffectUpgradeEnable en PRÉSERVANT les autres
+            // UNIQUEMENT la paire SwapEffectUpgradeEnable en PRÉSERVANT les autres.
+            // Décoché = pas d'override Tweakly, donc on retire la paire au lieu d'écrire 0.
             // (ex. VRROptimizeEnable=1, vérifié en réel sur la machine de référence).
             if (doWindowedOpt.HasValue)
             {
@@ -295,13 +315,22 @@ namespace Optimisation_Tool.Pages
                 {
                     const string dxPath = @"HKEY_CURRENT_USER\Software\Microsoft\DirectX\UserGpuPreferences";
                     var cur = (Registry.GetValue(dxPath, "DirectXUserGlobalSettings", null) as string) ?? "";
-                    var pairs = new System.Collections.Generic.List<string>();
-                    foreach (var p in cur.Split(';'))
-                        if (p.Trim().Length > 0 && !p.TrimStart().StartsWith("SwapEffectUpgradeEnable=", StringComparison.OrdinalIgnoreCase))
-                            pairs.Add(p.Trim());
-                    pairs.Add("SwapEffectUpgradeEnable=" + (doWindowedOpt == true ? "1" : "0"));
-                    Registry.SetValue(dxPath, "DirectXUserGlobalSettings",
-                                      string.Join(";", pairs) + ";", RegistryValueKind.String);
+                    var updated = Helpers.RegistryValueLogic.SetSemicolonValue(
+                        cur,
+                        "SwapEffectUpgradeEnable",
+                        doWindowedOpt == true ? "1" : null);
+
+                    if (updated == null)
+                    {
+                        DeleteRegistryValue(Registry.CurrentUser,
+                            @"Software\Microsoft\DirectX\UserGpuPreferences",
+                            "DirectXUserGlobalSettings");
+                    }
+                    else
+                    {
+                        Registry.SetValue(dxPath, "DirectXUserGlobalSettings", updated, RegistryValueKind.String);
+                    }
+
                     log($"Optimisations jeux fenêtrés : {(doWindowedOpt == true ? "ACTIVÉES" : "désactivées")} (effet au prochain lancement des jeux).");
                 }
                 catch (Exception ex) { log($"Jeux fenêtrés : erreur — {ex.Message}"); }
@@ -598,6 +627,34 @@ namespace Optimisation_Tool.Pages
             }
         }
 
+        private static bool IsForcedGpuPriorityProfile()
+        {
+            int gpuPriority = ReadRegistryInt(GamesTaskRegistryPath, "GPU Priority", 0);
+            int priority = ReadRegistryInt(GamesTaskRegistryPath, "Priority", 0);
+            string scheduling = Convert.ToString(Registry.GetValue(
+                GamesTaskRegistryPath, "Scheduling Category", "")) ?? "";
+            string sfio = Convert.ToString(Registry.GetValue(
+                GamesTaskRegistryPath, "SFIO Priority", "")) ?? "";
+
+            return Helpers.RegistryValueLogic.IsForcedGpuPriority(
+                gpuPriority, priority, scheduling, sfio);
+        }
+
+        private static int ReadRegistryInt(string path, string name, int fallback)
+        {
+            var value = Registry.GetValue(path, name, null);
+            return value == null ? fallback : Convert.ToInt32(value);
+        }
+
+        private static void WriteGpuPriorityProfile(bool forced)
+        {
+            var profile = Helpers.RegistryValueLogic.GpuPriority(forced);
+            Registry.SetValue(GamesTaskRegistryPath, "GPU Priority", profile.GpuPriority, RegistryValueKind.DWord);
+            Registry.SetValue(GamesTaskRegistryPath, "Priority", profile.Priority, RegistryValueKind.DWord);
+            Registry.SetValue(GamesTaskRegistryPath, "Scheduling Category", profile.SchedulingCategory, RegistryValueKind.String);
+            Registry.SetValue(GamesTaskRegistryPath, "SFIO Priority", profile.SfioPriority, RegistryValueKind.String);
+        }
+
         private static void ApplyChanges(
             bool? doHAGS, bool? doDisableGameBar, bool? doDisableDVR,
             bool? doGPUPriority, bool? doMSI, bool? doDiscord, bool? doSteam,
@@ -607,9 +664,18 @@ namespace Optimisation_Tool.Pages
             if (doHAGS.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
-                    "HwSchMode", doHAGS.Value ? 2 : 1, RegistryValueKind.DWord);
+                if (doHAGS.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
+                        "HwSchMode", 2, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
+                        "HwSchMode");
+                }
                 log($"HAGS : {(doHAGS.Value ? "ACTIVÉ" : "DÉSACTIVÉ")} — redémarrage requis.");
             }
             catch (Exception ex) { log($"HAGS : erreur — {ex.Message}"); }
@@ -646,22 +712,15 @@ namespace Optimisation_Tool.Pages
             if (doGPUPriority.HasValue)
             try
             {
-                const string pathGames =
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
                 if (doGPUPriority.Value)
                 {
-                    Registry.SetValue(pathGames, "GPU Priority",        8,      RegistryValueKind.DWord);
-                    Registry.SetValue(pathGames, "Priority",            6,      RegistryValueKind.DWord);
-                    Registry.SetValue(pathGames, "Scheduling Category", "High", RegistryValueKind.String);
-                    log("Priorité GPU : ÉLEVÉE.");
+                    WriteGpuPriorityProfile(forced: true);
+                    log("Priorité GPU jeux : forcée.");
                 }
                 else
                 {
-                    // Vrais défauts Windows de la tâche « Games » (avant : 2/2/Medium = sous le défaut)
-                    Registry.SetValue(pathGames, "GPU Priority",        8,      RegistryValueKind.DWord);
-                    Registry.SetValue(pathGames, "Priority",            6,      RegistryValueKind.DWord);
-                    Registry.SetValue(pathGames, "Scheduling Category", "High", RegistryValueKind.String);
-                    log("Priorité GPU : restaurée aux défauts Windows.");
+                    WriteGpuPriorityProfile(forced: false);
+                    log("Priorité GPU jeux : profil Windows restauré.");
                 }
             }
             catch (Exception ex) { log($"GPU Priority : erreur — {ex.Message}"); }
@@ -741,6 +800,12 @@ namespace Optimisation_Tool.Pages
                 }
             }
             catch (Exception ex) { log($"Overlay Steam : erreur — {ex.Message}"); }
+        }
+
+        private static void DeleteRegistryValue(RegistryKey root, string subKey, string name)
+        {
+            using var key = root.OpenSubKey(subKey, writable: true);
+            key?.DeleteValue(name, throwOnMissingValue: false);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

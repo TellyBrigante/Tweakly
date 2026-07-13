@@ -4,6 +4,9 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using GpuTuningLab.Core;
 
 namespace Optimisation_Tool.Helpers
 {
@@ -92,10 +95,10 @@ namespace Optimisation_Tool.Helpers
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
-        // ── Collecte complète (à appeler sur un thread de fond) ──────────────
-        private static readonly object _collectLock = new();
+        // ── Collecte complète ────────────────────────────────────────────────
+        private static readonly SemaphoreSlim _collectGate = new(1, 1);
 
-        public static MonSnapshot Collect(MonCollectParts parts = MonCollectParts.All)
+        public static async Task<MonSnapshot> CollectAsync(MonCollectParts parts = MonCollectParts.All)
         {
             // v1.3.5 (retour utilisateur : « les valeurs mettent longtemps à arriver ») :
             // les 5 sections tournent en PARALLÈLE. Au premier appel, chacune paie son
@@ -104,26 +107,31 @@ namespace Optimisation_Tool.Helpers
             // plusieurs secondes, en parallèle on ne paie que la plus lente.
             // Sans risque : chaque section écrit des champs DISTINCTS du snapshot et
             // ne touche qu'à SES caches statiques.
-            lock (_collectLock)
+            await _collectGate.WaitAsync().ConfigureAwait(false);
+            try
             {
                 var s = new MonSnapshot { Parts = parts };
-                var tasks = new List<System.Threading.Tasks.Task>(6);
+                var tasks = new List<Task>(6);
 
                 bool Has(MonCollectParts p) => (parts & p) != 0;
 
                 if (Has(MonCollectParts.Cpu))
-                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectCpu(s)));
+                    tasks.Add(Task.Run(() => CollectCpu(s)));
                 if (Has(MonCollectParts.Processes))
-                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectProcesses(s)));
+                    tasks.Add(Task.Run(() => CollectProcesses(s)));
                 if (Has(MonCollectParts.Ram))
-                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectRam(s)));
+                    tasks.Add(Task.Run(() => CollectRam(s)));
                 if (Has(MonCollectParts.Gpu))
-                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectGpu(s, Has(MonCollectParts.GpuWatts))));
+                    tasks.Add(Task.Run(() => CollectGpu(s, Has(MonCollectParts.GpuWatts))));
                 if (Has(MonCollectParts.Nvme))
-                    tasks.Add(System.Threading.Tasks.Task.Run(() => CollectNvme(s)));
+                    tasks.Add(Task.Run(() => CollectNvme(s)));
 
-                System.Threading.Tasks.Task.WaitAll(tasks.ToArray());
+                await Task.WhenAll(tasks).ConfigureAwait(false);
                 return s;
+            }
+            finally
+            {
+                _collectGate.Release();
             }
         }
 
@@ -728,6 +736,42 @@ namespace Optimisation_Tool.Helpers
             if (gpus.Count == 0) return false;
             foreach (var g in gpus)
                 if (g.Vendor == GpuVendor.Nvidia) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// L'optimisation GPU est expérimentale : contrairement à l'onglet pilote Nvidia,
+        /// elle reste verrouillée si la compatibilité ne peut pas être confirmée.
+        /// </summary>
+        public static bool ShouldLockGpuTuningTab(out string reason)
+        {
+            var gpus = EnumGpus();
+            if (gpus.Count == 0)
+            {
+                reason = "Compatibilité GPU impossible à confirmer. Fonction réservée aux "
+                         + GpuTuningCompatibility.SupportedFamilies + ".";
+                return true;
+            }
+
+            foreach (var gpu in gpus)
+            {
+                if (gpu.Vendor == GpuVendor.Nvidia
+                    && GpuTuningCompatibility.IsSupportedModelName(gpu.Name))
+                {
+                    reason = "";
+                    return false;
+                }
+            }
+
+            string detected = string.Join(", ", gpus
+                .Where(static gpu => gpu.Vendor == GpuVendor.Nvidia)
+                .Select(static gpu => gpu.Name)
+                .Where(static name => !string.IsNullOrWhiteSpace(name)));
+            reason = string.IsNullOrWhiteSpace(detected)
+                ? "Aucune carte graphique Nvidia compatible détectée. Fonction réservée aux "
+                  + GpuTuningCompatibility.SupportedFamilies + "."
+                : "Carte Nvidia non prise en charge : " + detected + ". Fonction réservée aux "
+                  + GpuTuningCompatibility.SupportedFamilies + ".";
             return true;
         }
 

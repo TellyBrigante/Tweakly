@@ -11,7 +11,7 @@
             <TextBlock Text="TWEAKS R&#201;SEAU"
                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                        FontSize="10.5" FontWeight="SemiBold" Margin="2,0,0,7"/>
-            <Border Background="{DynamicResource ThPanel}" BorderBrush="#1A808080"
+            <Border Background="{DynamicResource ThPanel}" BorderBrush="{DynamicResource ThFaintBorder}"
                     BorderThickness="1" CornerRadius="12" Padding="8,7">
                 <StackPanel Grid.IsSharedSizeScope="True">
 

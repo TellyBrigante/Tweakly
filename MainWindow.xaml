@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Tweakly" Width="1180" Height="820"
-        MinWidth="940" MinHeight="620"
+        MinWidth="760" MinHeight="460"
         Icon="Tweakly.ico"
         WindowStyle="None" ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource ThBg}">
@@ -78,6 +78,49 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd"  Property="Background" Value="{DynamicResource ThSecBtn}"/>
+                                <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextNav}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Navigation expérimentale : contenu texte conservé pour le titre de page,
+             badge rouge thémé ajouté uniquement à Optimisation GPU. -->
+        <Style x:Key="GpuExperimentalNavBtnStyle" TargetType="Button" BasedOn="{StaticResource NavBtnStyle}">
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Margin="8,2" Padding="6,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="Lbl" Text="{TemplateBinding Content}"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           FontFamily="{TemplateBinding FontFamily}"
+                                           FontWeight="{TemplateBinding FontWeight}"
+                                           TextAlignment="Center" TextWrapping="Wrap"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="1" Background="{DynamicResource ThCritTint}"
+                                        BorderBrush="{DynamicResource ThCritBorderTint}"
+                                        BorderThickness="1" CornerRadius="4"
+                                        Padding="3,1" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock Text="EXP" Foreground="{DynamicResource ThCrit}"
+                                               FontFamily="{StaticResource AppFont}"
+                                               FontSize="7.5" FontWeight="Bold"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThSecBtn}"/>
                                 <Setter TargetName="Lbl" Property="Foreground" Value="{DynamicResource ThTextNav}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -216,7 +259,7 @@
                         <StackPanel>
                             <TextBlock FontSize="18" FontWeight="Bold"
                                        FontFamily="{StaticResource AppFont}"><Run Text="Tweak" Foreground="{DynamicResource ThTextTitle}"/><Run Text="ly" Foreground="{DynamicResource ThAccentIcon}"/></TextBlock>
-                            <TextBlock x:Name="TxtVersion" Text="v1.4.9"
+                            <TextBlock x:Name="TxtVersion" Text="v1.5.0"
                                        FontSize="11" Foreground="{DynamicResource ThTextDim}"
                                        FontFamily="{StaticResource AppFont}" Margin="0,3,0,0"/>
                         </StackPanel>
@@ -328,6 +371,11 @@
                                             Tag="Nvidia"
                                             Style="{StaticResource NavSubBtnStyle}"
                                             Click="NavBtn_Click"/>
+                                    <Button x:Name="BtnNavGpuTuning"
+                                            Content="Optimisation GPU"
+                                            Tag="GpuTuning"
+                                            Style="{StaticResource GpuExperimentalNavBtnStyle}"
+                                            Click="NavBtn_Click"/>
                                     <Button Content="R&#233;seau"
                                             Tag="Reseau"
                                             Style="{StaticResource NavSubBtnStyle}"
@@ -416,7 +464,7 @@
                                                        Text="&#xE706;"
                                                        FontFamily="Segoe MDL2 Assets"
                                                        FontSize="13"
-                                                       Foreground="#F5C24A"
+                                                       Foreground="{DynamicResource ThWarn}"
                                                        VerticalAlignment="Center" Margin="0,0,8,0"/>
                                             <TextBlock x:Name="ThemeLbl"
                                                        Text="Mode clair"
@@ -491,7 +539,9 @@
 
                 <!-- Contenu de la page active -->
                 <ContentControl x:Name="MainContent"
-                                Focusable="False"/>
+                                Focusable="False"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"/>
                 </Grid><!-- fin ZONE DE CONTENU -->
 
                 <!-- ══ JOURNAL D'ACTIVIT&#201; (repliable) ══════════════════════ -->

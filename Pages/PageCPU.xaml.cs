@@ -96,16 +96,17 @@ namespace Optimisation_Tool.Pages
             // (GlobalTimerResolution RETIRÉ le 2026-06-12 — effet catastrophique mesuré au
             // bench sur build 26200, dépendant du build Windows. Voir commentaire XAML.)
 
-            // HVCI / Memory Integrity désactivé (Enabled=0 ou absent)
+            // HVCI / Memory Integrity désactivé uniquement si Windows expose Enabled=0.
+            // Absent = pas d'override Tweakly visible, donc case décochée comme défaut.
             bool disableHVCI = false;
             try
             {
                 var v = Registry.GetValue(
                     @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
                     "Enabled", null);
-                disableHVCI = v == null || Convert.ToInt32(v) == 0;
+                disableHVCI = v != null && Convert.ToInt32(v) == 0;
             }
-            catch { disableHVCI = true; }
+            catch { disableHVCI = false; }
 
             return (ultimatePower, disableThrottling, sysResponsiveness, disableHVCI);
         }
@@ -163,9 +164,17 @@ namespace Optimisation_Tool.Pages
                 ApplyChanges(chUlt, chThr, chSys, chHVCI,
                              msg => { _main.Log(msg); msgs.Add(msg); }));
 
-            _state = (ChkUltimatePower.IsChecked == true, ChkDisableThrottling.IsChecked == true,
-                      ChkSysResponsiveness.IsChecked == true,
-                      ChkHVCI.IsChecked == true);
+            var actual = await Task.Run(ReadState);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Power Plan", chUlt, actual.UltimatePower);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Power Throttling", chThr, actual.DisableThrottling);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "SystemResponsiveness", chSys, actual.SysResponsiveness);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Memory Integrity (HVCI)", chHVCI, actual.DisableHVCI);
+
+            ChkUltimatePower.IsChecked = actual.UltimatePower;
+            ChkDisableThrottling.IsChecked = actual.DisableThrottling;
+            ChkSysResponsiveness.IsChecked = actual.SysResponsiveness;
+            ChkHVCI.IsChecked = actual.DisableHVCI;
+            _state = actual;
             _main.Log("CPU : tweaks appliqués.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Tweaks CPU appliqués");
             BtnAppliquer.IsEnabled = true;
@@ -215,9 +224,18 @@ namespace Optimisation_Tool.Pages
             if (doThrottling.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
-                    "PowerThrottlingOff", doThrottling.Value ? 1 : 0, RegistryValueKind.DWord);
+                if (doThrottling.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
+                        "PowerThrottlingOff", 1, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
+                        "PowerThrottlingOff");
+                }
                 log($"Power Throttling : {(doThrottling.Value ? "DÉSACTIVÉ" : "ACTIVÉ (par défaut)")}.");
             }
             catch (Exception ex) { log($"Power Throttling : erreur — {ex.Message}"); }
@@ -228,8 +246,10 @@ namespace Optimisation_Tool.Pages
             {
                 Registry.SetValue(
                     @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
-                    "SystemResponsiveness", doSysResp.Value ? 0 : 20, RegistryValueKind.DWord);
-                log($"SystemResponsiveness : {(doSysResp.Value ? "0 (jeux)" : "20 (par défaut)")}.");
+                    "SystemResponsiveness",
+                    doSysResp.Value ? 0 : Helpers.RegistryValueLogic.SystemResponsivenessDefault,
+                    RegistryValueKind.DWord);
+                log($"SystemResponsiveness : {(doSysResp.Value ? "0 (jeux)" : $"{Helpers.RegistryValueLogic.SystemResponsivenessDefault} (par défaut)")}.");
             }
             catch (Exception ex) { log($"SystemResponsiveness : erreur — {ex.Message}"); }
 
@@ -255,6 +275,12 @@ namespace Optimisation_Tool.Pages
             using var p = Process.Start(new ProcessStartInfo(exe, args)
             { UseShellExecute = false, CreateNoWindow = true });
             p?.WaitForExit(15_000);
+        }
+
+        private static void DeleteRegistryValue(RegistryKey root, string subKey, string name)
+        {
+            using var key = root.OpenSubKey(subKey, writable: true);
+            key?.DeleteValue(name, throwOnMissingValue: false);
         }
     }
 }

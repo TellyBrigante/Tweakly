@@ -460,7 +460,7 @@
                                    Foreground="{DynamicResource ThTextDim}"
                                    FontFamily="{StaticResource AppFont}" FontSize="12"
                                    TextWrapping="Wrap" Margin="0,0,0,10"/>
-                        <Border x:Name="NoiseWarn" Background="#33F5C24A" BorderBrush="{DynamicResource ThWarn}"
+                        <Border x:Name="NoiseWarn" Background="{DynamicResource ThWarnTint}" BorderBrush="{DynamicResource ThWarn}"
                                 BorderThickness="1" CornerRadius="8" Padding="12,8"
                                 Margin="0,0,0,14" Visibility="Collapsed">
                             <TextBlock Text="⚠ Activité système détectée — ferme tes apps avant de lancer pour un score fiable."

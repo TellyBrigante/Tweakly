@@ -127,7 +127,7 @@ namespace Optimisation_Tool.Pages
                 if (tick > 0 && tick % 2 == 1) parts |= MonCollectParts.Processes | MonCollectParts.GpuWatts;
                 if (tick > 0 && tick % 4 == 2) parts |= MonCollectParts.Nvme;
 
-                var s = await Task.Run(() => SystemMonitor.Collect(parts));
+                var s = await SystemMonitor.CollectAsync(parts);
                 UpdateUI(s);
             }
             catch { }

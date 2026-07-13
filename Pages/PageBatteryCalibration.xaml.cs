@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Management;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,12 +19,14 @@ namespace Optimisation_Tool.Pages
     {
         private readonly MainWindow _main;
         private readonly DispatcherTimer _timer;
+        private readonly DateTime? _systemBootTime;
         private BatteryCalibrationSession _session;
         private BatterySnapshot _lastSnapshot = new();
         private CancellationTokenSource? _drainCts;
         private readonly List<Thread> _drainThreads = new();
         private volatile int _drainDutyPercent = DrainStartDutyPercent;
         private bool _idleSleepGuardActive;
+        private bool _telemetryGapLogged;
 #if DEBUG
         private Button? _debugSimulationButton;
         private bool _debugSimulationEnabled;
@@ -55,12 +57,14 @@ namespace Optimisation_Tool.Pages
             InitializeComponent();
 
             _session = BatteryCalibrationStore.Load();
+            _systemBootTime = ReadSystemBootTime();
 #if DEBUG
             _debugSimulationEnabled = ShouldEnableDebugSimulationByDefault();
             InstallDebugSimulationButton();
 #endif
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(SampleSeconds) };
             _timer.Tick += (_, _) => RefreshAndLog();
+            SizeChanged += (_, _) => UpdateMetricsLayout();
             Unloaded += (_, _) => HandlePageUnloaded();
         }
 
@@ -71,6 +75,17 @@ namespace Optimisation_Tool.Pages
             RestorePowerPlanGuardIfNeeded();
             ReleaseIdleSleepGuard();
             BatteryCalibrationStore.Save(_session);
+        }
+
+        public void ResumeActiveSession()
+        {
+            if (!IsActive(_session.Phase)) return;
+
+            RefreshAndLog();
+            if (IsActive(_session.Phase) && !_timer.IsEnabled)
+                _timer.Start();
+
+            AppLog.Write($"Calibrage batterie repris au démarrage : phase={_session.Phase}, points={_session.Samples.Count}.");
         }
 
         private void HandlePageUnloaded()
@@ -100,9 +115,47 @@ namespace Optimisation_Tool.Pages
 
         private void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
-            RecoverInterruptedDrain();
+            UpdateMetricsLayout();
             RefreshAndLog();
             if (!_timer.IsEnabled) _timer.Start();
+        }
+
+        private void UpdateMetricsLayout()
+        {
+            bool compact = ActualWidth > 0 && ActualWidth < 800;
+            MetricsGrid.Columns = compact ? 2 : 4;
+            MetricsGrid.Rows = compact ? 2 : 1;
+
+            DetailsGrid.ColumnDefinitions[0].Width = compact
+                ? new GridLength(1, GridUnitType.Star)
+                : new GridLength(1.02, GridUnitType.Star);
+            DetailsGrid.ColumnDefinitions[1].Width = compact
+                ? new GridLength(0)
+                : new GridLength(14);
+            DetailsGrid.ColumnDefinitions[2].Width = compact
+                ? new GridLength(0)
+                : new GridLength(0.98, GridUnitType.Star);
+            DetailsGrid.RowDefinitions[1].Height = compact
+                ? new GridLength(14)
+                : new GridLength(0);
+            Grid.SetColumn(ReportColumn, compact ? 0 : 2);
+            Grid.SetRow(ReportColumn, compact ? 2 : 0);
+
+            var cards = MetricsGrid.Children.OfType<Border>().ToArray();
+            for (int i = 0; i < cards.Length; i++)
+            {
+                cards[i].Margin = compact
+                    ? i switch
+                    {
+                        0 => new Thickness(0, 0, 6, 6),
+                        1 => new Thickness(6, 0, 0, 6),
+                        2 => new Thickness(0, 6, 6, 0),
+                        _ => new Thickness(6, 6, 0, 0)
+                    }
+                    : i < cards.Length - 1
+                        ? new Thickness(0, 0, 6, 0)
+                        : new Thickness(0);
+            }
         }
 
         private void BtnRefresh_Click(object sender, RoutedEventArgs e) => RefreshAndLog();
@@ -207,13 +260,13 @@ namespace Optimisation_Tool.Pages
 #if DEBUG
         private void InstallDebugSimulationButton()
         {
-            if (BtnRefresh.Parent is not Panel panel) return;
+            if (_debugSimulationButton != null) return;
 
             _debugSimulationButton = new Button
             {
                 Style = (Style)FindResource("SecondaryBtnStyle"),
                 Padding = new Thickness(16, 9, 16, 9),
-                Margin = new Thickness(0, 0, 10, 0)
+                Margin = new Thickness(0)
             };
             _debugSimulationButton.Click += (_, _) =>
             {
@@ -222,7 +275,9 @@ namespace Optimisation_Tool.Pages
                 RefreshAndLog();
             };
 
-            panel.Children.Insert(0, _debugSimulationButton);
+            DebugSimulationHost.Children.Add(_debugSimulationButton);
+            DebugSimulationHost.Visibility = Visibility.Visible;
+            AppLog.Write("Calibrage batterie Debug : bouton simulation séparé des actions Release.");
             UpdateDebugSimulationButton();
         }
 
@@ -329,39 +384,72 @@ namespace Optimisation_Tool.Pages
             var last = _session.LastSample;
             if (last == null) return;
 
-            if (_session.Phase != BatteryCalibrationPhase.Complete
-                && IsActive(last.Phase)
-                && PhaseOrder(_session.Phase) < PhaseOrder(last.Phase))
+            var decision = BatteryResumeEvaluator.Evaluate(
+                _session.Phase,
+                _session.PhaseStartedAt,
+                _session.VerifiedRestSeconds,
+                last.Phase,
+                last.Timestamp,
+                DateTime.Now,
+                _systemBootTime,
+                RestTargetDuration());
+
+            if (decision.RecoveredPhase &&
+                decision.Action is BatteryResumeAction.None or BatteryResumeAction.TelemetryGapWithoutRestart)
             {
-                _session.Phase = last.Phase;
-                _session.PhaseStartedAt = last.Timestamp;
+                _session.Phase = decision.Phase;
+                _session.PhaseStartedAt = decision.PhaseStartedAt;
                 BatteryCalibrationStore.Save(_session);
             }
 
-            var gap = DateTime.Now - last.Timestamp;
-            if (_session.Phase == BatteryCalibrationPhase.Drain && gap >= TimeSpan.FromMinutes(30))
+            if (decision.Action == BatteryResumeAction.TelemetryGapWithoutRestart)
             {
-                if (gap >= RestTargetDuration())
+                if (!_telemetryGapLogged)
+                {
+                    var gap = DateTime.Now - last.Timestamp;
+                    AppLog.Write($"Calibrage batterie : trou de télémétrie de {FormatDuration(gap)} sans redémarrage Windows, phase Drain conservée.");
+                    _telemetryGapLogged = true;
+                }
+                return;
+            }
+
+            if (decision.Action is BatteryResumeAction.RestIncomplete or BatteryResumeAction.RestComplete)
+            {
+                _telemetryGapLogged = false;
+                _session.VerifiedRestSeconds = decision.VerifiedRestSeconds;
+                AppLog.Write($"Calibrage batterie : extinction confirmée, repos hors tension vérifié = {FormatDuration(decision.OfflineDuration)}.");
+                if (decision.Action == BatteryResumeAction.RestComplete)
                     SetPhase(BatteryCalibrationPhase.Recharge, save: true);
                 else
-                    SetPhase(BatteryCalibrationPhase.Rest, save: true, phaseStartedAt: last.Timestamp);
-
-                RestorePowerPlanGuardIfNeeded();
-            }
-            else if (_session.Phase == BatteryCalibrationPhase.Rest)
-            {
-                if (_session.PhaseStartedAt > last.Timestamp)
                 {
-                    _session.PhaseStartedAt = last.Timestamp;
+                    SetPhase(BatteryCalibrationPhase.Rest, save: true, decision.PhaseStartedAt);
+                    MarkProtocolWarning($"Repos incomplet : le PC a redémarré après {FormatDuration(decision.OfflineDuration)}. Éteins-le pendant {RestTargetLabel()} sans le rallumer.");
                     BatteryCalibrationStore.Save(_session);
                 }
+                RestorePowerPlanGuardIfNeeded();
+            }
+        }
 
-                if (DateTime.Now - _session.PhaseStartedAt >= RestTargetDuration())
+        private static DateTime? ReadSystemBootTime()
+        {
+            try
+            {
+                using var query = new ManagementObjectSearcher("SELECT LastBootUpTime FROM Win32_OperatingSystem");
+                foreach (ManagementObject item in query.Get())
                 {
-                    SetPhase(BatteryCalibrationPhase.Recharge, save: true);
-                    RestorePowerPlanGuardIfNeeded();
+                    string? raw = item["LastBootUpTime"]?.ToString();
+                    item.Dispose();
+                    if (!string.IsNullOrWhiteSpace(raw))
+                        return ManagementDateTimeConverter.ToDateTime(raw);
                 }
             }
+            catch (Exception ex)
+            {
+                AppLog.Error("Calibrage batterie : lecture du dernier démarrage Windows", ex);
+            }
+
+            try { return DateTime.Now - TimeSpan.FromMilliseconds(Environment.TickCount64); }
+            catch { return null; }
         }
 
         private void AdvancePhase(BatterySnapshot snapshot)
@@ -419,8 +507,12 @@ namespace Optimisation_Tool.Pages
                 case BatteryCalibrationPhase.Rest:
                     StopDrainLoad();
                     RestorePowerPlanGuardIfNeeded();
-                    if (_session.LastSample != null && DateTime.Now - _session.PhaseStartedAt >= RestTargetDuration())
+#if DEBUG
+                    if (_debugSimulationEnabled
+                        && _session.LastSample != null
+                        && DateTime.Now - _session.PhaseStartedAt >= RestTargetDuration())
                         SetPhase(BatteryCalibrationPhase.Recharge, save: true);
+#endif
                     break;
 
                 case BatteryCalibrationPhase.Recharge:
@@ -656,7 +748,9 @@ namespace Optimisation_Tool.Pages
             TxtVoltage.Text = s.VoltageV.HasValue ? $"{s.VoltageV.Value:0.000} V" : "-- V";
             TxtPower.Text = $"Puissance : {FormatW(s.PowerW)} | Courant : {FormatA(s.CurrentA)}";
 
-            TxtSource.Text = FormatSource(s.Source);
+            TxtSource.Text = s.BatteryCount > 1
+                ? $"{s.BatteryCount} batteries | {FormatSource(s.Source)}"
+                : FormatSource(s.Source);
             TxtCycles.Text = $"État : {s.StateText} | Secteur : {AcText(s.OnAcPower)}";
             TxtBatteryTemperature.Text = ControllerCapacityLine(s);
             TxtControllerDetail.Text = ControllerDetail(s);
@@ -718,12 +812,19 @@ namespace Optimisation_Tool.Pages
                 BatteryCalibrationPhase.ChargeToFull => _lastSnapshot.ChargePercent ?? 0,
                 BatteryCalibrationPhase.CellBalance => PercentOf(DateTime.Now - _session.PhaseStartedAt, BalanceTargetDuration()),
                 BatteryCalibrationPhase.Drain => _lastSnapshot.ChargePercent.HasValue ? Math.Clamp(100 - _lastSnapshot.ChargePercent.Value, 0, 100) : 0,
-                BatteryCalibrationPhase.Rest => _session.LastSample != null
-                    ? PercentOf(DateTime.Now - _session.PhaseStartedAt, RestTargetDuration())
-                    : 0,
+                BatteryCalibrationPhase.Rest => RestProgress(),
                 BatteryCalibrationPhase.Recharge => _lastSnapshot.ChargePercent ?? 0,
                 _ => 0
             };
+        }
+
+        private double RestProgress()
+        {
+#if DEBUG
+            if (_debugSimulationEnabled)
+                return PercentOf(DateTime.Now - _session.PhaseStartedAt, RestTargetDuration());
+#endif
+            return PercentOf(TimeSpan.FromSeconds(Math.Max(0, _session.VerifiedRestSeconds)), RestTargetDuration());
         }
 
         private static double PercentOf(TimeSpan elapsed, TimeSpan target)
@@ -795,13 +896,22 @@ namespace Optimisation_Tool.Pages
             BatteryCalibrationPhase.Drain => _lastSnapshot.OnAcPower == false
                 ? "Drain CPU contrôlé en cours. Tweakly sauvegarde chaque mesure pour retrouver le dernier point avant extinction."
                 : "Débranche le secteur pour lancer le drain contrôlé.",
-            BatteryCalibrationPhase.Rest => "Ne redémarre pas le PC avant 8 h. Au prochain lancement, Tweakly vérifiera la durée réelle depuis le dernier point.",
+            BatteryCalibrationPhase.Rest => RestPhaseDetail(),
             BatteryCalibrationPhase.Recharge => _lastSnapshot.OnAcPower == true
                 ? "Recharge jusqu'à 100 % sans coupure secteur. Tweakly continue le graphique et le rapport final."
                 : "Branche le chargeur pour terminer la recharge complète.",
             BatteryCalibrationPhase.Complete => "Le rapport contient les points de charge, drain, repos et recharge finale.",
             _ => "Lance le calibrage pour démarrer le protocole complet."
         };
+
+        private string RestPhaseDetail()
+        {
+#if DEBUG
+            if (_debugSimulationEnabled)
+                return "Simulation du repos total en cours.";
+#endif
+            return "Le repos ne compte que lorsque le PC est éteint. Éteins-le et laisse-le arrêté pendant 8 h.";
+        }
 
         private string BuildLastSampleText()
         {
@@ -815,118 +925,6 @@ namespace Optimisation_Tool.Pages
                 $"Capacité restante : {FormatMWh(s.RemainingCapacityMWh)} | Température : {FormatC(s.TemperatureC)}\n" +
                 $"Source : {s.Source} | Secteur : {AcText(s.OnAcPower)}";
         }
-
-        private string BuildReport()
-        {
-            var sb = new StringBuilder();
-            var samples = _session.Samples;
-            var first = samples.FirstOrDefault();
-            var last = samples.LastOrDefault();
-            var drainLast = samples.LastOrDefault(s => s.Phase == BatteryCalibrationPhase.Drain);
-
-            sb.AppendLine("RAPPORT CALIBRAGE BATTERIE - TWEAKLY");
-            sb.AppendLine(new string('=', 42));
-            sb.AppendLine($"Généré le        : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"Session démarrée : {_session.StartedAt:yyyy-MM-dd HH:mm:ss}");
-            sb.AppendLine($"État             : {PhaseTitle(_session.Phase)}");
-            sb.AppendLine($"Points mesurés   : {samples.Count}");
-            sb.AppendLine();
-
-            sb.AppendLine("BATTERIE");
-            sb.AppendLine(new string('-', 42));
-            sb.AppendLine($"Nom              : {FirstNonEmpty(_session.BatteryName, _lastSnapshot.Name, "Batterie")}");
-            sb.AppendLine($"Fabricant        : {FirstNonEmpty(_session.BatteryManufacturer, _lastSnapshot.Manufacturer, "Non renseigné")}");
-            sb.AppendLine($"Chimie           : {FirstNonEmpty(_session.BatteryChemistry, _lastSnapshot.Chemistry, "Non renseignée")}");
-            sb.AppendLine($"Source lecture   : {_lastSnapshot.Source}");
-            sb.AppendLine($"Santé            : {FormatHealth(_lastSnapshot.HealthPercent)}");
-            sb.AppendLine($"Capacité pleine  : {FormatMWh(_lastSnapshot.FullChargeCapacityMWh ?? _session.FullChargeCapacityMWh)}");
-            sb.AppendLine($"Capacité origine : {FormatMWh(_lastSnapshot.DesignCapacityMWh ?? _session.DesignCapacityMWh)}");
-            sb.AppendLine($"Cycles           : {FormatCycles(_lastSnapshot.CycleCount ?? _session.CycleCount)}");
-            sb.AppendLine();
-
-            sb.AppendLine("RÉSUMÉ");
-            sb.AppendLine(new string('-', 42));
-            sb.AppendLine($"Équilibrage 2 h continu : {YesNo(!_session.BalanceInterrupted)}");
-            sb.AppendLine($"Recharge finale continue : {YesNo(!_session.RechargeInterrupted)}");
-            if (!string.IsNullOrWhiteSpace(_session.PowerPlanGuardError))
-                sb.AppendLine($"Réglage batterie Windows : {_session.PowerPlanGuardError}");
-            AppendReportPoint(sb, "Premier point", first);
-            AppendReportPoint(sb, "Dernier point", last);
-            AppendReportPoint(sb, "Dernier drain", drainLast);
-            sb.AppendLine();
-
-            sb.AppendLine("PHASES");
-            sb.AppendLine(new string('-', 42));
-            AppendPhaseSummary(sb, BatteryCalibrationPhase.ChargeToFull, "1. Charge complète");
-            AppendPhaseSummary(sb, BatteryCalibrationPhase.CellBalance, "2. Équilibrage cellules");
-            AppendPhaseSummary(sb, BatteryCalibrationPhase.Drain, "3. Drain contrôlé");
-            AppendPhaseSummary(sb, BatteryCalibrationPhase.Rest, "4. Repos total");
-            AppendPhaseSummary(sb, BatteryCalibrationPhase.Recharge, "5. Recharge complète");
-            sb.AppendLine();
-
-            sb.AppendLine("MESURES");
-            sb.AppendLine(new string('-', 104));
-            sb.AppendLine("Heure               Phase        %      V        W        A        °C       mWh       Secteur");
-            sb.AppendLine(new string('-', 104));
-
-            foreach (var s in _session.Samples)
-            {
-                sb.AppendLine(
-                    $"{s.Timestamp:yyyy-MM-dd HH:mm:ss}  " +
-                    $"{ShortPhase(s.Phase),-11} " +
-                    $"{FormatPercent(s.ChargePercent),6} " +
-                    $"{FormatV(s.VoltageV),8} " +
-                    $"{FormatW(s.PowerW),8} " +
-                    $"{FormatA(s.CurrentA),8} " +
-                    $"{FormatC(s.TemperatureC),8} " +
-                    $"{FormatMWh(s.RemainingCapacityMWh),9} " +
-                    $"{AcText(s.OnAcPower)}");
-            }
-
-            return sb.ToString();
-        }
-
-        private static void AppendReportPoint(StringBuilder sb, string label, BatteryCalibrationSample? s)
-        {
-            if (s == null)
-            {
-                sb.AppendLine($"{label,-15}: aucun point");
-                return;
-            }
-
-            sb.AppendLine(
-                $"{label,-15}: {s.Timestamp:yyyy-MM-dd HH:mm:ss} | {ShortPhase(s.Phase)} | " +
-                $"{FormatPercent(s.ChargePercent)} | {FormatV(s.VoltageV)} | {FormatW(s.PowerW)} | {FormatC(s.TemperatureC)}");
-        }
-
-        private void AppendPhaseSummary(StringBuilder sb, BatteryCalibrationPhase phase, string label)
-        {
-            var items = _session.Samples.Where(s => s.Phase == phase).ToList();
-            if (items.Count == 0)
-            {
-                sb.AppendLine($"{label,-24}: aucun point");
-                return;
-            }
-
-            var first = items[0];
-            var last = items[^1];
-            var duration = last.Timestamp - first.Timestamp;
-            sb.AppendLine(
-                $"{label,-24}: {items.Count,3} point(s), {FormatDuration(duration),10}, " +
-                $"{FormatPercent(first.ChargePercent)} -> {FormatPercent(last.ChargePercent)}, " +
-                $"{FormatV(first.VoltageV)} -> {FormatV(last.VoltageV)}");
-        }
-
-        private static string ShortPhase(BatteryCalibrationPhase phase) => phase switch
-        {
-            BatteryCalibrationPhase.ChargeToFull => "Charge",
-            BatteryCalibrationPhase.CellBalance => "Equilibrage",
-            BatteryCalibrationPhase.Drain => "Drain",
-            BatteryCalibrationPhase.Rest => "Repos",
-            BatteryCalibrationPhase.Recharge => "Recharge",
-            BatteryCalibrationPhase.Complete => "Termine",
-            _ => "Pret"
-        };
 
         private void EnsureDrainLoad()
         {
@@ -1004,121 +1002,6 @@ namespace Optimisation_Tool.Pages
             }
         }
 
-        private void DrawGraph()
-        {
-            if (GraphCanvas.ActualWidth <= 0) return;
-
-            GraphCanvas.Children.Clear();
-            var samples = _session.Samples;
-            if (samples.Count == 0)
-            {
-                AddGraphText("Aucun point enregistré.", 16, 16, "ThTextDim");
-                return;
-            }
-
-            double width = GraphCanvas.ActualWidth;
-            double height = GraphCanvas.ActualHeight > 0 ? GraphCanvas.ActualHeight : GraphCanvas.Height;
-            double left = 42;
-            double right = 18;
-            double top = 18;
-            double bottom = 30;
-            double plotW = Math.Max(20, width - left - right);
-            double plotH = Math.Max(20, height - top - bottom);
-
-            DrawGrid(left, top, plotW, plotH);
-
-            var minTime = samples.Min(s => s.Timestamp);
-            var maxTime = samples.Max(s => s.Timestamp);
-            if (maxTime <= minTime) maxTime = minTime.AddSeconds(1);
-
-            double X(DateTime t) => left + (t - minTime).TotalSeconds / (maxTime - minTime).TotalSeconds * plotW;
-            double YPercent(int p) => top + (100 - Math.Clamp(p, 0, 100)) / 100.0 * plotH;
-
-            var volts = samples.Where(s => s.VoltageV.HasValue).Select(s => s.VoltageV!.Value).ToList();
-            double minV = volts.Count > 0 ? volts.Min() : 0;
-            double maxV = volts.Count > 0 ? volts.Max() : 1;
-            if (maxV - minV < 0.2) { minV -= 0.1; maxV += 0.1; }
-            double YVolt(double v) => top + (maxV - v) / (maxV - minV) * plotH;
-
-            var powers = samples.Where(s => s.PowerW.HasValue).Select(s => Math.Abs(s.PowerW!.Value)).ToList();
-            double maxW = Math.Max(1, powers.Count > 0 ? powers.Max() : 1);
-            double YPower(double w) => top + (1 - Math.Abs(w) / maxW) * plotH;
-
-            DrawPolyline(samples.Where(s => s.ChargePercent.HasValue).Select(s => new Point(X(s.Timestamp), YPercent(s.ChargePercent!.Value))), "ThAccentIcon", 2.2);
-            DrawPolyline(samples.Where(s => s.VoltageV.HasValue).Select(s => new Point(X(s.Timestamp), YVolt(s.VoltageV!.Value))), "ThWarn", 1.8);
-            DrawPolyline(samples.Where(s => s.PowerW.HasValue).Select(s => new Point(X(s.Timestamp), YPower(s.PowerW!.Value))), "ThCyan", 1.5);
-
-            AddGraphText("100 %", 0, top - 4, "ThTextDim");
-            AddGraphText("0 %", 8, top + plotH - 8, "ThTextDim");
-            if (volts.Count > 0)
-                AddGraphText($"{maxV:0.00} V / {minV:0.00} V", left + 4, top + 4, "ThWarn");
-        }
-
-        private void DrawGrid(double left, double top, double width, double height)
-        {
-            var gridBrush = Brush("ThBorder");
-            for (int i = 0; i <= 4; i++)
-            {
-                double y = top + height * i / 4.0;
-                GraphCanvas.Children.Add(new Line
-                {
-                    X1 = left,
-                    X2 = left + width,
-                    Y1 = y,
-                    Y2 = y,
-                    Stroke = gridBrush,
-                    StrokeThickness = 1,
-                    Opacity = 0.55
-                });
-            }
-        }
-
-        private void DrawPolyline(IEnumerable<Point> points, string role, double thickness)
-        {
-            var list = points.ToList();
-            if (list.Count == 0) return;
-            if (list.Count == 1)
-            {
-                var dot = new Ellipse
-                {
-                    Width = 7,
-                    Height = 7,
-                    Fill = Brush(role)
-                };
-                Canvas.SetLeft(dot, list[0].X - 3.5);
-                Canvas.SetTop(dot, list[0].Y - 3.5);
-                GraphCanvas.Children.Add(dot);
-                return;
-            }
-
-            var line = new Polyline
-            {
-                Stroke = Brush(role),
-                StrokeThickness = thickness,
-                StrokeLineJoin = PenLineJoin.Round,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round
-            };
-            foreach (var p in list) line.Points.Add(p);
-            GraphCanvas.Children.Add(line);
-        }
-
-        private void AddGraphText(string text, double x, double y, string role)
-        {
-            var tb = new TextBlock
-            {
-                Text = text,
-                Foreground = Brush(role),
-                FontFamily = (FontFamily)Application.Current.Resources["AppFont"],
-                FontSize = 10.5
-            };
-            Canvas.SetLeft(tb, x);
-            Canvas.SetTop(tb, y);
-            GraphCanvas.Children.Add(tb);
-        }
-
-        private void GraphCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => DrawGraph();
-
         private string ElapsedPhaseText(BatteryCalibrationPhase phase)
         {
             if (PhaseOrder(_session.Phase) > PhaseOrder(phase)) return phase == BatteryCalibrationPhase.CellBalance ? BalanceTargetLabel() : "terminé";
@@ -1132,7 +1015,10 @@ namespace Optimisation_Tool.Pages
             if (PhaseOrder(_session.Phase) > PhaseOrder(BatteryCalibrationPhase.Rest)) return RestTargetLabel();
             var last = _session.LastSample;
             if (last == null || PhaseOrder(_session.Phase) < PhaseOrder(BatteryCalibrationPhase.Rest)) return "0 min";
-            return FormatDuration(DateTime.Now - _session.PhaseStartedAt);
+#if DEBUG
+            if (_debugSimulationEnabled) return FormatDuration(DateTime.Now - _session.PhaseStartedAt);
+#endif
+            return FormatDuration(TimeSpan.FromSeconds(Math.Max(0, _session.VerifiedRestSeconds)));
         }
 
         private static string ControllerCapacityLine(BatterySnapshot s)
@@ -1172,9 +1058,6 @@ namespace Optimisation_Tool.Pages
                 ? "Windows"
                 : value.Replace("Battery API", "API").Replace("ACPI WMI", "ACPI").Replace("Win32_Battery", "Win32");
         private static string AcText(bool? onAc) => onAc == true ? "branché" : onAc == false ? "batterie" : "inconnu";
-        private static string YesNo(bool value) => value ? "oui" : "non";
-        private static string FirstNonEmpty(params string[] values) => values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? "";
-
         private static SolidColorBrush Brush(string role)
         {
             if (Application.Current.Resources[role] is SolidColorBrush brush) return brush;

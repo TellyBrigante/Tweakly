@@ -56,8 +56,8 @@
                              Grid.Column="1"
                              Background="Transparent"
                              Foreground="{DynamicResource ThTextBody}"
-                             CaretBrush="#DCE0F6"
-                             SelectionBrush="#256DCC"
+                             CaretBrush="{DynamicResource ThTextBody}"
+                             SelectionBrush="{DynamicResource ThTabSel}"
                              FontFamily="{StaticResource AppFont}"
                              FontSize="12"
                              VerticalAlignment="Center"
@@ -120,13 +120,13 @@
                     Click="BtnDesinstaller_Click">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
-                        <Setter Property="Background" Value="#7A1E1E"/>
+                        <Setter Property="Background" Value="{DynamicResource ThCritButton}"/>
                         <Style.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#9E2828"/>
+                                <Setter Property="Background" Value="{DynamicResource ThCritButtonHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#5E1818"/>
+                                <Setter Property="Background" Value="{DynamicResource ThCritButtonPressed}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
@@ -144,13 +144,13 @@
                     Click="BtnNettoyer_Click">
                 <Button.Style>
                     <Style TargetType="Button" BasedOn="{StaticResource PrimaryBtnStyle}">
-                        <Setter Property="Background" Value="#B5781E"/>
+                        <Setter Property="Background" Value="{DynamicResource ThWarnButton}"/>
                         <Style.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#D8941E"/>
+                                <Setter Property="Background" Value="{DynamicResource ThWarnButtonHover}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter Property="Background" Value="#8E5E16"/>
+                                <Setter Property="Background" Value="{DynamicResource ThWarnButtonPressed}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Background" Value="{DynamicResource ThSecBtn}"/>
@@ -165,7 +165,7 @@
              verticale + icône MDL2 — même grammaire que l'overlay de MAJ validé ── -->
         <UniformGrid Grid.Row="1" Rows="1" Margin="18,0,18,12">
             <!-- Total -->
-            <Border CornerRadius="12" Background="#0F5BA0FF" BorderBrush="#2E5BA0FF"
+            <Border CornerRadius="12" Background="{DynamicResource ThInfoTint}" BorderBrush="{DynamicResource ThInfoBorderTint}"
                     BorderThickness="1" Padding="0" Margin="0,0,10,0">
                 <Grid>
                     <Border Width="3" CornerRadius="2" Background="{DynamicResource ThAccentIcon}"
@@ -204,7 +204,7 @@
                 </Grid>
             </Border>
             <!-- Mises à jour disponibles -->
-            <Border CornerRadius="12" Background="#0F5BA0FF" BorderBrush="#2E5BA0FF"
+            <Border CornerRadius="12" Background="{DynamicResource ThInfoTint}" BorderBrush="{DynamicResource ThInfoBorderTint}"
                     BorderThickness="1" Padding="0" Margin="0,0,10,0">
                 <Grid>
                     <Border Width="3" CornerRadius="2" Background="{DynamicResource ThAccentIcon}"
@@ -223,8 +223,8 @@
                 </Grid>
             </Border>
             <!-- Échecs (visible seulement s'il y en a) -->
-            <Border x:Name="StatFailedCard" CornerRadius="12" Background="#14E05555"
-                    BorderBrush="#3DE05555" BorderThickness="1" Padding="0"
+            <Border x:Name="StatFailedCard" CornerRadius="12" Background="{DynamicResource ThCritTint}"
+                    BorderBrush="{DynamicResource ThCritBorderTint}" BorderThickness="1" Padding="0"
                     Visibility="Collapsed">
                 <Grid>
                     <Border Width="3" CornerRadius="2" Background="{DynamicResource ThCrit}"
@@ -274,15 +274,15 @@
                 <!-- Sélection translucide : lisible sur les DEUX thèmes (le texte garde
                      sa couleur de thème, plus de blanc forcé — refonte v1.3.4) -->
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"
-                                 Color="#1F5BA0FF"/>
+                                 Color="{DynamicResource ThInfoSelectionColor}"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}"
                                  Color="{DynamicResource ThBlueGradBColor}"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}"
-                                 Color="#145BA0FF"/>
+                                 Color="{DynamicResource ThInfoFaintColor}"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}"
-                                 Color="#805BA0FF"/>
+                                 Color="{DynamicResource ThInfoTextTintColor}"/>
                 <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}"
-                                 Color="#262C49"/>
+                                 Color="{DynamicResource ThCardB}"/>
             </DataGrid.Resources>
 
             <!-- En-têtes de colonnes -->
@@ -344,14 +344,14 @@
                         <!-- Hover : voile bleu FRANC — doit se voir immédiatement
                              (3e passe, les deux précédentes étaient trop timides) -->
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background"      Value="#2E5BA0FF"/>
-                            <Setter Property="BorderBrush"     Value="#665BA0FF"/>
+                            <Setter Property="Background"      Value="{DynamicResource ThInfoBorderTint}"/>
+                            <Setter Property="BorderBrush"     Value="{DynamicResource ThInfoStrongTint}"/>
                             <Setter Property="BorderThickness" Value="1"/>
                         </Trigger>
                         <!-- Sélection : fond bleu marqué + CONTOUR COMPLET accent + barre
                              gauche épaisse — la ligne sélectionnée saute aux yeux -->
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background"      Value="#505BA0FF"/>
+                            <Setter Property="Background"      Value="{DynamicResource ThInfoStrongTint}"/>
                             <Setter Property="BorderBrush"     Value="{DynamicResource ThBlueGradB}"/>
                             <Setter Property="BorderThickness" Value="5,1,1,1"/>
                         </Trigger>
@@ -389,12 +389,12 @@
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Width="30" Height="30" CornerRadius="8"
-                                        BorderBrush="#2E5BA0FF" BorderThickness="1"
+                                        BorderBrush="{DynamicResource ThInfoBorderTint}" BorderThickness="1"
                                         VerticalAlignment="Center">
                                     <Border.Background>
                                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                            <GradientStop Color="#3D5BA0FF" Offset="0"/>
-                                            <GradientStop Color="#145BA0FF" Offset="1"/>
+                                            <GradientStop Color="{DynamicResource ThInfoGradientColor}" Offset="0"/>
+                                            <GradientStop Color="{DynamicResource ThInfoFaintColor}" Offset="1"/>
                                         </LinearGradientBrush>
                                     </Border.Background>
                                     <TextBlock Text="{Binding Initial}"
@@ -453,7 +453,7 @@
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Failed">
                                                     <Setter Property="Visibility"  Value="Visible"/>
-                                                    <Setter Property="Background"  Value="#7A1E1E"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThCritButton}"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -472,8 +472,8 @@
                                             <Setter Property="Padding"     Value="0"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Checking">
-                                                    <Setter Property="Background"  Value="#22B4BBE0"/>
-                                                    <Setter Property="BorderBrush" Value="#55B4BBE0"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThNeutralTint}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource ThNeutralBorderTint}"/>
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="UpToDate">
@@ -482,13 +482,13 @@
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="UpdateAvailable">
-                                                    <Setter Property="Background"  Value="#225BA0FF"/>
-                                                    <Setter Property="BorderBrush" Value="#555BA0FF"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThInfoTint}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource ThInfoBorderTint}"/>
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Updating">
-                                                    <Setter Property="Background"  Value="#22F5C24A"/>
-                                                    <Setter Property="BorderBrush" Value="#55F5C24A"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThWarnTint}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource ThWarnBorderTint}"/>
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Updated">
@@ -497,8 +497,8 @@
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding UpdateStatus}" Value="Failed">
-                                                    <Setter Property="Background"  Value="#22E05555"/>
-                                                    <Setter Property="BorderBrush" Value="#55E05555"/>
+                                                    <Setter Property="Background"  Value="{DynamicResource ThCritTint}"/>
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource ThCritBorderTint}"/>
                                                     <Setter Property="Padding"     Value="10,3"/>
                                                 </DataTrigger>
                                             </Style.Triggers>

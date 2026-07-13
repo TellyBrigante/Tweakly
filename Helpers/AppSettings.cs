@@ -29,22 +29,40 @@ namespace Optimisation_Tool.Helpers
         [JsonPropertyName("navigationMode")]
         public string NavigationMode { get; set; } = "Easy";
 
-        [JsonPropertyName("cpuStabilityDefaultsRevision")]
-        public int CpuStabilityDefaultsRevision { get; set; } = 0;
-
         // ── Chemin du fichier : config\tweakly-settings.json (depuis v1.2.8) ──
         public static string FilePath => PathLayout.SettingsFile;
+        private static string BackupFilePath => FilePath + ".bak";
+        private static string TempFilePath => FilePath + ".tmp";
 
         // ── Chargement ─────────────────────────────────────────────────────────
         public static AppSettings Load()
         {
-            try
+            var candidates = new[] { FilePath, TempFilePath, BackupFilePath };
+            bool foundCandidate = false;
+
+            foreach (var path in candidates)
             {
-                if (!File.Exists(FilePath)) return new AppSettings();
-                var json = File.ReadAllText(FilePath);
-                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                if (!File.Exists(path)) continue;
+                foundCandidate = true;
+                try
+                {
+                    var json = File.ReadAllText(path);
+                    var settings = JsonSerializer.Deserialize<AppSettings>(json)
+                        ?? throw new InvalidDataException("Le JSON ne contient aucun réglage.");
+
+                    if (!string.Equals(path, FilePath, StringComparison.OrdinalIgnoreCase))
+                        AppLog.Write($"Réglages : récupération depuis {Path.GetFileName(path)}.");
+                    return settings;
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error($"Réglages : lecture impossible ({Path.GetFileName(path)})", ex);
+                }
             }
-            catch { return new AppSettings(); }
+
+            if (foundCandidate)
+                AppLog.Write("ERREUR · Réglages : aucun fichier valide, valeurs par défaut utilisées.");
+            return new AppSettings();
         }
 
         // ── Sauvegarde (écriture ATOMIQUE : tmp + Move) ────────────────────────
@@ -58,11 +76,33 @@ namespace Optimisation_Tool.Helpers
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath) ?? "");
                 var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-                var tmp  = FilePath + ".tmp";
-                File.WriteAllText(tmp, json);
-                File.Move(tmp, FilePath, overwrite: true);
+                File.WriteAllText(TempFilePath, json);
+
+                if (File.Exists(FilePath))
+                {
+                    try
+                    {
+                        File.Replace(TempFilePath, FilePath, BackupFilePath, ignoreMetadataErrors: true);
+                    }
+                    catch (IOException)
+                    {
+                        // Fallback pour les supports portables qui ne gèrent pas File.Replace.
+                        File.Copy(FilePath, BackupFilePath, overwrite: true);
+                        File.Move(TempFilePath, FilePath, overwrite: true);
+                    }
+                    catch (PlatformNotSupportedException)
+                    {
+                        File.Copy(FilePath, BackupFilePath, overwrite: true);
+                        File.Move(TempFilePath, FilePath, overwrite: true);
+                    }
+                }
+                else
+                    File.Move(TempFilePath, FilePath);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.Error("Réglages : sauvegarde impossible", ex);
+            }
         }
     }
 }

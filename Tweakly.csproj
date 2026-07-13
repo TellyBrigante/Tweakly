@@ -14,7 +14,7 @@
     <RootNamespace>Optimisation_Tool</RootNamespace>
     <AssemblyName>Tweakly</AssemblyName>
     <ApplicationIcon>Tweakly.ico</ApplicationIcon>
-    <Version>1.4.9</Version>
+    <Version>1.5.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
@@ -39,6 +39,17 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tweakly.RegistryTests\**\*.cs" />
+    <Compile Remove="GpuTuningLab.Tests\**\*.cs" />
+    <Compile Remove="GpuTuningLab.Core\**\*.cs" />
+    <Compile Remove="GpuTuningLab.Workloads\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="GpuTuningLab.Core\GpuTuningLab.Core.csproj" />
   </ItemGroup>
 
 </Project>

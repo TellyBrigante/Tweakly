@@ -207,11 +207,27 @@ namespace Optimisation_Tool.Pages
                              doLoc, doWER, doTailored, doCompat,
                              msg => { _main.Log(msg); msgs.Add(msg); }));
 
-            _state = (ChkTelemetrie.IsChecked == true, ChkAdID.IsChecked == true,
-                      ChkActivityHistory.IsChecked == true, ChkBingSearch.IsChecked == true,
-                      ChkInputPersonal.IsChecked == true, ChkLocation.IsChecked == true,
-                      ChkWER.IsChecked == true, ChkTailoredExp.IsChecked == true,
-                      ChkCompatTel.IsChecked == true);
+            var actual = await Task.Run(ReadState);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Telemetrie Windows", doTel, actual.Telemetrie);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Identifiant publicitaire", doAdID, actual.AdID);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Historique d'activite", doActivity, actual.ActivityHistory);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Recherche Bing", doBing, actual.BingSearch);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Personnalisation de saisie", doInk, actual.InputPersonal);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Localisation", doLoc, actual.Location);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Rapports d'erreurs Windows", doWER, actual.WER);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Experiences personnalisees", doTailored, actual.TailoredExp);
+            Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Inventaire applications", doCompat, actual.CompatTel);
+
+            ChkTelemetrie.IsChecked = actual.Telemetrie;
+            ChkAdID.IsChecked = actual.AdID;
+            ChkActivityHistory.IsChecked = actual.ActivityHistory;
+            ChkBingSearch.IsChecked = actual.BingSearch;
+            ChkInputPersonal.IsChecked = actual.InputPersonal;
+            ChkLocation.IsChecked = actual.Location;
+            ChkWER.IsChecked = actual.WER;
+            ChkTailoredExp.IsChecked = actual.TailoredExp;
+            ChkCompatTel.IsChecked = actual.CompatTel;
+            _state = actual;
             _main.Log("Confidentialité : paramètres appliqués.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Paramètres de confidentialité appliqués");
             BtnAppliquer.IsEnabled = true;
@@ -237,9 +253,11 @@ namespace Optimisation_Tool.Pages
                 }
                 else
                 {
-                    Registry.SetValue(pathDC, "AllowTelemetry", 3, RegistryValueKind.DWord);
-                    SetSvc("DiagTrack",          disabled: false);
-                    SetSvc("dmwappushservice",   disabled: false);
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
+                        "AllowTelemetry");
+                    SetSvcStart("DiagTrack", "auto", start: true);
+                    SetSvcStart("dmwappushservice", "demand", start: false);
                     log("Télémétrie Windows : RESTAURÉE (par défaut).");
                 }
             }
@@ -260,9 +278,18 @@ namespace Optimisation_Tool.Pages
             if (doActivity.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System",
-                    "EnableActivityFeed", doActivity.Value ? 0 : 1, RegistryValueKind.DWord);
+                if (doActivity.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System",
+                        "EnableActivityFeed", 0, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\System",
+                        "EnableActivityFeed");
+                }
                 log($"Historique d'activité : {(doActivity.Value ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
             }
             catch (Exception ex) { log($"ActivityFeed : erreur — {ex.Message}"); }
@@ -271,9 +298,18 @@ namespace Optimisation_Tool.Pages
             if (doBing.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
-                    "BingSearchEnabled", doBing.Value ? 0 : 1, RegistryValueKind.DWord);
+                if (doBing.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
+                        "BingSearchEnabled", 0, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.CurrentUser,
+                        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
+                        "BingSearchEnabled");
+                }
                 log($"Recherche Bing : {(doBing.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"BingSearch : erreur — {ex.Message}"); }
@@ -284,10 +320,22 @@ namespace Optimisation_Tool.Pages
             {
                 const string pathInk =
                     @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputPersonalization";
-                Registry.SetValue(pathInk, "RestrictImplicitInkCollection",
-                    doInk.Value ? 1 : 0, RegistryValueKind.DWord);
-                Registry.SetValue(pathInk, "RestrictImplicitTextCollection",
-                    doInk.Value ? 1 : 0, RegistryValueKind.DWord);
+                if (doInk.Value)
+                {
+                    Registry.SetValue(pathInk, "RestrictImplicitInkCollection",
+                        1, RegistryValueKind.DWord);
+                    Registry.SetValue(pathInk, "RestrictImplicitTextCollection",
+                        1, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.CurrentUser,
+                        @"SOFTWARE\Microsoft\InputPersonalization",
+                        "RestrictImplicitInkCollection");
+                    DeleteRegistryValue(Registry.CurrentUser,
+                        @"SOFTWARE\Microsoft\InputPersonalization",
+                        "RestrictImplicitTextCollection");
+                }
                 log($"Personnalisation saisie : {(doInk.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"InputPersonalization : erreur — {ex.Message}"); }
@@ -296,9 +344,18 @@ namespace Optimisation_Tool.Pages
             if (doLoc.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
-                    "DisableLocation", doLoc.Value ? 1 : 0, RegistryValueKind.DWord);
+                if (doLoc.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
+                        "DisableLocation", 1, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
+                        "DisableLocation");
+                }
                 log($"Localisation : {(doLoc.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"Localisation : erreur — {ex.Message}"); }
@@ -317,8 +374,10 @@ namespace Optimisation_Tool.Pages
                 }
                 else
                 {
-                    Registry.SetValue(pathWER, "Disabled", 0, RegistryValueKind.DWord);
-                    SetSvc("WerSvc", disabled: false);
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting",
+                        "Disabled");
+                    SetSvcStart("WerSvc", "demand", start: false);
                     log("Rapport d'erreurs Windows : ACTIVÉ (par défaut).");
                 }
             }
@@ -340,9 +399,18 @@ namespace Optimisation_Tool.Pages
             if (doCompat.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat",
-                    "DisableInventory", doCompat.Value ? 1 : 0, RegistryValueKind.DWord);
+                if (doCompat.Value)
+                {
+                    Registry.SetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat",
+                        "DisableInventory", 1, RegistryValueKind.DWord);
+                }
+                else
+                {
+                    DeleteRegistryValue(Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\AppCompat",
+                        "DisableInventory");
+                }
                 log($"Télémétrie applications (CompatTelRunner) : {(doCompat.Value ? "DÉSACTIVÉE" : "ACTIVÉE")}.");
             }
             catch (Exception ex) { log($"CompatTel : erreur — {ex.Message}"); }
@@ -371,6 +439,18 @@ namespace Optimisation_Tool.Pages
                 RunCmd("sc", $"stop \"{name}\"");
             else
                 RunCmd("sc", $"start \"{name}\"");
+        }
+
+        private static void SetSvcStart(string name, string startType, bool start)
+        {
+            RunCmd("sc", $"config \"{name}\" start= {startType}");
+            if (start) RunCmd("sc", $"start \"{name}\"");
+        }
+
+        private static void DeleteRegistryValue(RegistryKey root, string subKey, string name)
+        {
+            using var key = root.OpenSubKey(subKey, writable: true);
+            key?.DeleteValue(name, throwOnMissingValue: false);
         }
 
         private static void RunCmd(string exe, string args)

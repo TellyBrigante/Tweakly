@@ -1,0 +1,37 @@
+﻿[
+    {
+        "path":  "d3d11/GpuTuningLab.Workload.exe",
+        "bytes":  67889312,
+        "sha256":  "C9DAD80A2E2A55B2C3DFB12674D903E453BEF5F05E9479177A92BDD9AC274324"
+    },
+    {
+        "path":  "d3d11/THIRD_PARTY_NOTICES.md",
+        "bytes":  1840,
+        "sha256":  "413B47A7D2CC6B35003E3B68471FD4637D9A3E2E5273203275752929A7AF67F4"
+    },
+    {
+        "path":  "dxr/D3D12/D3D12Core.dll",
+        "bytes":  4821536,
+        "sha256":  "67ED09DB4CDF4AA6E139D542209F53B7728D1CC282304C30859FB27BE42C4543"
+    },
+    {
+        "path":  "dxr/D3D12_LICENSE.txt",
+        "bytes":  13147,
+        "sha256":  "5239850894610071566F7ECEE0B751FDE43C862032D92B99D7D0F596B3433EBD"
+    },
+    {
+        "path":  "dxr/D3D12_LICENSE-CODE.txt",
+        "bytes":  1093,
+        "sha256":  "903DF5512F7D02609FED0C780A9B704F5A3EEB6E4D84EBE42A29845C81899A3C"
+    },
+    {
+        "path":  "dxr/GpuTuningLab.RayTracingWorkload.exe",
+        "bytes":  318976,
+        "sha256":  "C30370E0CAEE4D2BD038632E692544B2DDE4EFFE26F9EA00EE044C385E71F5FF"
+    },
+    {
+        "path":  "dxr/THIRD_PARTY_NOTICES.md",
+        "bytes":  618,
+        "sha256":  "859061FF0061CA2C88C9F9166A8C6A9CDC35AB4C0D4A36699FB60F3126657EC0"
+    }
+]

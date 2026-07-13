@@ -46,6 +46,12 @@ namespace Optimisation_Tool.Helpers
         public static string PresentMon      => Path.Combine(DataTools, "PresentMon.exe");
         public static string SessionsFile    => Path.Combine(Config,    "tweakly-sessions.json");
         public static string CpuReference    => Path.Combine(DataRefs,  "cpu_reference.json");
+        public static string NvmeReference   => Path.Combine(DataRefs,  "nvme_reference.json");
+        public static string GpuTuningData   => Path.Combine(Data,      "gpu-tuning");
+        public static string GpuTuningTools  => Path.Combine(DataTools, "gpu-tuning");
+        public static string GpuTuningSession => Path.Combine(Config,   "tweakly-gpu-tuning.json");
+        public static string GpuTuningPolicy => Path.Combine(GpuTuningData, "evaluation_policy.json");
+        public static string GpuTuningEvidence => Path.Combine(GpuTuningData, "published_tuning_evidence.json");
 
         // Dossier où chercher les profils .nip (page Nvidia, onglet « par application »)
         public static string NipFolder       => DataNip;

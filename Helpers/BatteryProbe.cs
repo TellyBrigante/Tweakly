@@ -12,6 +12,7 @@ namespace Optimisation_Tool.Helpers
     public sealed class BatterySnapshot
     {
         public bool HasBattery { get; init; }
+        public int BatteryCount { get; init; }
         public string Source { get; init; } = "Aucune";
         public string Name { get; init; } = "";
         public string Manufacturer { get; init; } = "";
@@ -87,15 +88,16 @@ namespace Optimisation_Tool.Helpers
         {
             var acpiWmi = ReadAcpiWmi();
             var win32Wmi = ReadWmi();
+            var physical = new List<BatterySnapshot>();
 
             foreach (var devicePath in EnumerateBatteryDevicePaths())
             {
                 var low = ReadBatteryDevice(devicePath);
-                if (low.HasBattery)
-                    return MergeSnapshots(low, acpiWmi, win32Wmi);
+                if (low.HasBattery) physical.Add(low);
             }
 
-            return MergeSnapshots(acpiWmi, win32Wmi);
+            var batteryApi = AggregatePhysicalBatteries(physical, "Battery API");
+            return MergeSnapshots(batteryApi, win32Wmi, acpiWmi);
         }
 
         private static BatterySnapshot MergeSnapshots(params BatterySnapshot[] snapshots)
@@ -106,6 +108,7 @@ namespace Optimisation_Tool.Helpers
             return new BatterySnapshot
             {
                 HasBattery = true,
+                BatteryCount = usable.Max(s => Math.Max(1, s.BatteryCount)),
                 Source = string.Join(" + ", usable
                     .Select(s => s.Source)
                     .Where(s => !string.IsNullOrWhiteSpace(s))
@@ -127,6 +130,91 @@ namespace Optimisation_Tool.Helpers
                 IsCritical = FirstNullable(usable.Select(s => s.IsCritical)),
             };
         }
+
+        private static BatterySnapshot AggregatePhysicalBatteries(
+            IEnumerable<BatterySnapshot> snapshots,
+            string source)
+        {
+            var batteries = snapshots.Where(s => s.HasBattery).ToList();
+            if (batteries.Count == 0) return new BatterySnapshot();
+            if (batteries.Count == 1) return batteries[0];
+
+            int? remaining = SumIfComplete(batteries, s => s.RemainingCapacityMWh);
+            int? full = SumIfComplete(batteries, s => s.FullChargeCapacityMWh);
+            int? design = SumIfComplete(batteries, s => s.DesignCapacityMWh);
+            int? charge = remaining.HasValue && full is > 0
+                ? Math.Clamp((int)Math.Round(remaining.Value * 100.0 / full.Value), 0, 100)
+                : AverageIfComplete(batteries, s => s.ChargePercent);
+
+            return new BatterySnapshot
+            {
+                HasBattery = true,
+                BatteryCount = batteries.Sum(s => Math.Max(1, s.BatteryCount)),
+                Source = source,
+                Name = $"{batteries.Count} batteries",
+                Manufacturer = JoinDistinct(batteries.Select(s => s.Manufacturer)),
+                Chemistry = JoinDistinct(batteries.Select(s => s.Chemistry)),
+                ChargePercent = charge,
+                RemainingCapacityMWh = remaining,
+                FullChargeCapacityMWh = full,
+                DesignCapacityMWh = design,
+                CycleCount = MaxNullable(batteries.Select(s => s.CycleCount)),
+                VoltageMv = CompatibleAverageVoltage(batteries),
+                RateMw = SumIfComplete(batteries, s => s.RateMw),
+                TemperatureC = MaxNullable(batteries.Select(s => s.TemperatureC)),
+                OnAcPower = AnyKnownTrue(batteries.Select(s => s.OnAcPower)),
+                IsCharging = AnyKnownTrue(batteries.Select(s => s.IsCharging)),
+                IsDischarging = AnyKnownTrue(batteries.Select(s => s.IsDischarging)),
+                IsCritical = AnyKnownTrue(batteries.Select(s => s.IsCritical)),
+            };
+        }
+
+        private static int? SumIfComplete(
+            IReadOnlyCollection<BatterySnapshot> batteries,
+            Func<BatterySnapshot, int?> selector)
+        {
+            var values = batteries.Select(selector).ToArray();
+            if (values.Any(v => !v.HasValue)) return null;
+            long sum = values.Sum(v => (long)v!.Value);
+            return sum is >= int.MinValue and <= int.MaxValue ? (int)sum : null;
+        }
+
+        private static int? AverageIfComplete(
+            IReadOnlyCollection<BatterySnapshot> batteries,
+            Func<BatterySnapshot, int?> selector)
+        {
+            var values = batteries.Select(selector).ToArray();
+            return values.Any(v => !v.HasValue)
+                ? null
+                : (int)Math.Round(values.Average(v => v!.Value));
+        }
+
+        private static int? CompatibleAverageVoltage(IReadOnlyCollection<BatterySnapshot> batteries)
+        {
+            var values = batteries.Select(s => s.VoltageMv).ToArray();
+            if (values.Any(v => !v.HasValue)) return null;
+            int min = values.Min(v => v!.Value);
+            int max = values.Max(v => v!.Value);
+            if (max <= 0 || max - min > max * 0.10) return null;
+            return (int)Math.Round(values.Average(v => v!.Value));
+        }
+
+        private static T? MaxNullable<T>(IEnumerable<T?> values) where T : struct, IComparable<T>
+        {
+            var known = values.Where(v => v.HasValue).Select(v => v!.Value).ToArray();
+            return known.Length == 0 ? null : known.Max();
+        }
+
+        private static bool? AnyKnownTrue(IEnumerable<bool?> values)
+        {
+            var known = values.Where(v => v.HasValue).Select(v => v!.Value).ToArray();
+            return known.Length == 0 ? null : known.Any(v => v);
+        }
+
+        private static string JoinDistinct(IEnumerable<string> values)
+            => string.Join(" + ", values
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Distinct(StringComparer.OrdinalIgnoreCase));
 
         private static BatterySnapshot ReadBatteryDevice(string devicePath)
         {
@@ -160,6 +248,7 @@ namespace Optimisation_Tool.Helpers
             return new BatterySnapshot
             {
                 HasBattery = true,
+                BatteryCount = 1,
                 Source = "Battery API",
                 Name = displayName,
                 Manufacturer = manufacturer,
@@ -186,29 +275,35 @@ namespace Optimisation_Tool.Helpers
                 using var s = new ManagementObjectSearcher("SELECT * FROM Win32_Battery");
                 var batteries = s.Get().Cast<ManagementObject>().ToList();
                 if (batteries.Count == 0) return new BatterySnapshot();
+                var snapshots = new List<BatterySnapshot>();
 
-                var b = batteries[0];
-                var statusCode = ToInt(b["BatteryStatus"]);
-                int? percent = ToInt(b["EstimatedChargeRemaining"]);
-                int? designMWh = ToInt(b["DesignCapacity"]);
-                int? fullMWh = ToInt(b["FullChargeCapacity"]);
-
-                return new BatterySnapshot
+                foreach (var b in batteries)
                 {
-                    HasBattery = true,
-                    Source = "Win32_Battery",
-                    Name = b["Name"]?.ToString() ?? b["DeviceID"]?.ToString() ?? "Batterie",
-                    Manufacturer = b["Manufacturer"]?.ToString() ?? "",
-                    Chemistry = BatteryChemistryName(ToInt(b["Chemistry"])),
-                    ChargePercent = percent,
-                    DesignCapacityMWh = designMWh,
-                    FullChargeCapacityMWh = fullMWh,
-                    VoltageMv = null,
-                    OnAcPower = statusCode is 2 or 6 or 7 or 8 or 9 or 10 or 11,
-                    IsCharging = statusCode is 6 or 7 or 8 or 9,
-                    IsDischarging = statusCode == 1,
-                    IsCritical = statusCode == 4,
-                };
+                    try
+                    {
+                        var statusCode = ToInt(b["BatteryStatus"]);
+                        snapshots.Add(new BatterySnapshot
+                        {
+                            HasBattery = true,
+                            BatteryCount = 1,
+                            Source = "Win32_Battery",
+                            Name = b["Name"]?.ToString() ?? b["DeviceID"]?.ToString() ?? "Batterie",
+                            Manufacturer = b["Manufacturer"]?.ToString() ?? "",
+                            Chemistry = BatteryChemistryName(ToInt(b["Chemistry"])),
+                            ChargePercent = ToInt(b["EstimatedChargeRemaining"]),
+                            DesignCapacityMWh = ToInt(b["DesignCapacity"]),
+                            FullChargeCapacityMWh = ToInt(b["FullChargeCapacity"]),
+                            VoltageMv = null,
+                            OnAcPower = statusCode is 2 or 6 or 7 or 8 or 9 or 10 or 11,
+                            IsCharging = statusCode is 6 or 7 or 8 or 9,
+                            IsDischarging = statusCode == 1,
+                            IsCritical = statusCode == 4,
+                        });
+                    }
+                    finally { b.Dispose(); }
+                }
+
+                return AggregatePhysicalBatteries(snapshots, "Win32_Battery");
             }
             catch
             {
@@ -248,6 +343,7 @@ namespace Optimisation_Tool.Helpers
                 return new BatterySnapshot
                 {
                     HasBattery = true,
+                    BatteryCount = 1,
                     Source = "ACPI WMI",
                     Name = FirstNonEmpty(ToText(Value(staticData, "DeviceName")), ToText(Value(staticData, "Tag")), "Batterie"),
                     Manufacturer = ToText(Value(staticData, "ManufactureName")),

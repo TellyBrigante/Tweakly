@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Rapport calibrage batterie"
         Width="980" Height="680"
-        MinWidth="820" MinHeight="540"
+        MinWidth="720" MinHeight="460"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
-        ResizeMode="NoResize"
+        ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource ThBg}">
 
     <Window.Resources>

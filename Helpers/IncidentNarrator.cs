@@ -46,7 +46,10 @@ namespace Optimisation_Tool.Helpers
         /// retombe alors sur ses conseils génériques actuels). Le narrateur ne « comble
         /// jamais avec de l'imagination » : pas de preuve → null.
         /// </summary>
-        public static Narration? Narrate(List<RawEvent> cluster)
+        public static Narration? Narrate(
+            List<RawEvent> cluster,
+            GameCrashContextAnalyzer.Snapshot? gameCrashSnapshot = null,
+            WindowsCrashEvidenceIndex.Snapshot? windowsCrashSnapshot = null)
         {
             if (cluster == null || cluster.Count == 0) return null;
 
@@ -81,8 +84,8 @@ namespace Optimisation_Tool.Helpers
                 ?? TryWheaUncorrected(cluster)
                 ?? TryWheaCorrectedRepeated(cluster)
                 ?? TryDiskRepeated(cluster)
-                ?? TryTdrGpu(cluster)
-                ?? TryAppCrashSystemModule(cluster)
+                ?? TryTdrGpu(cluster, gameCrashSnapshot, windowsCrashSnapshot)
+                ?? TryAppCrashSystemModule(cluster, windowsCrashSnapshot)
                 ?? TryServiceCrashLoop(cluster)
                 ?? TryPower41MaskedBsod(cluster)
                 ?? TryPower41RealOutage(cluster)
@@ -339,7 +342,10 @@ namespace Optimisation_Tool.Helpers
         // ──────────────────────────────────────────────────────────────────────
         // 5. TDR GPU (Display 4101 / nvlddmkm / amdkmdag) + Application Error → pilote GPU
         // ──────────────────────────────────────────────────────────────────────
-        private static Narration? TryTdrGpu(List<RawEvent> cluster)
+        private static Narration? TryTdrGpu(
+            List<RawEvent> cluster,
+            GameCrashContextAnalyzer.Snapshot? gameCrashSnapshot,
+            WindowsCrashEvidenceIndex.Snapshot? windowsCrashSnapshot)
         {
             var tdr = cluster.Where(IsTdr).ToList();
             if (tdr.Count == 0) return null;
@@ -355,9 +361,15 @@ namespace Optimisation_Tool.Helpers
                 : (tdr.Any(e => e.Provider.IndexOf("amdkmdag", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                 e.RawFull.IndexOf("amdkmdag", StringComparison.OrdinalIgnoreCase) >= 0)
                     ? "AMD" : "GPU");
-            var localContext = GameCrashContextAnalyzer.Analyze(
-                cluster.Min(e => e.Time),
-                cluster.Max(e => e.Time));
+            DateTime incidentStart = cluster.Min(e => e.Time);
+            DateTime incidentEnd = cluster.Max(e => e.Time);
+            var localContext = gameCrashSnapshot != null
+                ? GameCrashContextAnalyzer.Analyze(gameCrashSnapshot, incidentStart, incidentEnd)
+                : GameCrashContextAnalyzer.Analyze(incidentStart, incidentEnd);
+            var crashEvidence = windowsCrashSnapshot?.Find(incidentStart, incidentEnd, apptag)
+                .Take(2)
+                .ToList() ?? new List<WindowsCrashEvidence>();
+            bool hasLocalEvidence = localContext.HasEvidence || crashEvidence.Count > 0;
 
             var live141 = cluster
                 .Where(e => e.Provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase)
@@ -390,7 +402,7 @@ namespace Optimisation_Tool.Helpers
             {
                 $"Résumé : le pilote {vendor} a mis trop de temps à répondre. Windows l'a réinitialisé pour récupérer l'affichage.",
                 "Preuves Windows : " + windowsProof,
-                localContext.HasEvidence
+                hasLocalEvidence
                     ? "Confiance : élevée pour le reset GPU, moyenne pour la cause locale exacte."
                     : "Confiance : élevée pour le reset GPU, faible pour la cause exacte."
             };
@@ -410,10 +422,16 @@ namespace Optimisation_Tool.Helpers
                     steps.Add("Réglages/traces lus : " + string.Join(", ", localContext.Facts.Take(6)) + ".");
             }
 
+            foreach (var evidence in crashEvidence)
+            {
+                why.Add("Preuve WER/dump locale : " + evidence.Describe() + ".");
+                steps.Add("Preuve Windows locale : " + evidence.Describe() + ".");
+            }
+
             if (runtimeLine.Length > 0)
                 why.Add(runtimeLine);
 
-            why.Add(localContext.HasEvidence
+            why.Add(hasLocalEvidence
                 ? "Conclusion : le reset GPU est corrélé à une activité app/jeu mesurable. Tweakly ne conclut donc pas à un pilote mort sans cette vérification."
                 : $"Conclusion : aucune trace app/jeu exploitable trouvée. On revient aux causes GPU classiques : pilote {vendor}, profil OC/undervolt, surchauffe ou adaptateur d'affichage virtuel.");
 
@@ -461,7 +479,9 @@ namespace Optimisation_Tool.Helpers
         // 6. Application Error avec FaultingModule = module SYSTÈME / pilote GPU
         //    → le vrai coupable est le module, pas l'application
         // ──────────────────────────────────────────────────────────────────────
-        private static Narration? TryAppCrashSystemModule(List<RawEvent> cluster)
+        private static Narration? TryAppCrashSystemModule(
+            List<RawEvent> cluster,
+            WindowsCrashEvidenceIndex.Snapshot? windowsCrashSnapshot)
         {
             var crash = cluster
                 .Where(e => e.Provider.Equals("Application Error", StringComparison.OrdinalIgnoreCase))
@@ -470,6 +490,10 @@ namespace Optimisation_Tool.Helpers
 
             string appName = crash.Data.GetValueOrDefault("AppName", "") ?? "";
             string modName = crash.Data.GetValueOrDefault("ModuleName", "") ?? "";
+            var localEvidence = windowsCrashSnapshot?.Find(crash.Time, crash.Time, appName)
+                .FirstOrDefault(e => e.ModuleName.Length > 0);
+            if (appName.Length == 0 && localEvidence != null) appName = localEvidence.AppName;
+            if (modName.Length == 0 && localEvidence != null) modName = localEvidence.ModuleName;
             if (modName.Length == 0) return null;
 
             string modLow = modName.ToLowerInvariant();
@@ -492,6 +516,8 @@ namespace Optimisation_Tool.Helpers
                     : $"un module Windows ({modName}) → typiquement RAM instable, fichiers système corrompus, ou conflit pilote";
 
             var steps = new List<string>();
+            if (localEvidence != null)
+                steps.Add("Preuve WER locale : " + localEvidence.Describe() + ".");
             if (isGpuModule)
             {
                 steps.Add($"Mets à jour le pilote GPU : c'est lui qui a fait planter {appName}, pas l'appli. Pilotes NVIDIA App ou AMD Adrenalin > Installation propre.");
@@ -532,7 +558,8 @@ namespace Optimisation_Tool.Helpers
                 Icon   = "",
                 Chain  = $"{crash.Time:HH:mm:ss} : Application Error 1000 sur {who}, module fautif = {modName}",
                 Advice = $"L'événement dit que {who} a crashé. Mais en regardant le DÉTAIL : l'exception s'est levée dans {vraiCoupable}. " +
-                         $"C'est {vraiCoupable} qui a planté, et {who} était juste l'appli qui l'utilisait à ce moment. Réinstaller l'appli ne servirait à rien.",
+                          $"C'est {vraiCoupable} qui a planté, et {who} était juste l'appli qui l'utilisait à ce moment. Réinstaller l'appli ne servirait à rien." +
+                          (localEvidence != null ? " Preuve WER : " + localEvidence.Describe() + "." : ""),
                 Steps  = steps,
                 Actions = actions,
             };
