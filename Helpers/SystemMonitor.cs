@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Management;
@@ -116,15 +117,15 @@ namespace Optimisation_Tool.Helpers
                 bool Has(MonCollectParts p) => (parts & p) != 0;
 
                 if (Has(MonCollectParts.Cpu))
-                    tasks.Add(Task.Run(() => CollectCpu(s)));
+                    tasks.Add(Task.Run(() => CollectSection("cpu", () => CollectCpu(s))));
                 if (Has(MonCollectParts.Processes))
-                    tasks.Add(Task.Run(() => CollectProcesses(s)));
+                    tasks.Add(Task.Run(() => CollectSection("processus", () => CollectProcesses(s))));
                 if (Has(MonCollectParts.Ram))
-                    tasks.Add(Task.Run(() => CollectRam(s)));
+                    tasks.Add(Task.Run(() => CollectSection("ram", () => CollectRam(s))));
                 if (Has(MonCollectParts.Gpu))
-                    tasks.Add(Task.Run(() => CollectGpu(s, Has(MonCollectParts.GpuWatts))));
+                    tasks.Add(Task.Run(() => CollectSection("gpu", () => CollectGpu(s, Has(MonCollectParts.GpuWatts)))));
                 if (Has(MonCollectParts.Nvme))
-                    tasks.Add(Task.Run(() => CollectNvme(s)));
+                    tasks.Add(Task.Run(() => CollectSection("nvme", () => CollectNvme(s))));
 
                 await Task.WhenAll(tasks).ConfigureAwait(false);
                 return s;
@@ -132,6 +133,19 @@ namespace Optimisation_Tool.Helpers
             finally
             {
                 _collectGate.Release();
+            }
+        }
+
+        private static void CollectSection(string name, Action collect)
+        {
+            try
+            {
+                collect();
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-section-" + name,
+                    "Monitoring : collecte " + name + " indisponible", ex);
             }
         }
 
@@ -191,7 +205,13 @@ namespace Optimisation_Tool.Helpers
                             if (pct > bestCpu) { bestCpu = pct; bestCpuName = p.ProcessName; }
                         }
                     }
-                    catch { }
+                    catch (System.ComponentModel.Win32Exception) { }
+                    catch (InvalidOperationException) { }
+                    catch (NotSupportedException) { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("monitor-process-item", "Monitoring : compteur d'un processus illisible", ex);
+                    }
                     finally { p.Dispose(); }
                 }
 
@@ -207,7 +227,10 @@ namespace Optimisation_Tool.Helpers
                 _procCache = (s.Processes, s.TopCpuName, s.TopCpuPct, s.TopRamName, s.TopRamMB);
                 _procCacheTime = DateTime.UtcNow;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-process-list", "Monitoring : lecture des processus", ex);
+            }
         }
 
         private static string Short(string n)
@@ -233,7 +256,10 @@ namespace Optimisation_Tool.Helpers
                     break;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-cpu-static", "Monitoring : informations statiques du CPU", ex);
+            }
             if (_cpuName.Length == 0) _cpuName = "Processeur";
             // Nettoyer le nom (retirer (R), (TM), CPU @ x.xGHz)
             _cpuName = _cpuName
@@ -271,7 +297,10 @@ namespace Optimisation_Tool.Helpers
                     break;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-cpu-usage", "Monitoring : utilisation du CPU", ex);
+            }
 
             // Fréquence live = base × (% performance / 100) → capture le turbo
             try
@@ -287,7 +316,10 @@ namespace Optimisation_Tool.Helpers
                     break;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-cpu-frequency", "Monitoring : fréquence du CPU", ex);
+            }
 
             // Température CPU (opt-in) : null si désactivée / pilote PawnIO absent / non élevé.
             s.CpuTempC = CpuTemperature.Read();
@@ -320,7 +352,10 @@ namespace Optimisation_Tool.Helpers
                 }
                 _ramInstalledGB = totalBytes / (1024.0 * 1024.0 * 1024.0);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-ram-static", "Monitoring : informations statiques de la RAM", ex);
+            }
             if (_ramType == null || _ramType.Length == 0) _ramType = "DDR";
         }
 
@@ -342,8 +377,16 @@ namespace Optimisation_Tool.Helpers
                     s.RamUsedGB  = (mem.ullTotalPhys - mem.ullAvailPhys) / gb;
                     s.RamPct     = mem.dwMemoryLoad;
                 }
+                else
+                {
+                    var error = new Win32Exception(Marshal.GetLastWin32Error());
+                    AppLog.ErrorOnce("monitor-ram-status", "Monitoring : état de la mémoire", error);
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-ram-status", "Monitoring : état de la mémoire", ex);
+            }
         }
 
         // ── Températures NVMe (namespace Storage WMI) ────────────────────────
@@ -401,11 +444,17 @@ namespace Optimisation_Tool.Helpers
                                 byDevice[devId] = info;
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("monitor-nvme-device", "Monitoring : lecture d'un disque NVMe", ex);
+                    }
                     finally { disk.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-nvme-storage", "Monitoring : inventaire des disques NVMe", ex);
+            }
 
             // % d'activité disque via compteur de perf (root\CIMV2). Name = "<num> <lettres>".
             // util% = 100 - PercentIdleTime (plus fiable que PercentDiskTime qui peut dépasser 100).
@@ -425,11 +474,17 @@ namespace Optimisation_Tool.Helpers
                             info.UsagePct = Math.Max(0, Math.Min(100, 100 - idle));
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("monitor-nvme-activity-item", "Monitoring : activité d'un disque", ex);
+                    }
                     finally { o.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-nvme-activity", "Monitoring : compteurs d'activité disque", ex);
+            }
 
             _nvmeCache     = list;
             _nvmeCacheTime = DateTime.UtcNow;
@@ -498,7 +553,11 @@ namespace Optimisation_Tool.Helpers
                 s.GpuOk           = true;
                 CacheGpu(s);
             }
-            catch { s.GpuOk = false; }
+            catch (Exception ex)
+            {
+                s.GpuOk = false;
+                AppLog.ErrorOnce("monitor-gpu", "Monitoring : collecte GPU", ex);
+            }
         }
 
         private static bool TryReuseGpuCache(MonSnapshot s)
@@ -533,7 +592,16 @@ namespace Optimisation_Tool.Helpers
         {
             try
             {
-                if (!_nvapiTried) { _nvapiTried = true; try { _nvapi = new GpuTelemetry(); } catch { _nvapi = null; } }
+                if (!_nvapiTried)
+                {
+                    _nvapiTried = true;
+                    try { _nvapi = new GpuTelemetry(); }
+                    catch (Exception ex)
+                    {
+                        _nvapi = null;
+                        AppLog.ErrorOnce("monitor-nvapi-init", "Monitoring : initialisation NvAPI", ex);
+                    }
+                }
                 if (_nvapi == null || !_nvapi.Available) return false;
 
                 var r = _nvapi.Read();
@@ -551,7 +619,11 @@ namespace Optimisation_Tool.Helpers
                 if (includeWatts) EnsureWattsFetch();          // refresh watts lent si nécessaire
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-nvapi-read", "Monitoring : lecture NvAPI", ex);
+                return false;
+            }
         }
 
         // Refresh des watts via nvidia-smi, au plus toutes les 5 s, sur un thread de fond →
@@ -564,21 +636,28 @@ namespace Optimisation_Tool.Helpers
             {
                 try
                 {
-                    using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
-                        "--query-gpu=power.draw --format=csv,noheader,nounits")
+                    if (!TryRunNvidiaSmi(
+                        "--query-gpu=power.draw --format=csv,noheader,nounits",
+                        "monitor-nvidia-watts", out string output))
+                        return;
+
+                    string line = output.Split(new[] { '\r', '\n' },
+                        StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                    if (double.TryParse(line.Trim(), NumberStyles.Any,
+                        CultureInfo.InvariantCulture, out var w))
                     {
-                        UseShellExecute = false, CreateNoWindow = true,
-                        RedirectStandardOutput = true, RedirectStandardError = true,
-                    });
-                    if (p != null)
+                        _gpuWattsCached = w;
+                    }
+                    else
                     {
-                        var line = p.StandardOutput.ReadLine();
-                        p.WaitForExit(4000);
-                        if (double.TryParse((line ?? "").Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var w))
-                            _gpuWattsCached = w;
+                        AppLog.WriteOnce("monitor-nvidia-watts-value",
+                            "Monitoring : nvidia-smi a renvoyé une puissance GPU illisible.");
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("monitor-nvidia-watts", "Monitoring : puissance GPU Nvidia", ex);
+                }
                 finally
                 {
                     _gpuWattsTime = DateTime.UtcNow;
@@ -590,43 +669,68 @@ namespace Optimisation_Tool.Helpers
         // Remplit s via nvidia-smi. Renvoie false si nvidia-smi absent / muet (pas de carte Nvidia active).
         private static bool TryNvidiaSmi(MonSnapshot s)
         {
-            try
+            if (!TryRunNvidiaSmi(
+                "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,clocks.gr " +
+                "--format=csv,noheader,nounits",
+                "monitor-nvidia-smi", out string output))
+                return false;
+
+            string line = output.Split(new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+            var parts = line.Split(',');
+            if (parts.Length < 7)
             {
-                using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
-                    "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,clocks.gr " +
-                    "--format=csv,noheader,nounits")
-                {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                });
-                if (p == null) return false;
-
-                var line = p.StandardOutput.ReadLine();
-                p.WaitForExit(4000);
-                if (string.IsNullOrWhiteSpace(line)) return false;
-
-                var parts = line.Split(',');
-                if (parts.Length < 7) return false;
-
-                double D(string v)
-                {
-                    v = v.Trim();
-                    return double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
-                }
-
-                s.GpuName        = parts[0].Trim();
-                s.GpuUsage       = D(parts[1]);
-                s.GpuVramUsedMB  = D(parts[2]);
-                s.GpuVramTotalMB = D(parts[3]);
-                s.GpuTemp        = D(parts[4]);
-                s.GpuWatts       = D(parts[5]);
-                s.GpuMHz         = D(parts[6]);
-                s.GpuOk          = true;
-                return true;
+                AppLog.WriteOnce("monitor-nvidia-smi-columns",
+                    "Monitoring : nvidia-smi a renvoyé un nombre de colonnes inattendu.");
+                return false;
             }
-            catch { return false; }
+
+            double D(string v)
+            {
+                v = v.Trim();
+                return double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out var d) ? d : 0;
+            }
+
+            s.GpuName        = parts[0].Trim();
+            s.GpuUsage       = D(parts[1]);
+            s.GpuVramUsedMB  = D(parts[2]);
+            s.GpuVramTotalMB = D(parts[3]);
+            s.GpuTemp        = D(parts[4]);
+            s.GpuWatts       = D(parts[5]);
+            s.GpuMHz         = D(parts[6]);
+            s.GpuOk          = true;
+            return true;
+        }
+
+        private static bool TryRunNvidiaSmi(string arguments, string logKey, out string output)
+        {
+            output = "";
+            ProcessCommandResult result = ProcessCommand.Run("nvidia-smi", arguments, 4000);
+            if (!result.Started)
+            {
+                AppLog.WriteOnce(logKey + "-start",
+                    "Monitoring : nvidia-smi n'a pas pu être lancé — " + result.Error);
+                return false;
+            }
+            if (result.TimedOut)
+            {
+                AppLog.WriteOnce(logKey + "-timeout",
+                    "Monitoring : délai dépassé pendant la lecture de nvidia-smi.");
+                return false;
+            }
+            if (!result.Success)
+            {
+                AppLog.WriteOnce(logKey + "-exit",
+                    "Monitoring : nvidia-smi a échoué"
+                    + (result.Error.Length > 0 ? " — " + result.Error : $" — code {result.ExitCode}."));
+                return false;
+            }
+
+            output = result.Output.Trim();
+            if (output.Length > 0) return true;
+
+            AppLog.WriteOnce(logKey + "-empty", "Monitoring : nvidia-smi n'a renvoyé aucune donnée.");
+            return false;
         }
 
         // ── Énumération des GPU physiques (stable → mise en cache au 1er appel) ────
@@ -679,7 +783,10 @@ namespace Optimisation_Tool.Helpers
                     list.Add(new GpuInfo { Name = name, Vendor = vendor, IsIntegrated = igp, DedicatedVramMB = dedMb });
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-gpu-inventory", "Monitoring : inventaire des GPU", ex);
+            }
             _gpuList = list;
             return list;
         }
@@ -705,10 +812,16 @@ namespace Optimisation_Tool.Helpers
                         double mb = Convert.ToInt64(memObj) / (1024.0 * 1024.0);
                         if (mb > 0) map[desc] = mb;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("monitor-gpu-vram-value", "Monitoring : taille VRAM illisible", ex);
+                    }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-gpu-vram", "Monitoring : lecture de la VRAM dédiée", ex);
+            }
             return map;
         }
 
@@ -810,7 +923,11 @@ namespace Optimisation_Tool.Helpers
                 }
                 return Math.Min(100, best);
             }
-            catch { return 0; }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-gpu-engine", "Monitoring : compteur d'utilisation GPU", ex);
+                return 0;
+            }
         }
 
         // "pid_24532_luid_0x00000000_0x00017A9C_phys_0_eng_3_engtype_VideoDecode" -> (luid, engtype)

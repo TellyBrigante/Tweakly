@@ -8,6 +8,7 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Parse NVIDIA N/A", () => Run(ParseNvidiaNa)),
     ("Throttle bit masks", () => Run(ThrottleMasks)),
     ("Detect competing GPU workload", () => Run(DetectCompetingGpuWorkload)),
+    ("Ignore host GPU process", () => Run(IgnoreHostGpuProcess)),
     ("Classify sustained GPU contamination", () => Run(ClassifySustainedGpuContamination)),
     ("Load text enum evaluation policy", () => Run(LoadTextEnumEvaluationPolicy)),
     ("Detect competing GPU video workload", () => Run(DetectCompetingGpuVideoWorkload)),
@@ -122,6 +123,22 @@ static void DetectCompetingGpuWorkload()
     Equal(2, processes.Count);
     Near(56, processes[1].ComputePercent!.Value, 0.001);
     Equal("game.exe", processes[1].Name);
+}
+
+static void IgnoreHostGpuProcess()
+{
+    var host = new ActiveGpuProcess(15540, "Tweakly.exe", 17, 3);
+    var browser = new ActiveGpuProcess(4820, "brave.exe", 29, 0, null, 5);
+    var workload = new ActiveGpuProcess(9000, "GpuTuningLab.Workload.exe", 98, 12);
+
+    ActiveGpuProcess[] busy = GpuWorkloadPreflight.SelectContaminatingProcesses(
+        [host, browser, workload],
+        new HashSet<int> { workload.ProcessId },
+        host.ProcessId);
+
+    Equal(1, busy.Length);
+    Equal(browser.ProcessId, busy[0].ProcessId);
+    Equal("brave.exe", busy[0].Name);
 }
 
 static void DetectCompetingGpuVideoWorkload()

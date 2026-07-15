@@ -104,55 +104,70 @@ namespace Optimisation_Tool.Pages
             SetProgress(0); SetTotalRaw(0); TxtOverlayPhase.Text = "Préparation…";
             BtnCancelBench.IsEnabled = true; BtnCancelBench.Content = "ANNULER LE BENCHMARK";
             _main.Log("Benchmark : démarrage…");
-            _cts = new CancellationTokenSource();
+            _cts?.Dispose();
+            using var operationCts = new CancellationTokenSource();
+            _cts = operationCts;
 
-            var progress = new Progress<(Benchmark.Phase phase, double pct)>(p =>
+            try
             {
-                TxtOverlayPhase.Text = p.phase switch
+                var progress = new Progress<(Benchmark.Phase phase, double pct)>(p =>
                 {
-                    // v1.3.0 : 7 sondes gaming-oriented x 3 runs (médiane)
-                    Benchmark.Phase.CpuSingle => "CPU — single-thread (Mandelbrot) · 3 runs…",
-                    Benchmark.Phase.CpuMulti  => "CPU — multi-thread (8 cœurs max) · 3 runs…",
-                    Benchmark.Phase.CpuMem    => "CPU — accès mémoire (pointer-chase) · 3 runs…",
-                    Benchmark.Phase.SysFrame  => "Système — stabilité 60 Hz (frame time) · 3 runs…",
-                    Benchmark.Phase.SysInput  => "Système — latence d'entrée (jitter scheduler) · 3 runs…",
-                    Benchmark.Phase.RamBand   => "RAM — bande passante (STREAM Copy+Triad) · 3 runs…",
-                    Benchmark.Phase.RamLat    => "RAM — latence accès aléatoire · 3 runs…",
-                    Benchmark.Phase.Network   => "Réseau — ping & jitter (1.1.1.1)…",
-                    Benchmark.Phase.Done      => "Calcul du score…",
-                    _ => "…"
-                };
-                SetProgress(p.pct);
-                SetTotalProgress(p.phase, p.pct);
-            });
+                    TxtOverlayPhase.Text = p.phase switch
+                    {
+                        // v1.3.0 : 7 sondes gaming-oriented x 3 runs (médiane)
+                        Benchmark.Phase.CpuSingle => "CPU — single-thread (Mandelbrot) · 3 runs…",
+                        Benchmark.Phase.CpuMulti  => "CPU — multi-thread (8 cœurs max) · 3 runs…",
+                        Benchmark.Phase.CpuMem    => "CPU — accès mémoire (pointer-chase) · 3 runs…",
+                        Benchmark.Phase.SysFrame  => "Système — stabilité 60 Hz (frame time) · 3 runs…",
+                        Benchmark.Phase.SysInput  => "Système — latence d'entrée (jitter scheduler) · 3 runs…",
+                        Benchmark.Phase.RamBand   => "RAM — bande passante (STREAM Copy+Triad) · 3 runs…",
+                        Benchmark.Phase.RamLat    => "RAM — latence accès aléatoire · 3 runs…",
+                        Benchmark.Phase.Network   => "Réseau — ping & jitter (1.1.1.1)…",
+                        Benchmark.Phase.Done      => "Calcul du score…",
+                        _ => "…"
+                    };
+                    SetProgress(p.pct);
+                    SetTotalProgress(p.phase, p.pct);
+                });
 
-            BenchmarkResult? r = null;
-            try { r = await Benchmark.RunAsync(progress, _cts.Token); }
-            catch (Exception ex) { _main.Log("Benchmark : erreur — " + ex.Message); }
+                BenchmarkResult? r = null;
+                try { r = await Benchmark.RunAsync(progress, operationCts.Token); }
+                catch (OperationCanceledException) when (operationCts.IsCancellationRequested) { }
+                catch (Exception ex)
+                {
+                    AppLog.Error("Benchmark : exécution", ex);
+                    _main.Log("Benchmark : erreur — " + ex.Message);
+                }
 
-            BenchOverlay.Visibility = Visibility.Collapsed;
-            BtnRun.IsEnabled = true;
-            if (r == null) return;
+                if (r == null) return;
 
-            // Annulé en cours de route : les sondes ont cassé leurs boucles → les mesures
-            // sont PARTIELLES et le score n'a aucun sens. On jette, l'historique reste sain.
-            if (_cts?.IsCancellationRequested == true)
-            {
-                _main.Log("Benchmark : annulé par l'utilisateur — résultat partiel ignoré.");
-                return;
+                // Annulé en cours de route : les sondes ont cassé leurs boucles → les mesures
+                // sont PARTIELLES et le score n'a aucun sens. On jette, l'historique reste sain.
+                if (operationCts.IsCancellationRequested)
+                {
+                    _main.Log("Benchmark : annulé par l'utilisateur — résultat partiel ignoré.");
+                    return;
+                }
+
+                BenchmarkStore.Append(r);
+                _history = BenchmarkStore.Load().OrderByDescending(x => x.Timestamp).ToList();
+                if (_history.Count >= 2) { _selA = _history[1]; _selB = _history[0]; }
+                RefreshHeader();
+                RefreshSubScores();
+                RefreshHistory();
+                RefreshSparkline();
+                RenderCompare();
+                Helpers.TweakFeedback.TweaksAppliedSinceBench = false;   // mesure faite → boucle bouclée
+                RefreshRebenchHint();
+                _main.Log($"Benchmark : terminé — score {r.TotalScore} (CPU {r.CpuScore}, Sys {r.SysScore}, Net {r.NetScore}).");
             }
-
-            BenchmarkStore.Append(r);
-            _history = BenchmarkStore.Load().OrderByDescending(x => x.Timestamp).ToList();
-            if (_history.Count >= 2) { _selA = _history[1]; _selB = _history[0]; }
-            RefreshHeader();
-            RefreshSubScores();
-            RefreshHistory();
-            RefreshSparkline();
-            RenderCompare();
-            Helpers.TweakFeedback.TweaksAppliedSinceBench = false;   // mesure faite → boucle bouclée
-            RefreshRebenchHint();
-            _main.Log($"Benchmark : terminé — score {r.TotalScore} (CPU {r.CpuScore}, Sys {r.SysScore}, Net {r.NetScore}).");
+            finally
+            {
+                BenchOverlay.Visibility = Visibility.Collapsed;
+                BtnRun.IsEnabled = true;
+                if (ReferenceEquals(_cts, operationCts))
+                    _cts = null;
+            }
         }
 
         // ── Effacer l'historique (confirmation obligatoire) ──────────────────

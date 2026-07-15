@@ -1,6 +1,7 @@
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -42,24 +43,45 @@ namespace Optimisation_Tool.Helpers
         public static SystemContextSnap Capture()
         {
             var ctx = new SystemContextSnap();
-            try { ctx.TotalRamGb = TotalPhysicalRamGb(); } catch { }
-            try
+            ctx.TotalRamGb = ReadOrDefault("ram", "mémoire totale", TotalPhysicalRamGb, 0d);
+            if (PowerPlanManager.TryReadActivePlan(
+                out string planName, out string planGuid, out string planError))
             {
-                var (planName, planGuid) = QueryActivePowerPlan();
                 ctx.ActivePowerPlan = planName;
                 ctx.ActivePowerPlanGuid = planGuid;
             }
-            catch { }
-            try { ctx.HagsEnabled = QueryHags(); } catch { }
-            try { ctx.HvciEnabled = QueryHvci(); } catch { }
-            try { ctx.VbsRunning = QueryVbsRunning(); } catch { }
-            try { ctx.GameModeEnabled = QueryGameMode(); } catch { }
-            try { ctx.CpuName = QueryCpuName(); } catch { }
-            try { ctx.GpuName = QueryGpuName(); } catch { }
-            try { ctx.MonitorRefreshRate = QueryMonitorRefreshRate(); } catch { }
-            try { ctx.ExePaths = SnapshotExePaths(); } catch { ctx.ExePaths = new(); }
-            try { ctx.DiskByLetter = SnapshotDisks(); } catch { ctx.DiskByLetter = new(); }
+            else
+            {
+                AppLog.WriteOnce("context-power-plan", "Contexte système : " + planError);
+            }
+
+            ctx.HagsEnabled = ReadOrDefault("hags", "état HAGS", QueryHags, false);
+            ctx.HvciEnabled = ReadOrDefault("hvci", "état HVCI", QueryHvci, false);
+            ctx.VbsRunning = ReadOrDefault("vbs", "état VBS", QueryVbsRunning, false);
+            ctx.GameModeEnabled = ReadOrDefault("game-mode", "Mode Jeu", QueryGameMode, true);
+            ctx.CpuName = ReadOrDefault("cpu", "nom du CPU", QueryCpuName, "");
+            ctx.GpuName = ReadOrDefault("gpu", "nom du GPU", QueryGpuName, "");
+            ctx.MonitorRefreshRate = ReadOrDefault(
+                "monitor-refresh", "fréquence de l'écran", QueryMonitorRefreshRate, 0);
+            ctx.ExePaths = ReadOrDefault(
+                "process-paths", "chemins des processus", SnapshotExePaths,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+            ctx.DiskByLetter = ReadOrDefault(
+                "storage", "type des disques", SnapshotDisks, new Dictionary<char, StorageKind>());
             return ctx;
+        }
+
+        private static T ReadOrDefault<T>(string key, string label, Func<T> read, T fallback)
+        {
+            try
+            {
+                return read();
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("context-" + key, "Contexte système : " + label, ex);
+                return fallback;
+            }
         }
 
         // ───────────────────────── Storage (réutilise le pattern HealthCheck) ─────────────────────────
@@ -71,12 +93,15 @@ namespace Optimisation_Tool.Helpers
             {
                 foreach (ManagementObject p in ms.Get())
                 {
-                    var dlObj = p["DriveLetter"];
-                    if (dlObj == null) continue;
-                    char dl = Convert.ToChar(dlObj);
-                    if (dl == '\0') continue;
-                    int dn = Convert.ToInt32(p["DiskNumber"]);
-                    letterToDisk[char.ToUpperInvariant(dl)] = dn;
+                    using (p)
+                    {
+                        var dlObj = p["DriveLetter"];
+                        if (dlObj == null) continue;
+                        char dl = Convert.ToChar(dlObj);
+                        if (dl == '\0') continue;
+                        int dn = Convert.ToInt32(p["DiskNumber"]);
+                        letterToDisk[char.ToUpperInvariant(dl)] = dn;
+                    }
                 }
             }
 
@@ -86,13 +111,16 @@ namespace Optimisation_Tool.Helpers
             {
                 foreach (ManagementObject d in ms.Get())
                 {
-                    if (!int.TryParse(d["DeviceId"]?.ToString(), out int devId)) continue;
-                    ushort bus = Convert.ToUInt16(d["BusType"]);
-                    ushort media = Convert.ToUInt16(d["MediaType"]);   // 3=HDD, 4=SSD, 5=SCM
-                    var kind = bus == 17 ? StorageKind.NVMe
-                             : (media == 4 ? StorageKind.SsdSata
-                             : (media == 3 ? StorageKind.HDD : StorageKind.Unknown));
-                    diskKind[devId] = kind;
+                    using (d)
+                    {
+                        if (!int.TryParse(d["DeviceId"]?.ToString(), out int devId)) continue;
+                        ushort bus = Convert.ToUInt16(d["BusType"]);
+                        ushort media = Convert.ToUInt16(d["MediaType"]);   // 3=HDD, 4=SSD, 5=SCM
+                        var kind = bus == 17 ? StorageKind.NVMe
+                                 : (media == 4 ? StorageKind.SsdSata
+                                 : (media == 3 ? StorageKind.HDD : StorageKind.Unknown));
+                        diskKind[devId] = kind;
+                    }
                 }
             }
 
@@ -115,15 +143,17 @@ namespace Optimisation_Tool.Helpers
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var p in Process.GetProcesses())
             {
-                try
+                using (p)
                 {
-                    string? path = p.MainModule?.FileName;
-                    if (string.IsNullOrEmpty(path)) continue;
-                    string exe = Path.GetFileName(path);
-                    if (!dict.ContainsKey(exe)) dict[exe] = path;
+                    try
+                    {
+                        string? path = p.MainModule?.FileName;
+                        if (string.IsNullOrEmpty(path)) continue;
+                        string exe = Path.GetFileName(path);
+                        if (!dict.ContainsKey(exe)) dict[exe] = path;
+                    }
+                    catch { /* accès refusé sur certains process système — attendu */ }
                 }
-                catch { /* accès refusé sur certains process système — pas grave */ }
-                finally { try { p.Dispose(); } catch { } }
             }
             return dict;
         }
@@ -132,47 +162,22 @@ namespace Optimisation_Tool.Helpers
         private static double TotalPhysicalRamGb()
         {
             var m = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
-            return GlobalMemoryStatusEx(ref m) ? m.ullTotalPhys / 1024.0 / 1024.0 / 1024.0 : 0;
-        }
-
-        private static (string, string) QueryActivePowerPlan()
-        {
-            try
-            {
-                var psi = new ProcessStartInfo("powercfg", "/getactivescheme")
-                {
-                    UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true
-                };
-                using var p = Process.Start(psi);
-                if (p == null) return ("", "");
-                string output = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(2000);
-                // Output : "Power Scheme GUID: <guid>  (Nom du plan)"
-                var m = System.Text.RegularExpressions.Regex.Match(output, @"GUID:\s*([0-9a-f-]+)\s*\((.+?)\)");
-                return m.Success ? (m.Groups[2].Value.Trim(), m.Groups[1].Value.Trim()) : ("", "");
-            }
-            catch { return ("", ""); }
+            if (!GlobalMemoryStatusEx(ref m))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return m.ullTotalPhys / 1024.0 / 1024.0 / 1024.0;
         }
 
         private static bool QueryHags()
         {
-            try
-            {
-                using var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers");
-                return k?.GetValue("HwSchMode") is int v && v == 2;
-            }
-            catch { return false; }
+            using var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\GraphicsDrivers");
+            return k?.GetValue("HwSchMode") is int v && v == 2;
         }
 
         private static bool QueryHvci()
         {
-            try
-            {
-                using var k = Registry.LocalMachine.OpenSubKey(
-                    @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity");
-                return k?.GetValue("Enabled") is int v && v == 1;
-            }
-            catch { return false; }
+            using var k = Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity");
+            return k?.GetValue("Enabled") is int v && v == 1;
         }
 
         /// <summary>
@@ -183,47 +188,42 @@ namespace Optimisation_Tool.Helpers
         /// </summary>
         private static bool QueryVbsRunning()
         {
-            try
+            using var ms = new ManagementObjectSearcher(
+                @"root\Microsoft\Windows\DeviceGuard",
+                "SELECT VirtualizationBasedSecurityStatus FROM Win32_DeviceGuard");
+            foreach (ManagementObject o in ms.Get())
             {
-                using var ms = new ManagementObjectSearcher(
-                    @"root\Microsoft\Windows\DeviceGuard",
-                    "SELECT VirtualizationBasedSecurityStatus FROM Win32_DeviceGuard");
-                foreach (ManagementObject o in ms.Get())
+                using (o)
                     return Convert.ToInt32(o["VirtualizationBasedSecurityStatus"]) == 2;
             }
-            catch { }
             return false;
         }
 
         private static bool QueryGameMode()
         {
-            try
-            {
-                using var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\GameBar");
-                return !(k?.GetValue("AutoGameModeEnabled") is int v && v == 0);
-            }
-            catch { return true; }
+            using var k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\GameBar");
+            return !(k?.GetValue("AutoGameModeEnabled") is int v && v == 0);
         }
 
         private static string QueryCpuName()
         {
-            try
+            using var ms = new ManagementObjectSearcher("SELECT Name FROM Win32_Processor");
+            foreach (ManagementObject p in ms.Get())
             {
-                using var ms = new ManagementObjectSearcher("SELECT Name FROM Win32_Processor");
-                foreach (ManagementObject p in ms.Get()) return (p["Name"]?.ToString() ?? "").Trim();
+                using (p)
+                    return (p["Name"]?.ToString() ?? "").Trim();
             }
-            catch { }
             return "";
         }
 
         private static string QueryGpuName()
         {
-            try
+            using var ms = new ManagementObjectSearcher(
+                "SELECT Name, PNPDeviceID FROM Win32_VideoController WHERE PNPDeviceID LIKE 'PCI\\\\%'");
+            string best = "";
+            foreach (ManagementObject c in ms.Get())
             {
-                using var ms = new ManagementObjectSearcher(
-                    "SELECT Name, PNPDeviceID FROM Win32_VideoController WHERE PNPDeviceID LIKE 'PCI\\\\%'");
-                string best = "";
-                foreach (ManagementObject c in ms.Get())
+                using (c)
                 {
                     string name = (c["Name"]?.ToString() ?? "").Trim();
                     if (name.Contains("nvidia", StringComparison.OrdinalIgnoreCase) ||
@@ -232,9 +232,8 @@ namespace Optimisation_Tool.Helpers
                         return name;
                     if (string.IsNullOrEmpty(best)) best = name;
                 }
-                return best;
             }
-            catch { return ""; }
+            return best;
         }
 
         /// <summary>
@@ -248,12 +247,12 @@ namespace Optimisation_Tool.Helpers
             var mode = new DEVMODE { dmSize = (ushort)Marshal.SizeOf<DEVMODE>() };
             if (EnumDisplaySettings(null, ENUM_CURRENT_SETTINGS, ref mode))
                 return (int)mode.dmDisplayFrequency;
-            return 0;
+            throw new Win32Exception(Marshal.GetLastWin32Error());
         }
 
         // ───────────────────────── P/Invoke ─────────────────────────
         private const int ENUM_CURRENT_SETTINGS = -1;
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern bool EnumDisplaySettings(string? deviceName, int modeNum, ref DEVMODE devMode);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]

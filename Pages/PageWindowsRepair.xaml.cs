@@ -194,7 +194,7 @@ namespace Optimisation_Tool.Pages
             {
                 AppLog.Error("R\u00e9paration Windows : s\u00e9quence", ex);
                 SetCurrent("R\u00e9paration interrompue", "Une erreur interne a interrompu l'op\u00e9ration.");
-                SetSummary("La r\u00e9paration a \u00e9t\u00e9 interrompue. Le d\u00e9tail est disponible dans le journal Tweakly.");
+                SetSummary($"La r\u00e9paration a \u00e9t\u00e9 interrompue : {ex.Message}");
                 AddReportLine($"Erreur interne : {ex.Message}");
             }
             finally
@@ -303,7 +303,11 @@ namespace Optimisation_Tool.Pages
                 bool cancelled = cancellationToken.IsCancellationRequested;
                 TryKillProcess(p);
                 await WaitForExitBoundedAsync(p, TimeSpan.FromSeconds(5));
-                await Task.WhenAny(Task.WhenAll(outTask, errTask), Task.Delay(TimeSpan.FromSeconds(2)));
+                // L'annulation a deja ete traitee : on laisse au maximum 2 s aux
+                // flux du processus tue pour se vider avant de rendre la main.
+                await Task.WhenAny(
+                    Task.WhenAll(outTask, errTask),
+                    Task.Delay(TimeSpan.FromSeconds(2), CancellationToken.None));
                 AppLog.Write(cancelled
                     ? $"Réparation Windows : {step.Title} annulée par l'utilisateur."
                     : $"Réparation Windows : {step.Title} arrêtée après le délai de {FormatDuration(step.Timeout)}.");

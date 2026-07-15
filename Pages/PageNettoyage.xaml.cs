@@ -1,14 +1,11 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using Microsoft.Win32;
+using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
@@ -28,18 +25,7 @@ namespace Optimisation_Tool.Pages
         {
             public required StepUi Ui { get; init; }
             public required string RunningText { get; init; }
-            public required Func<CleanupResult> Work { get; init; }
-        }
-
-        private sealed class CleanupResult
-        {
-            public long Freed { get; init; }
-            public int Ops { get; init; }
-            public int Residues { get; init; }
-            public int Skipped { get; init; }
-            public int Errors { get; init; }
-            public string Summary { get; init; } = "";
-            public List<string> Details { get; init; } = new();
+            public required Func<CleanupOperationResult> Work { get; init; }
         }
 
         public PageNettoyage(MainWindow main)
@@ -113,14 +99,14 @@ namespace Optimisation_Tool.Pages
             {
                 SetStepRunning(step.Ui, step.RunningText);
 
-                CleanupResult result;
+                CleanupOperationResult result;
                 try
                 {
                     result = await Task.Run(step.Work);
                 }
                 catch (Exception ex)
                 {
-                    result = new CleanupResult
+                    result = new CleanupOperationResult
                     {
                         Errors = 1,
                         Summary = "Erreur",
@@ -191,7 +177,7 @@ namespace Optimisation_Tool.Pages
                 {
                     Ui = uis[ChkTemp],
                     RunningText = "Nettoyage...",
-                    Work = () => CleanFolderStep(Path.GetTempPath())
+                    Work = () => CleanupOperations.CleanFolder(Path.GetTempPath())
                 });
 
             if (ChkSystemTemp.IsChecked == true)
@@ -199,7 +185,7 @@ namespace Optimisation_Tool.Pages
                 {
                     Ui = uis[ChkSystemTemp],
                     RunningText = "Nettoyage...",
-                    Work = () => CleanFolderStep(@"C:\Windows\Temp")
+                    Work = () => CleanupOperations.CleanFolder(@"C:\Windows\Temp")
                 });
 
             if (ChkPrefetch.IsChecked == true)
@@ -207,7 +193,7 @@ namespace Optimisation_Tool.Pages
                 {
                     Ui = uis[ChkPrefetch],
                     RunningText = "Nettoyage...",
-                    Work = () => CleanFolderStep(@"C:\Windows\Prefetch")
+                    Work = () => CleanupOperations.CleanFolder(@"C:\Windows\Prefetch")
                 });
 
             if (ChkDXCache.IsChecked == true)
@@ -215,7 +201,7 @@ namespace Optimisation_Tool.Pages
                 {
                     Ui = uis[ChkDXCache],
                     RunningText = "Nettoyage...",
-                    Work = () => CleanFolderStep(Path.Combine(local, "D3DSCache"))
+                    Work = () => CleanupOperations.CleanFolder(Path.Combine(local, "D3DSCache"))
                 });
 
             if (ChkNvCache.IsChecked == true)
@@ -223,24 +209,20 @@ namespace Optimisation_Tool.Pages
                 {
                     Ui = uis[ChkNvCache],
                     RunningText = "Nettoyage...",
-                    Work = () => CombineResults(
-                        CleanFolderStep(Path.Combine(local, "NVIDIA", "DXCache")),
-                        CleanFolderStep(Path.Combine(roaming, "NVIDIA", "GLCache")))
+                    Work = () => CleanupOperationResult.Combine(
+                        CleanupOperations.CleanFolder(Path.Combine(local, "NVIDIA", "DXCache")),
+                        CleanupOperations.CleanFolder(Path.Combine(roaming, "NVIDIA", "GLCache")))
                 });
 
             if (ChkTrimSSD.IsChecked == true)
-                steps.Add(new StepPlan { Ui = uis[ChkTrimSSD], RunningText = "Optimisation...", Work = RunTrimStep });
+                steps.Add(new StepPlan { Ui = uis[ChkTrimSSD], RunningText = "Optimisation...", Work = CleanupOperations.RunTrim });
 
             if (ChkEventLogs.IsChecked == true)
                 steps.Add(new StepPlan
                 {
                     Ui = uis[ChkEventLogs],
                     RunningText = "Vidage...",
-                    Work = () =>
-                    {
-                        int n = ClearEventLogs();
-                        return new CleanupResult { Ops = n, Summary = $"{n} journal(aux) traité(s)" };
-                    }
+                    Work = CleanupOperations.ClearEventLogs
                 });
 
             if (ChkResidues.IsChecked == true)
@@ -248,16 +230,7 @@ namespace Optimisation_Tool.Pages
                 {
                     Ui = uis[ChkResidues],
                     RunningText = "Recherche...",
-                    Work = () =>
-                    {
-                        int n = CleanSoftwareResidues();
-                        return new CleanupResult
-                        {
-                            Ops = n,
-                            Residues = n,
-                            Summary = n > 0 ? $"{n} résidu(s)" : "0 résidu sûr"
-                        };
-                    }
+                    Work = CleanupOperations.CleanSoftwareResidues
                 });
 
             return steps;
@@ -299,7 +272,7 @@ namespace Optimisation_Tool.Pages
             ui.Progress.SetResourceReference(Control.ForegroundProperty, "ThAccentIcon");
         }
 
-        private static void SetStepDone(StepUi ui, CleanupResult result)
+        private static void SetStepDone(StepUi ui, CleanupOperationResult result)
         {
             ui.Progress.IsIndeterminate = false;
             ui.Progress.Value = 100;
@@ -325,268 +298,6 @@ namespace Optimisation_Tool.Pages
                 : "Terminé - 0 octet à nettoyer";
             if (errors > 0) summary += $" | {errors} erreur(s)";
             return summary;
-        }
-
-        private static CleanupResult CleanFolderStep(string path)
-        {
-            if (!Directory.Exists(path))
-                return new CleanupResult { Summary = "Introuvable" };
-
-            long freed = 0;
-            int ops = 0;
-            int skipped = 0;
-            var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-
-            IEnumerable<string> files;
-            try { files = Directory.EnumerateFiles(path, "*", opts).ToList(); }
-            catch { return new CleanupResult { Errors = 1, Summary = "Accès refusé" }; }
-
-            foreach (var f in files)
-            {
-                try
-                {
-                    var fi = new FileInfo(f);
-                    long len = fi.Exists ? fi.Length : 0;
-                    fi.Delete();
-                    freed += len;
-                    ops++;
-                }
-                catch { skipped++; }
-            }
-
-            try
-            {
-                foreach (var d in Directory.EnumerateDirectories(path).ToList())
-                {
-                    try { Directory.Delete(d, true); ops++; }
-                    catch { skipped++; }
-                }
-            }
-            catch { skipped++; }
-
-            string summary = FormatStepSummary(freed, ops, skipped, errors: 0);
-
-            return new CleanupResult { Freed = freed, Ops = ops, Skipped = skipped, Summary = summary };
-        }
-
-        private static CleanupResult CombineResults(params CleanupResult[] results)
-        {
-            long freed = results.Sum(r => r.Freed);
-            int ops = results.Sum(r => r.Ops);
-            int skipped = results.Sum(r => r.Skipped);
-            int errors = results.Sum(r => r.Errors);
-            var details = results.SelectMany(r => r.Details).ToList();
-            string summary = FormatStepSummary(freed, ops, skipped, errors);
-
-            return new CleanupResult { Freed = freed, Ops = ops, Skipped = skipped, Errors = errors, Summary = summary, Details = details };
-        }
-
-        private static CleanupResult RunTrimStep()
-        {
-            int total = 0;
-            int okCount = 0;
-            int skipped = 0;
-            int errors = 0;
-            var details = new List<string>();
-
-            foreach (var di in DriveInfo.GetDrives())
-            {
-                if (di.DriveType != DriveType.Fixed || !di.IsReady) continue;
-
-                total++;
-                var letter = di.Name.TrimEnd('\\');
-                try
-                {
-                    var psi = new ProcessStartInfo("defrag", $"{letter} /L")
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        StandardOutputEncoding = Encoding.UTF8,
-                    };
-                    using var p = Process.Start(psi);
-                    _ = (p?.StandardOutput.ReadToEnd() ?? "") + (p?.StandardError.ReadToEnd() ?? "");
-                    p?.WaitForExit(120_000);
-
-                    bool ok = p != null && p.ExitCode == 0;
-                    if (ok) okCount++; else skipped++;
-                    details.Add(ok
-                        ? $"TRIM (optimisation SSD) - {letter} : terminé"
-                        : $"TRIM - {letter} : ignoré (volume non compatible ou occupé)");
-                }
-                catch (Exception ex)
-                {
-                    errors++;
-                    details.Add($"TRIM - {letter} : erreur ({ex.Message})");
-                }
-            }
-
-            string summary = total == 0 ? "0 volume" : $"{okCount}/{total} volume(s)";
-            if (skipped > 0) summary += $", {skipped} ignoré(s)";
-            if (errors > 0) summary += $" | {errors} erreur(s)";
-            return new CleanupResult { Ops = total, Skipped = skipped, Errors = errors, Summary = summary, Details = details };
-        }
-
-        private static string FormatStepSummary(long freed, int ops, int skipped, int errors)
-        {
-            var parts = new List<string>();
-            parts.Add(freed > 0 ? FormatBytes(freed) : "0 octet");
-            if (ops > 0) parts.Add($"{ops} élément(s)");
-            if (skipped > 0) parts.Add($"{skipped} ignoré(s)");
-            if (errors > 0) parts.Add($"{errors} erreur(s)");
-            return string.Join(" | ", parts);
-        }
-
-        private static int ClearEventLogs()
-        {
-            int count = 0;
-            try
-            {
-                using var listProc = Process.Start(new ProcessStartInfo("wevtutil", "el")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true
-                });
-                if (listProc == null) return 0;
-
-                var logs = listProc.StandardOutput.ReadToEnd();
-                listProc.WaitForExit(15_000);
-
-                foreach (var log in logs.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var name = log.Trim();
-                    if (string.IsNullOrEmpty(name)) continue;
-                    try
-                    {
-                        using var p = Process.Start(new ProcessStartInfo("wevtutil", $"cl \"{name}\"")
-                        {
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        });
-                        p?.WaitForExit(5_000);
-                        count++;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-            return count;
-        }
-
-        private static int CleanSoftwareResidues()
-        {
-            int n = 0;
-            try { n += CleanOrphanUninstallEntries(); } catch { }
-
-            try
-            {
-                int shortcuts = 0;
-                var th = new Thread(() => { try { shortcuts = CleanBrokenShortcuts(); } catch { } });
-                th.SetApartmentState(ApartmentState.STA);
-                th.IsBackground = true;
-                th.Start();
-                th.Join(20_000);
-                n += shortcuts;
-            }
-            catch { }
-            return n;
-        }
-
-        private static int CleanOrphanUninstallEntries()
-        {
-            int n = 0;
-            var roots = new (RegistryKey hive, string path)[]
-            {
-                (Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-                (Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
-                (Registry.CurrentUser,  @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
-            };
-
-            foreach (var (hive, path) in roots)
-            {
-                try
-                {
-                    using var root = hive.OpenSubKey(path, writable: true);
-                    if (root == null) continue;
-
-                    foreach (var sub in root.GetSubKeyNames())
-                    {
-                        try
-                        {
-                            string? name, loc;
-                            using (var k = root.OpenSubKey(sub))
-                            {
-                                if (k == null) continue;
-                                name = k.GetValue("DisplayName") as string;
-                                loc = k.GetValue("InstallLocation") as string;
-                            }
-
-                            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(loc)) continue;
-                            loc = loc.Trim().Trim('"').TrimEnd('\\');
-                            if (loc.Length < 4 || !loc.Contains(":\\")) continue;
-                            var drive = Path.GetPathRoot(loc);
-                            if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive)) continue;
-                            if (Directory.Exists(loc)) continue;
-
-                            root.DeleteSubKeyTree(sub, throwOnMissingSubKey: false);
-                            n++;
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-            return n;
-        }
-
-        private static int CleanBrokenShortcuts()
-        {
-            int n = 0;
-            var dirs = new[]
-            {
-                Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
-                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
-            }.Where(d => !string.IsNullOrEmpty(d)).Distinct();
-
-            dynamic? shell;
-            try
-            {
-                var t = Type.GetTypeFromProgID("WScript.Shell");
-                if (t == null) return 0;
-                shell = Activator.CreateInstance(t);
-            }
-            catch { return 0; }
-            if (shell == null) return 0;
-
-            var opts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-            foreach (var d in dirs)
-            {
-                if (!Directory.Exists(d)) continue;
-                IEnumerable<string> lnks;
-                try { lnks = Directory.EnumerateFiles(d, "*.lnk", opts).ToList(); }
-                catch { continue; }
-
-                foreach (var lnk in lnks)
-                {
-                    try
-                    {
-                        dynamic sc = shell.CreateShortcut(lnk);
-                        string target = sc.TargetPath as string ?? "";
-                        if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
-                        var drive = Path.GetPathRoot(target);
-                        if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive)) continue;
-                        if (File.Exists(target)) continue;
-                        File.Delete(lnk);
-                        n++;
-                    }
-                    catch { }
-                }
-            }
-            return n;
         }
 
         private static string FormatBytes(long bytes)

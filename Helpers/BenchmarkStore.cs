@@ -34,7 +34,11 @@ namespace Optimisation_Tool.Helpers
                 if (!File.Exists(FilePath)) return new();
                 return JsonSerializer.Deserialize<List<BenchmarkResult>>(File.ReadAllText(FilePath), _opt) ?? new();
             }
-            catch { return new(); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("benchmark-store-load", "Historique benchmark : lecture impossible", ex);
+                return new();
+            }
         }
 
         // Écriture ATOMIQUE (v1.4.3) : on écrit d'abord dans <fichier>.tmp puis on remplace
@@ -49,7 +53,10 @@ namespace Optimisation_Tool.Helpers
                 File.WriteAllText(tmp, JsonSerializer.Serialize(list, _opt));
                 File.Move(tmp, FilePath, overwrite: true);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.Error("Historique benchmark : enregistrement impossible", ex);
+            }
         }
 
         public static void Append(BenchmarkResult r)
@@ -72,7 +79,11 @@ namespace Optimisation_Tool.Helpers
         public static void Clear()
         {
             try { if (File.Exists(FilePath)) File.Delete(FilePath); }
-            catch { /* fallback : écrase avec liste vide */ try { Save(new()); } catch { } }
+            catch (Exception ex)
+            {
+                AppLog.Error("Historique benchmark : suppression impossible", ex);
+                Save(new());
+            }
         }
 
         /// <summary>Comparaison « a → b » (b plus récent) — produit un delta % et un verdict.</summary>

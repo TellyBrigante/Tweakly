@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using Microsoft.Win32;
 
 namespace Optimisation_Tool.Helpers
@@ -38,19 +37,25 @@ namespace Optimisation_Tool.Helpers
             // 1. Plan d'alimentation pas en mode performances
             try
             {
-                using var p = Process.Start(new ProcessStartInfo("powercfg", "/getactivescheme")
-                { UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true });
-                var outp = (p?.StandardOutput.ReadToEnd() ?? "").ToLowerInvariant();
-                p?.WaitForExit(3000);
-                if (outp.Length > 0 && !outp.Contains(HighPerfGuid) && !outp.Contains(UltimateGuid))
-                    list.Add(new Finding
+                if (PowerPlanManager.TryReadActivePlan(out _, out string activeGuid, out string error))
+                {
+                    if (!activeGuid.Equals(HighPerfGuid, StringComparison.OrdinalIgnoreCase)
+                        && !activeGuid.Equals(UltimateGuid, StringComparison.OrdinalIgnoreCase))
                     {
-                        Text = "Ton plan d'alimentation Windows n'est pas en mode performances — "
-                             + "le CPU baisse sa fréquence dès qu'il le peut, ce qui crée des irrégularités.",
-                        ActionLabel = "Corriger dans Optimisations > CPU", NavTag = "CPU",
-                    });
+                        list.Add(new Finding
+                        {
+                            Text = "Ton plan d'alimentation Windows n'est pas en mode performances — "
+                                 + "le CPU baisse sa fréquence dès qu'il le peut, ce qui crée des irrégularités.",
+                            ActionLabel = "Corriger dans Optimisations > CPU", NavTag = "CPU",
+                        });
+                    }
+                }
+                else
+                {
+                    AppLog.WriteOnce("bench-advisor-power-plan", "Conseils benchmark : " + error);
+                }
             }
-            catch { }
+            catch (Exception ex) { AppLog.ErrorOnce("bench-advisor-power-plan-exception", "Conseils benchmark : plan d'alimentation indisponible", ex); }
 
             // 2. Game DVR : capture vidéo permanente en arrière-plan
             try
@@ -66,7 +71,7 @@ namespace Optimisation_Tool.Helpers
                         ActionLabel = "Corriger dans Optimisations > Windows", NavTag = "Windows",
                     });
             }
-            catch { }
+            catch (Exception ex) { AppLog.ErrorOnce("bench-advisor-game-dvr", "Conseils benchmark : état Game DVR indisponible", ex); }
 
             // 6. Programmes lancés avec Windows — UNIQUEMENT les ACTIFS.
             // ⚠️ PIÈGE (vécu, capture utilisateur à l'appui ET déjà documenté dans
@@ -99,7 +104,7 @@ namespace Optimisation_Tool.Helpers
                     });
                 }
             }
-            catch { }
+            catch (Exception ex) { AppLog.ErrorOnce("bench-advisor-startup", "Conseils benchmark : programmes au démarrage indisponibles", ex); }
 
             return list;
         }
@@ -126,7 +131,10 @@ namespace Optimisation_Tool.Helpers
                     names.Add(n);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("bench-advisor-startup-key:" + runPath, "Conseils benchmark : clé de démarrage inaccessible", ex);
+            }
         }
     }
 }

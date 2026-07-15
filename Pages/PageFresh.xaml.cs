@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -17,32 +16,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Media;
 using Microsoft.Win32;
 using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
-    // ── Convertisseur statut → couleur (conservé pour compatibilité interne) ─
-
-    public sealed class StatusToColorConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return (value?.ToString() ?? "") switch
-            {
-                var s when s.StartsWith("✓") => ThemeManager.Brush("ThOk"),
-                var s when s.StartsWith("✗") => ThemeManager.Brush("ThCrit"),
-                "En cours…"                  => ThemeManager.Brush("ThAccentIcon"),
-                "En attente"                 => ThemeManager.Brush("ThTextDim"),
-                _                            => ThemeManager.Brush("ThTextBody"),
-            };
-        }
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-            => throw new NotImplementedException();
-    }
-
     // ── Modèle ligne ─────────────────────────────────────────────────────────
 
     public sealed class FreshAppItem : INotifyPropertyChanged
@@ -366,74 +345,13 @@ namespace Optimisation_Tool.Pages
 
         private static List<FreshAppItem> LoadFromRegistry()
         {
-            var result = new List<FreshAppItem>();
-            var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            string[] paths =
-            {
-                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-                @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-            };
-
-            foreach (var path in paths)
-            {
-                try
+            return InstalledApplicationInventory.Read()
+                .Select(app => new FreshAppItem
                 {
-                    using var root = RegistryKey
-                        .OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64)
-                        .OpenSubKey(path);
-                    if (root == null) continue;
-                    foreach (var sub in root.GetSubKeyNames())
-                    {
-                        try
-                        {
-                            using var k = root.OpenSubKey(sub);
-                            if (k == null) continue;
-                            var item = RegKeyToFreshItem(k);
-                            if (item != null && seen.Add(item.Name))
-                                result.Add(item);
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-
-            try
-            {
-                using var root = Registry.CurrentUser.OpenSubKey(
-                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
-                if (root != null)
-                    foreach (var sub in root.GetSubKeyNames())
-                    {
-                        try
-                        {
-                            using var k = root.OpenSubKey(sub);
-                            if (k == null) continue;
-                            var item = RegKeyToFreshItem(k);
-                            if (item != null && seen.Add(item.Name))
-                                result.Add(item);
-                        }
-                        catch { }
-                    }
-            }
-            catch { }
-
-            return result.OrderBy(a => a.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        }
-
-        private static FreshAppItem? RegKeyToFreshItem(RegistryKey k)
-        {
-            var name = k.GetValue("DisplayName")?.ToString()?.Trim();
-            if (string.IsNullOrEmpty(name)) return null;
-            if (k.GetValue("SystemComponent") is int sc && sc == 1) return null;
-            if (Regex.IsMatch(name, @"^KB\d{6,}", RegexOptions.IgnoreCase))        return null;
-            if (name.StartsWith("Security Update", StringComparison.OrdinalIgnoreCase)) return null;
-            if (name.StartsWith("Update for",      StringComparison.OrdinalIgnoreCase)) return null;
-            if (name.StartsWith("Hotfix for",      StringComparison.OrdinalIgnoreCase)) return null;
-
-            var ver = k.GetValue("DisplayVersion")?.ToString()?.Trim() ?? "";
-            return new FreshAppItem { Name = name, Version = ver };
+                    Name = app.Name,
+                    Version = app.Version,
+                })
+                .ToList();
         }
 
         // ── Winget : dictionnaire Nom→(ID, Version) du catalogue ─────────────
@@ -444,13 +362,12 @@ namespace Optimisation_Tool.Pages
 
             try
             {
-                using var pChk = Process.Start(new ProcessStartInfo("winget", "--version")
+                ProcessCommandResult version = ProcessCommand.Run("winget", "--version", 5_000);
+                if (!version.Success)
                 {
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                });
-                pChk?.WaitForExit(5_000);
-                if (pChk == null || pChk.ExitCode != 0) return (map, false);
+                    AppLog.WriteOnce("fresh-winget-version", "Pack Réinstallation : Winget indisponible : " + version.FailureDescription);
+                    return (map, false);
+                }
 
                 // Essai 1 : --source winget (catalogue uniquement, pas les entrées ARP)
                 // Essai 2 : sans --source (fallback pour winget < 1.6)
@@ -468,30 +385,24 @@ namespace Optimisation_Tool.Pages
                     }
                 }
             }
-            catch { return (map, false); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("fresh-winget-map", "Pack Réinstallation : catalogue Winget indisponible", ex);
+                return (map, false);
+            }
 
             return (map, true);
         }
 
         private static string RunWingetCommand(string arguments)
         {
-            try
-            {
-                using var p = Process.Start(new ProcessStartInfo("winget", arguments)
-                {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                });
-                if (p == null) return "";
-                var t = Task.Run(() => p.StandardOutput.ReadToEnd());
-                Task.Run(() => p.StandardError.ReadToEnd());   // drain stderr
-                p.WaitForExit(60_000);
-                return t.GetAwaiter().GetResult();
-            }
-            catch { return ""; }
+            ProcessCommandResult result = ProcessCommand.Run("winget", arguments, 60_000);
+            if (result.Success) return result.Output;
+
+            string operation = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "commande";
+            AppLog.WriteOnce("fresh-winget-command:" + operation,
+                $"Pack Réinstallation : Winget {operation} échoué : {result.FailureDescription}");
+            return "";
         }
 
         private static void ParseWingetOutputToMap(string output,
@@ -545,8 +456,7 @@ namespace Optimisation_Tool.Pages
 
                 // Garder uniquement les vraies IDs catalogue winget (ex. "7zip.7zip")
                 if (string.IsNullOrEmpty(name)) continue;
-                if (!id.Contains('.'))          continue;   // pas une ID catalogue
-                if (id.Contains('\\'))          continue;   // entrée ARP registre
+                if (!WingetCli.IsValidPackageId(id)) continue;
 
                 var ver = "";
                 if (verCol > 0 && line.Length > verCol)
@@ -611,7 +521,7 @@ namespace Optimisation_Tool.Pages
                                  .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries)
                                  .FirstOrDefault() ?? "";
 
-                    if (!id.Contains('.') || id.Contains('\\')) continue;
+                    if (!WingetCli.IsValidPackageId(id)) continue;
 
                     // Match exact ou début de nom
                     if (name.Equals(appName, StringComparison.OrdinalIgnoreCase) ||
@@ -622,7 +532,10 @@ namespace Optimisation_Tool.Pages
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("fresh-winget-search", "Pack Réinstallation : recherche Winget impossible", ex);
+            }
             return "";
         }
 
@@ -647,6 +560,7 @@ namespace Optimisation_Tool.Pages
             _main.Log($"Pack Réinstallation : début téléchargement de {selected.Count} app(s).");
 
             int done = 0;
+            int downloadFailures = 0;
             foreach (var item in selected)
             {
                 // ── Résolution de l'ID Winget ────────────────────────────────
@@ -672,31 +586,34 @@ namespace Optimisation_Tool.Pages
                     }
                 }
 
+                if (!WingetCli.IsValidPackageId(wingetId))
+                {
+                    item.Status = "✗ ID Winget invalide";
+                    _main.Log($"Pack Réinstallation : ID Winget invalide pour {item.Name}, élément ignoré.");
+                    done++;
+                    TxtDlStatus.Text = $"{done} / {selected.Count}";
+                    SetBar(BarDl, done, selected.Count);
+                    continue;
+                }
+
                 // ── Téléchargement ───────────────────────────────────────────
                 TxtDlApp.Text = $"Téléchargement : {item.Name}";
                 _main.Log($"Pack Réinstallation : winget download → {item.Name} ({wingetId})");
 
-                await Task.Run(() =>
+                ProcessCommandResult download = await Task.Run(() => ProcessCommand.Run(
+                    "winget",
+                    $"download --id \"{wingetId}\" -l \"{dlFolder}\" --accept-package-agreements --accept-source-agreements",
+                    120_000));
+                if (download.Success)
                 {
-                    using var p = Process.Start(new ProcessStartInfo(
-                        "winget",
-                        $"download --id \"{wingetId}\" -l \"{dlFolder}\" --accept-package-agreements --accept-source-agreements")
-                    {
-                        UseShellExecute        = false,
-                        CreateNoWindow         = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError  = true,
-                        StandardOutputEncoding = Encoding.UTF8,
-                    });
-                    if (p == null) return;
-
-                    // Drainer stdout ET stderr obligatoirement — sinon deadlock pipe buffer
-                    var outTask = Task.Run(() => p.StandardOutput.ReadToEnd());
-                    var errTask = Task.Run(() => p.StandardError.ReadToEnd());
-                    p.WaitForExit(120_000);
-                    outTask.GetAwaiter().GetResult();
-                    errTask.GetAwaiter().GetResult();
-                });
+                    item.Status = "✓ Téléchargée";
+                }
+                else
+                {
+                    downloadFailures++;
+                    item.Status = "✗ Téléchargement impossible";
+                    _main.Log($"Pack Réinstallation : téléchargement de {item.Name} échoué — {download.FailureDescription}");
+                }
 
                 done++;
                 TxtDlStatus.Text = $"{done} / {selected.Count}";
@@ -747,8 +664,11 @@ namespace Optimisation_Tool.Pages
             // Étape 3 : afficher résultat
             if (zipOk)
             {
-                TxtZipTitle.Text = "✓  ZIP prêt !";
-                TxtZipTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
+                TxtZipTitle.Text = downloadFailures == 0
+                    ? "✓  ZIP prêt !"
+                    : $"ZIP prêt — {downloadFailures} téléchargement(s) manquant(s)";
+                TxtZipTitle.SetResourceReference(TextBlock.ForegroundProperty,
+                    downloadFailures == 0 ? "ThOk" : "ThWarn");
                 TxtZipPath.Text        = _zipPath;
                 _main.Log($"Pack Réinstallation : ZIP créé → {_zipPath}");
             }
@@ -814,18 +734,29 @@ namespace Optimisation_Tool.Pages
                 {
                     using var zip = ZipFile.OpenRead(_zipPath);
                     var entry = zip.Entries.FirstOrDefault(e => e.Name == "manifest.json")
-                        ?? throw new Exception("manifest.json introuvable dans le ZIP.");
+                        ?? throw new InvalidDataException("manifest.json introuvable dans le ZIP.");
+                    if (entry.Length > 2_000_000)
+                        throw new InvalidDataException("manifest.json dépasse 2 000 000 octets.");
 
                     using var stream = entry.Open();
                     using var reader = new StreamReader(stream, Encoding.UTF8);
                     var json = reader.ReadToEnd();
                     return JsonSerializer.Deserialize<ManifestData>(json,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                        ?? throw new Exception("manifest.json invalide.");
+                        ?? throw new InvalidDataException("manifest.json invalide.");
                 });
+
+                if (manifest.Apps.Count > 1000)
+                    throw new InvalidDataException("Le manifeste contient plus de 1 000 applications.");
 
                 foreach (var a in manifest.Apps.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
                 {
+                    if (string.IsNullOrWhiteSpace(a.Name) || a.Name.Length > 256)
+                        throw new InvalidDataException("Le manifeste contient un nom d'application invalide.");
+                    if (!string.IsNullOrEmpty(a.WingetId) && !WingetCli.IsValidPackageId(a.WingetId))
+                        throw new InvalidDataException($"ID Winget invalide pour {a.Name}.");
+                    if (a.Version.Length > 128)
+                        throw new InvalidDataException($"Version invalide pour {a.Name}.");
                     _restoreItems.Add(new FreshAppItem
                     {
                         Name       = a.Name,
@@ -858,7 +789,10 @@ namespace Optimisation_Tool.Pages
             var toInstall = _restoreItems.Where(i => i.IsSelected).ToList();
             if (toInstall.Count == 0) return;
 
-            _cts = new CancellationTokenSource();
+            _cts?.Dispose();
+            var operationCts = new CancellationTokenSource();
+            CancellationToken token = operationCts.Token;
+            _cts = operationCts;
             GoToStep(4);
             TxtInstTitle.Text = "Installation en cours…";
             TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThTextTitle");
@@ -871,74 +805,95 @@ namespace Optimisation_Tool.Pages
             bool extracted = false;
             try
             {
-                await Task.Run(() => ZipFile.ExtractToDirectory(_zipPath, extractDir));
-                extracted = true;
-            }
-            catch { }
+                try
+                {
+                    await Task.Run(() => ZipFile.ExtractToDirectory(_zipPath, extractDir));
+                    extracted = true;
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error("Pack Réinstallation : extraction du ZIP", ex);
+                }
 
-            foreach (var item in toInstall)
-            {
-                item.Status = "En attente";
-            }
+                foreach (var item in toInstall)
+                {
+                    item.Status = "En attente";
+                }
 
-            int done = 0;
-            foreach (var item in toInstall)
-            {
-                if (_cts.Token.IsCancellationRequested) { item.Status = "— Annulé"; continue; }
+                int done = 0;
+                foreach (var item in toInstall)
+                {
+                    if (token.IsCancellationRequested) { item.Status = "— Annulé"; continue; }
 
-                item.Status         = "En cours…";
-                TxtInstApp.Text     = $"Installation : {item.Name}";
+                    item.Status         = "En cours…";
+                    TxtInstApp.Text     = $"Installation : {item.Name}";
+                    SetBar(BarInst, done, toInstall.Count);
+
+                    var (result, debug) = await Task.Run(() =>
+                        InstallApp(item, extracted ? extractDir : null, token));
+
+                    item.Status = result switch
+                    {
+                        InstallResult.Ok        => "✓ Installé",
+                        InstallResult.Already   => "✓ Déjà présent",
+                        InstallResult.Cancelled => "— Annulé",
+                        _                       => "✗ Échec",
+                    };
+                    _main.Log($"Pack Réinstallation : [{item.Status}] {item.Name} — {debug}");
+                    done++;
+                    TxtInstStatus.Text = $"{done} / {toInstall.Count}";
+                }
+
                 SetBar(BarInst, done, toInstall.Count);
 
-                var (result, debug) = await Task.Run(() =>
-                    InstallApp(item, extracted ? extractDir : null, _cts.Token));
+                int failed    = toInstall.Count(i => i.Status.StartsWith("✗"));
+                int succeeded = toInstall.Count(i => i.Status.StartsWith("✓"));
 
-                item.Status = result switch
+                if (token.IsCancellationRequested)
                 {
-                    InstallResult.Ok        => "✓ Installé",
-                    InstallResult.Already   => "✓ Déjà présent",
-                    InstallResult.Cancelled => "— Annulé",
-                    _                       => "✗ Échec",
-                };
-                _main.Log($"Pack Réinstallation : [{item.Status}] {item.Name} — {debug}");
-                done++;
-                TxtInstStatus.Text = $"{done} / {toInstall.Count}";
+                    TxtInstTitle.Text       = $"Annulé — {done} / {toInstall.Count} traitée(s).";
+                    TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+                }
+                else if (failed == 0)
+                {
+                    TxtInstTitle.Text       = "✓  Tout est installé !";
+                    TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
+                }
+                else if (succeeded == 0)
+                {
+                    TxtInstTitle.Text       = $"✗  Échec — {failed} application(s) non installée(s).";
+                    TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+                }
+                else
+                {
+                    TxtInstTitle.Text       = $"⚠  Partiel — {succeeded} OK, {failed} échec(s).";
+                    TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
+                }
+
+                _main.Log($"Pack Réinstallation : terminé — {succeeded} OK, {failed} échec(s), {done} traitée(s).");
             }
-
-            SetBar(BarInst, done, toInstall.Count);
-
-            int failed    = toInstall.Count(i => i.Status.StartsWith("✗"));
-            int succeeded = toInstall.Count(i => i.Status.StartsWith("✓"));
-
-            if (_cts.Token.IsCancellationRequested)
+            catch (Exception ex)
             {
-                TxtInstTitle.Text       = $"Annulé — {done} / {toInstall.Count} traitée(s).";
+                AppLog.Error("Pack Réinstallation : installation", ex);
+                TxtInstTitle.Text = "Échec de l'installation.";
                 TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+                _main.Log($"Pack Réinstallation : erreur — {ex.Message}");
             }
-            else if (failed == 0)
+            finally
             {
-                TxtInstTitle.Text       = "✓  Tout est installé !";
-                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThOk");
-            }
-            else if (succeeded == 0)
-            {
-                TxtInstTitle.Text       = $"✗  Échec — {failed} application(s) non installée(s).";
-                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
-            }
-            else
-            {
-                TxtInstTitle.Text       = $"⚠  Partiel — {succeeded} OK, {failed} échec(s).";
-                TxtInstTitle.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
-            }
+                TxtInstApp.Text = "";
+                BtnCancelInst.IsEnabled = false;
+                _main.ClearTaskbarProgress();
+                if (extracted)
+                {
+                    try { Directory.Delete(extractDir, recursive: true); }
+                    catch (Exception ex) { AppLog.Error("Pack Réinstallation : nettoyage temporaire", ex); }
+                }
 
-            TxtInstApp.Text         = "";
-            BtnCancelInst.IsEnabled = false;
-            _main.ClearTaskbarProgress();
-
-            // Nettoyage dossier temp
-            if (extracted) try { Directory.Delete(extractDir, recursive: true); } catch { }
-
-            _main.Log($"Pack Réinstallation : terminé — {succeeded} OK, {failed} échec(s), {done} traitée(s).");
+                if (ReferenceEquals(_cts, operationCts))
+                    _cts = null;
+                operationCts.Dispose();
+            }
         }
 
         private void BtnCancelInst_Click(object sender, RoutedEventArgs e)
@@ -963,17 +918,20 @@ namespace Optimisation_Tool.Pages
             // codes winget « déjà installé / rien à faire »
             static bool IsAlready(int ec) => ec == -1978335109 || ec == -1978335146 || ec == -1978335189;
 
-            // ── 1. winget install DÉ-ÉLEVÉ (via cmd) — gère le user-scope ─────
+            // ── 1. winget install DÉ-ÉLEVÉ — gère le user-scope ──────────────
             //    winget connaît les bons switches silencieux par paquet et installe
             //    Discord/Spotify dans le bon profil utilisateur (pas en admin).
             if (!string.IsNullOrEmpty(item.WingetId))
             {
-                var args = $"/c winget install --id \"{item.WingetId}\" --silent " +
+                if (!WingetCli.IsValidPackageId(item.WingetId))
+                    return (InstallResult.Failed, "ID Winget invalide");
+
+                var args = $"install --id \"{item.WingetId}\" --silent " +
                            "--accept-package-agreements --accept-source-agreements --disable-interactivity";
                 try
                 {
                     int ec = DeElevatedLauncher.StartAndWait(
-                        Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                        WingetCli.UserExecutablePath,
                         args, 300_000, null);
                     log.Append($"winget-userctx ec={ec}; ");
                     if (ec == 0)            return (InstallResult.Ok,      log.ToString());
@@ -1007,18 +965,39 @@ namespace Optimisation_Tool.Pages
                         if (p == null) continue;
 
                         var outTask = Task.Run(() => p.StandardOutput.ReadToEnd());
-                        Task.Run(() => p.StandardError.ReadToEnd());
+                        var errTask = Task.Run(() => p.StandardError.ReadToEnd());
+                        var elapsed = Stopwatch.StartNew();
+                        bool timedOut = false;
 
                         while (!p.WaitForExit(500))
                         {
-                            if (!ct.IsCancellationRequested) continue;
-                            try { p.Kill(entireProcessTree: true); } catch { }
-                            return (InstallResult.Cancelled, log + "annulé");
+                            if (ct.IsCancellationRequested)
+                            {
+                                try { p.Kill(entireProcessTree: true); }
+                                catch (Exception ex) { log.Append($"arrêt impossible={ex.Message}; "); }
+                                _ = outTask.GetAwaiter().GetResult();
+                                _ = errTask.GetAwaiter().GetResult();
+                                return (InstallResult.Cancelled, log + "annulé");
+                            }
+                            if (elapsed.ElapsedMilliseconds < 300_000) continue;
+
+                            timedOut = true;
+                            try { p.Kill(entireProcessTree: true); }
+                            catch (Exception ex) { log.Append($"arrêt après délai impossible={ex.Message}; "); }
+                            break;
                         }
 
                         var stdout = outTask.GetAwaiter().GetResult();
+                        var stderr = errTask.GetAwaiter().GetResult();
+                        if (timedOut)
+                        {
+                            log.Append("winget-admin délai 300000 ms dépassé; ");
+                            continue;
+                        }
                         var ec     = p.ExitCode;
                         log.Append($"winget-admin{(scope.Length > 0 ? "(machine)" : "")} ec={ec}; ");
+                        if (ec != 0 && !string.IsNullOrWhiteSpace(stderr))
+                            log.Append($"erreur={stderr.Trim()}; ");
 
                         if (ec == 0)       return (InstallResult.Ok,      log.ToString());
                         if (IsAlready(ec)) return (InstallResult.Already, log.ToString());
@@ -1076,26 +1055,24 @@ namespace Optimisation_Tool.Pages
                 // ── MSI : per-machine → msiexec élevé, silencieux ────────────
                 if (ext == ".msi")
                 {
-                    using var p = Process.Start(new ProcessStartInfo(
-                        "msiexec", $"/i \"{file}\" /qn /norestart")
-                    { UseShellExecute = true });
-                    p?.WaitForExit(180_000);
+                    ProcessCommandResult install = ProcessCommand.Run(
+                        "msiexec", $"/i \"{file}\" /qn /norestart", 180_000);
                     if (ct.IsCancellationRequested) return (InstallResult.Cancelled, "annulé");
-                    return (p?.ExitCode == 0 ? InstallResult.Ok : InstallResult.Failed,
-                            $"msiexec {name} ec={p?.ExitCode}");
+                    return (install.Success ? InstallResult.Ok : InstallResult.Failed,
+                            $"msiexec {name} : {(install.Success ? "terminé" : install.FailureDescription)}");
                 }
 
                 // ── MSIX / APPX : Add-AppxPackage ────────────────────────────
                 if (ext == ".msix" || ext == ".msixbundle")
                 {
-                    using var p = Process.Start(new ProcessStartInfo(
+                    string escapedPath = file.Replace("'", "''", StringComparison.Ordinal);
+                    ProcessCommandResult install = ProcessCommand.Run(
                         "powershell",
-                        $"-NoProfile -NonInteractive -Command \"Add-AppxPackage -Path '{file}'\"")
-                    { UseShellExecute = false, CreateNoWindow = true });
-                    p?.WaitForExit(180_000);
+                        $"-NoProfile -NonInteractive -Command \"Add-AppxPackage -Path '{escapedPath}'\"",
+                        180_000);
                     if (ct.IsCancellationRequested) return (InstallResult.Cancelled, "annulé");
-                    return (p?.ExitCode == 0 ? InstallResult.Ok : InstallResult.Failed,
-                            $"Add-AppxPackage {name} ec={p?.ExitCode}");
+                    return (install.Success ? InstallResult.Ok : InstallResult.Failed,
+                            $"Add-AppxPackage {name} : {(install.Success ? "terminé" : install.FailureDescription)}");
                 }
 
                 // ── EXE : essais silencieux DÉ-ÉLEVÉS ────────────────────────
@@ -1120,11 +1097,20 @@ namespace Optimisation_Tool.Pages
                         {
                             using var p = Process.Start(new ProcessStartInfo(file, flag)
                             { UseShellExecute = true });
-                            p?.WaitForExit(120_000);
-                            if (p != null && p.HasExited && p.ExitCode == 0)
+                            if (p == null) continue;
+                            if (!p.WaitForExit(120_000))
+                            {
+                                try { p.Kill(entireProcessTree: true); }
+                                catch (Exception ex) { AppLog.ErrorOnce("fresh-local-installer-kill", "Pack Réinstallation : arrêt d'un installeur expiré impossible", ex); }
+                                continue;
+                            }
+                            if (p.ExitCode == 0)
                                 return (InstallResult.Ok, $"local élevé {name} {flag} ec=0");
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            AppLog.ErrorOnce("fresh-local-installer-elevated", "Pack Réinstallation : installeur local élevé impossible", ex);
+                        }
                     }
                 }
 

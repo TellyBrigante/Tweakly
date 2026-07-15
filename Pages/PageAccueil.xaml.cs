@@ -155,7 +155,10 @@ namespace Optimisation_Tool.Pages
                 SetScoreBar(ScoreNetBar, TxtScoreNet, last.NetScore);
                 ScoreSubGrid.Visibility = Visibility.Visible;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("home-score", "Accueil : affichage du dernier benchmark", ex);
+            }
         }
 
         private static void SetScoreBar(Grid bar, TextBlock val, double score)
@@ -294,8 +297,9 @@ namespace Optimisation_Tool.Pages
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AppLog.ErrorOnce("home-health", "Accueil : résumé des erreurs Windows", ex);
                 TxtHealthValue.Text = "—";
                 TxtHealthSub.Text   = "Analyse impossible — voir Erreurs Windows.";
             }
@@ -344,7 +348,10 @@ namespace Optimisation_Tool.Pages
                 else TxtGameCv.Text = "—";
                 GameStatsGrid.Visibility = Visibility.Visible;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("home-game-session", "Accueil : affichage de la dernière session de jeu", ex);
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -373,7 +380,10 @@ namespace Optimisation_Tool.Pages
                 if (s.CpuTempC.HasValue) temps += (temps.Length > 0 ? "  ·  " : "") + $"CPU {s.CpuTempC.Value:F0} °C";
                 TxtHwTemp.Text = temps.Length > 0 ? temps : "—";
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("home-live-hardware", "Accueil : mesure du matériel en direct", ex);
+            }
             finally { _hwBusy = false; }
         }
 
@@ -464,7 +474,10 @@ namespace Optimisation_Tool.Pages
                     StorageList.Children.Add(row);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("home-storage", "Accueil : affichage du stockage", ex);
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -501,8 +514,9 @@ namespace Optimisation_Tool.Pages
                     NetSpeedGrid.Visibility = Visibility.Visible;
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                AppLog.ErrorOnce("home-network", "Accueil : mesure réseau", ex);
                 TxtNetValue.Text = "—";
                 TxtNetSub.Text   = "Mesure impossible.";
             }
@@ -544,7 +558,10 @@ namespace Optimisation_Tool.Pages
                 }
                 RenderActivity();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("home-activity", "Accueil : activité récente", ex);
+            }
         }
 
         private void AddIncidentsToActivity(IEnumerable<Incident> incidents)

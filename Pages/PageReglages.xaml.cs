@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.5.0";
+        public const string AppVersion = "1.5.1";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -117,7 +117,7 @@ namespace Optimisation_Tool.Pages
                 MainWindow.Settings.CpuTempEnabled = false;
                 MainWindow.Settings.Save();
                 Helpers.CpuTemperature.Enabled = false;
-                TxtCpuTempStatus.Text = "Échec de l'installation du pilote — température indisponible. Voir le journal.";
+                TxtCpuTempStatus.Text = $"Température indisponible : {msg}";
                 _main.Log($"Réglages : échec activation température CPU — {msg}.");
             }
 
@@ -536,8 +536,8 @@ namespace Optimisation_Tool.Pages
                 var report = await Task.Run(() => Helpers.WindowsDefaultsRestorer.RestoreAll(_main.Log));
                 var errors = report.Steps
                     .Where(s => s.State == RestoreStepState.Error)
-                    .Take(3)
-                    .Select(s => $"{s.Group} / {s.Name}");
+                    .Take(2)
+                    .Select(s => $"{s.Group} / {s.Name} : {s.Detail}");
 
                 var suffix = report.NeedsRestart ? " Redémarrage conseillé." : "";
                 if (report.ErrorCount == 0)
@@ -548,7 +548,7 @@ namespace Optimisation_Tool.Pages
                 else
                 {
                     TxtRestoreDefaultsStatus.Text =
-                        $"Terminé avec {report.ErrorCount} erreur(s) : {string.Join(", ", errors)}. Voir le journal.{suffix}";
+                        $"{report.ErrorCount} réglage(s) non restauré(s) : {string.Join(" | ", errors)}.{suffix}";
                 }
 
                 _main.Log($"Réglages : restauration terminée — {report.OkCount} OK, {report.SkippedCount} ignoré(s), {report.ErrorCount} erreur(s).");

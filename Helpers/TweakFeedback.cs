@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -31,20 +32,43 @@ namespace Optimisation_Tool.Helpers
         public static void Show(Border banner, Ellipse dot, TextBlock text,
                                 IReadOnlyList<string> messages, string okText)
         {
-            bool error = false, restart = false, action = false;
+            bool error = messages.Any(FeedbackMessageClassifier.IsFailure);
+            bool restart = false, action = false;
             foreach (var m in messages)
             {
                 var s = m.ToLowerInvariant();
-                if (s.Contains("erreur"))                                error   = true;
                 if (s.Contains("redémarr") || s.Contains("redemarr"))    restart = true;
-                if (s.Contains("fermez")   || s.Contains("introuvable")) action  = true;
+                if (s.Contains("ferme")    || s.Contains("introuvable")) action  = true;
             }
 
-            TweaksAppliedSinceBench = true;   // des réglages ont changé → proposer un re-bench
-            if (error)        Run(banner, dot, text, Level.Err,  "Appliqué, mais des erreurs sont survenues — voir le journal d'activité.", emphasize: true,  autoHide: false);
-            else if (action)  Run(banner, dot, text, Level.Warn, okText + " — une action est requise, voir le journal d'activité.",        emphasize: true,  autoHide: false);
+            if (messages.Any(message =>
+                    !FeedbackMessageClassifier.IsFailure(message) && !IsActionMessage(message)))
+                TweaksAppliedSinceBench = true;
+            if (error)
+            {
+                var failures = messages
+                    .Where(FeedbackMessageClassifier.IsFailure)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                string detail = failures.Count == 0
+                    ? "Un réglage n'a pas été appliqué."
+                    : string.Join("  •  ", failures.Take(2));
+                if (failures.Count > 2) detail += $"  •  +{failures.Count - 2} autre(s) échec(s)";
+                Run(banner, dot, text, Level.Err, detail, emphasize: true, autoHide: false);
+            }
+            else if (action)
+            {
+                string detail = messages.FirstOrDefault(IsActionMessage) ?? "Une action est requise.";
+                Run(banner, dot, text, Level.Warn, detail, emphasize: true, autoHide: false);
+            }
             else if (restart) Run(banner, dot, text, Level.Warn, okText + " — redémarre le PC pour activer certains réglages.",            emphasize: true,  autoHide: false);
             else              Run(banner, dot, text, Level.Ok,   okText + " ✓",                                                       emphasize: false, autoHide: true);
+        }
+
+        private static bool IsActionMessage(string message)
+        {
+            string value = message.ToLowerInvariant();
+            return value.Contains("ferme") || value.Contains("introuvable");
         }
 
         public static void ShowSimple(Border banner, Ellipse dot, TextBlock text,
@@ -65,6 +89,22 @@ namespace Optimisation_Tool.Helpers
         }
 
         /// <summary>
+        /// Applique une lecture a un switch. Une lecture en echec desactive le switch :
+        /// la valeur de repli ne doit jamais devenir un faux etat modifiable.
+        /// </summary>
+        public static void ApplyDetectedState(
+            CheckBox box,
+            ProbeResult<bool> result,
+            Action<string> log,
+            string label)
+        {
+            box.IsChecked = result.Value;
+            box.IsEnabled = result.Success;
+            if (!result.Success)
+                log($"{label} indisponible : {result.Error}");
+        }
+
+        /// <summary>
         /// Compare l'etat demande avec l'etat relu apres application. Une divergence
         /// devient une vraie erreur visible au lieu de laisser le switch sur un faux succes.
         /// </summary>
@@ -76,6 +116,25 @@ namespace Optimisation_Tool.Helpers
             string message = $"{label} : erreur - le réglage n'a pas été appliqué. La case a été remise sur l'état détecté.";
             messages.Add(message);
             log(message);
+        }
+
+        public static void VerifyApplied(
+            ICollection<string> messages,
+            Action<string> log,
+            string label,
+            bool? requested,
+            ProbeResult<bool> actual)
+        {
+            if (!requested.HasValue) return;
+            if (!actual.Success)
+            {
+                string message = $"{label} : erreur - verification impossible apres application ({actual.Error}).";
+                messages.Add(message);
+                log(message);
+                return;
+            }
+
+            VerifyApplied(messages, log, label, requested, actual.Value);
         }
 
         // ── Cœur : contenu + animation d'entrée (+ auto-disparition) ───────────

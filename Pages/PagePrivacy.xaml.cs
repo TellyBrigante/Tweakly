@@ -16,6 +16,23 @@ namespace Optimisation_Tool.Pages
         private (bool Telemetrie, bool AdID, bool ActivityHistory, bool BingSearch,
                  bool InputPersonal, bool Location, bool WER, bool TailoredExp, bool CompatTel) _state;
 
+        private sealed record StateRead(
+            Helpers.ProbeResult<bool> Telemetrie,
+            Helpers.ProbeResult<bool> AdID,
+            Helpers.ProbeResult<bool> ActivityHistory,
+            Helpers.ProbeResult<bool> BingSearch,
+            Helpers.ProbeResult<bool> InputPersonal,
+            Helpers.ProbeResult<bool> Location,
+            Helpers.ProbeResult<bool> WER,
+            Helpers.ProbeResult<bool> TailoredExp,
+            Helpers.ProbeResult<bool> CompatTel)
+        {
+            public (bool Telemetrie, bool AdID, bool ActivityHistory, bool BingSearch,
+                    bool InputPersonal, bool Location, bool WER, bool TailoredExp, bool CompatTel) Values
+                => (Telemetrie.Value, AdID.Value, ActivityHistory.Value, BingSearch.Value,
+                    InputPersonal.Value, Location.Value, WER.Value, TailoredExp.Value, CompatTel.Value);
+        }
+
         public PagePrivacy(MainWindow main)
         {
             _main = main;
@@ -35,19 +52,22 @@ namespace Optimisation_Tool.Pages
         {
             BtnAppliquer.IsEnabled = false;
 
-            var s = await Task.Run(ReadState);
+            StateRead read = await Task.Run(ReadStateDetailed);
 
-            ChkTelemetrie.IsChecked      = s.Telemetrie;
-            ChkAdID.IsChecked            = s.AdID;
-            ChkActivityHistory.IsChecked = s.ActivityHistory;
-            ChkBingSearch.IsChecked      = s.BingSearch;
-            ChkInputPersonal.IsChecked   = s.InputPersonal;
-            ChkLocation.IsChecked        = s.Location;
-            ChkWER.IsChecked             = s.WER;
-            ChkTailoredExp.IsChecked     = s.TailoredExp;
-            ChkCompatTel.IsChecked       = s.CompatTel;
+            Helpers.TweakFeedback.ApplyDetectedState(ChkTelemetrie, read.Telemetrie, _main.Log, "Télémétrie");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkAdID, read.AdID, _main.Log, "Identifiant publicitaire");
+            Helpers.TweakFeedback.ApplyDetectedState(
+                ChkActivityHistory, read.ActivityHistory, _main.Log, "Historique d'activité");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkBingSearch, read.BingSearch, _main.Log, "Recherche Bing");
+            Helpers.TweakFeedback.ApplyDetectedState(
+                ChkInputPersonal, read.InputPersonal, _main.Log, "Personnalisation de la saisie");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkLocation, read.Location, _main.Log, "Localisation");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkWER, read.WER, _main.Log, "Rapports d'erreurs Windows");
+            Helpers.TweakFeedback.ApplyDetectedState(
+                ChkTailoredExp, read.TailoredExp, _main.Log, "Expériences personnalisées");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkCompatTel, read.CompatTel, _main.Log, "CompatTel");
 
-            _state = s;
+            _state = read.Values;
             BtnAppliquer.IsEnabled = true;
             _main.Log("Confidentialité : état chargé.");
         }
@@ -55,112 +75,129 @@ namespace Optimisation_Tool.Pages
         private static (bool Telemetrie, bool AdID, bool ActivityHistory, bool BingSearch,
                         bool InputPersonal, bool Location, bool WER,
                         bool TailoredExp, bool CompatTel) ReadState()
+            => ReadStateDetailed().Values;
+
+        private static StateRead ReadStateDetailed()
         {
             // Télémétrie (AllowTelemetry = 0 ET service DiagTrack désactivé)
-            bool telemetrie = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection",
-                    "AllowTelemetry", null);
-                bool policySet = v != null && Convert.ToInt32(v) == 0;
-                bool svcDisabled = IsSvcDisabled("DiagTrack");
-                telemetrie = policySet && svcDisabled;
-            }
-            catch { }
+            var telemetrie = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de la télémétrie",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection",
+                        "AllowTelemetry", null);
+                    bool policySet = v != null && Convert.ToInt32(v) == 0;
+                    bool servicesDisabled = IsSvcDisabledOrMissing("DiagTrack") &&
+                                            IsSvcDisabledOrMissing("dmwappushservice");
+                    return policySet && servicesDisabled;
+                },
+                fallback: false);
 
             // Identifiant publicitaire
-            bool adID = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-                    "Enabled", null);
-                adID = v != null && Convert.ToInt32(v) == 0;
-            }
-            catch { }
+            var adId = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de l'identifiant publicitaire",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
+                        "Enabled", null);
+                    return v != null && Convert.ToInt32(v) == 0;
+                },
+                fallback: false);
 
             // Historique d'activité
-            bool activityHistory = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System",
-                    "EnableActivityFeed", null);
-                activityHistory = v != null && Convert.ToInt32(v) == 0;
-            }
-            catch { }
+            var activityHistory = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de l'historique d'activité",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System",
+                        "EnableActivityFeed", null);
+                    return v != null && Convert.ToInt32(v) == 0;
+                },
+                fallback: false);
 
             // Bing Search désactivé
-            bool bingSearch = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
-                    "BingSearchEnabled", null);
-                bingSearch = v != null && Convert.ToInt32(v) == 0;
-            }
-            catch { }
+            var bingSearch = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de la recherche Bing",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
+                        "BingSearchEnabled", null);
+                    return v != null && Convert.ToInt32(v) == 0;
+                },
+                fallback: false);
 
             // Input Personalization
-            bool inputPersonal = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputPersonalization",
-                    "RestrictImplicitInkCollection", null);
-                inputPersonal = v != null && Convert.ToInt32(v) == 1;
-            }
-            catch { }
+            var inputPersonal = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de la personnalisation de saisie",
+                () =>
+                {
+                    var ink = Registry.GetValue(
+                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputPersonalization",
+                        "RestrictImplicitInkCollection", null);
+                    var text = Registry.GetValue(
+                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputPersonalization",
+                        "RestrictImplicitTextCollection", null);
+                    return ink != null && Convert.ToInt32(ink) == 1 &&
+                           text != null && Convert.ToInt32(text) == 1;
+                },
+                fallback: false);
 
             // Localisation
-            bool location = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
-                    "DisableLocation", null);
-                location = v != null && Convert.ToInt32(v) == 1;
-            }
-            catch { }
+            var location = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de la localisation",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
+                        "DisableLocation", null);
+                    return v != null && Convert.ToInt32(v) == 1;
+                },
+                fallback: false);
 
             // WER
-            bool wer = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting",
-                    "Disabled", null);
-                bool policySet = v != null && Convert.ToInt32(v) == 1;
-                bool svcDisabled = IsSvcDisabled("WerSvc");
-                wer = policySet && svcDisabled;
-            }
-            catch { }
+            var wer = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture des rapports d'erreurs Windows",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting",
+                        "Disabled", null);
+                    bool policySet = v != null && Convert.ToInt32(v) == 1;
+                    return policySet && IsSvcDisabled("WerSvc");
+                },
+                fallback: false);
 
             // Tailored Experiences
-            bool tailoredExp = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
-                    "TailoredExperiencesWithDiagnosticDataEnabled", null);
-                tailoredExp = v != null && Convert.ToInt32(v) == 0;
-            }
-            catch { }
+            var tailoredExp = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture des expériences personnalisées",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
+                        "TailoredExperiencesWithDiagnosticDataEnabled", null);
+                    return v != null && Convert.ToInt32(v) == 0;
+                },
+                fallback: false);
 
             // CompatTel / AppCompat
-            bool compatTel = false;
-            try
-            {
-                var v = Registry.GetValue(
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat",
-                    "DisableInventory", null);
-                compatTel = v != null && Convert.ToInt32(v) == 1;
-            }
-            catch { }
+            var compatTel = Helpers.ProbeResult<bool>.Capture(
+                "Confidentialité : lecture de CompatTel",
+                () =>
+                {
+                    var v = Registry.GetValue(
+                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat",
+                        "DisableInventory", null);
+                    return v != null && Convert.ToInt32(v) == 1;
+                },
+                fallback: false);
 
-            return (telemetrie, adID, activityHistory, bingSearch,
-                    inputPersonal, location, wer, tailoredExp, compatTel);
+            return new StateRead(
+                telemetrie, adId, activityHistory, bingSearch,
+                inputPersonal, location, wer, tailoredExp, compatTel);
         }
 
         // ── Appliquer ─────────────────────────────────────────────────────────
@@ -174,7 +211,7 @@ namespace Optimisation_Tool.Pages
             for (var d = e.OriginalSource as DependencyObject; d != null;
                  d = System.Windows.Media.VisualTreeHelper.GetParent(d))
                 if (d is CheckBox) return;
-            if (sender is System.Windows.Controls.Border row && row.Tag is CheckBox chk)
+            if (sender is System.Windows.Controls.Border row && row.Tag is CheckBox chk && chk.IsEnabled)
                 chk.IsChecked = chk.IsChecked != true;
         }
         private async void BtnAppliquer_Click(object sender, RoutedEventArgs e)
@@ -207,7 +244,7 @@ namespace Optimisation_Tool.Pages
                              doLoc, doWER, doTailored, doCompat,
                              msg => { _main.Log(msg); msgs.Add(msg); }));
 
-            var actual = await Task.Run(ReadState);
+            StateRead actual = await Task.Run(ReadStateDetailed);
             Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Telemetrie Windows", doTel, actual.Telemetrie);
             Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Identifiant publicitaire", doAdID, actual.AdID);
             Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Historique d'activite", doActivity, actual.ActivityHistory);
@@ -218,17 +255,20 @@ namespace Optimisation_Tool.Pages
             Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Experiences personnalisees", doTailored, actual.TailoredExp);
             Helpers.TweakFeedback.VerifyApplied(msgs, _main.Log, "Inventaire applications", doCompat, actual.CompatTel);
 
-            ChkTelemetrie.IsChecked = actual.Telemetrie;
-            ChkAdID.IsChecked = actual.AdID;
-            ChkActivityHistory.IsChecked = actual.ActivityHistory;
-            ChkBingSearch.IsChecked = actual.BingSearch;
-            ChkInputPersonal.IsChecked = actual.InputPersonal;
-            ChkLocation.IsChecked = actual.Location;
-            ChkWER.IsChecked = actual.WER;
-            ChkTailoredExp.IsChecked = actual.TailoredExp;
-            ChkCompatTel.IsChecked = actual.CompatTel;
-            _state = actual;
-            _main.Log("Confidentialité : paramètres appliqués.");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkTelemetrie, actual.Telemetrie, _main.Log, "Télémétrie");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkAdID, actual.AdID, _main.Log, "Identifiant publicitaire");
+            Helpers.TweakFeedback.ApplyDetectedState(
+                ChkActivityHistory, actual.ActivityHistory, _main.Log, "Historique d'activité");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkBingSearch, actual.BingSearch, _main.Log, "Recherche Bing");
+            Helpers.TweakFeedback.ApplyDetectedState(
+                ChkInputPersonal, actual.InputPersonal, _main.Log, "Personnalisation de la saisie");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkLocation, actual.Location, _main.Log, "Localisation");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkWER, actual.WER, _main.Log, "Rapports d'erreurs Windows");
+            Helpers.TweakFeedback.ApplyDetectedState(
+                ChkTailoredExp, actual.TailoredExp, _main.Log, "Expériences personnalisées");
+            Helpers.TweakFeedback.ApplyDetectedState(ChkCompatTel, actual.CompatTel, _main.Log, "CompatTel");
+            _state = actual.Values;
+            _main.Log("Confidentialité : application terminée.");
             Helpers.TweakFeedback.Show(StatusBanner, StatusDot, StatusText, msgs, "Paramètres de confidentialité appliqués");
             BtnAppliquer.IsEnabled = true;
         }
@@ -242,18 +282,19 @@ namespace Optimisation_Tool.Pages
             if (doTel.HasValue)
             try
             {
-                const string pathDC =
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection";
                 if (doTel.Value)
                 {
-                    Registry.SetValue(pathDC, "AllowTelemetry", 0, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
+                        "AllowTelemetry", 0);
                     SetSvc("DiagTrack",          disabled: true);
                     SetSvc("dmwappushservice",   disabled: true);
                     log("Télémétrie Windows : DÉSACTIVÉE.");
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.LocalMachine,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                         @"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
                         "AllowTelemetry");
                     SetSvcStart("DiagTrack", "auto", start: true);
@@ -267,9 +308,10 @@ namespace Optimisation_Tool.Pages
             if (doAdID.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-                    "Enabled", doAdID.Value ? 0 : 1, RegistryValueKind.DWord);
+                Helpers.VerifiedRegistry.SetDword(
+                    Registry.CurrentUser,
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
+                    "Enabled", doAdID.Value ? 0 : 1);
                 log($"Identifiant publicitaire : {(doAdID.Value ? "DÉSACTIVÉ" : "ACTIVÉ")}.");
             }
             catch (Exception ex) { log($"AdvertisingInfo : erreur — {ex.Message}"); }
@@ -280,13 +322,14 @@ namespace Optimisation_Tool.Pages
             {
                 if (doActivity.Value)
                 {
-                    Registry.SetValue(
-                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\System",
-                        "EnableActivityFeed", 0, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\System",
+                        "EnableActivityFeed", 0);
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.LocalMachine,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                         @"SOFTWARE\Policies\Microsoft\Windows\System",
                         "EnableActivityFeed");
                 }
@@ -300,13 +343,14 @@ namespace Optimisation_Tool.Pages
             {
                 if (doBing.Value)
                 {
-                    Registry.SetValue(
-                        @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
-                        "BingSearchEnabled", 0, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.CurrentUser,
+                        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
+                        "BingSearchEnabled", 0);
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.CurrentUser,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                         @"SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
                         "BingSearchEnabled");
                 }
@@ -318,21 +362,23 @@ namespace Optimisation_Tool.Pages
             if (doInk.HasValue)
             try
             {
-                const string pathInk =
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\InputPersonalization";
                 if (doInk.Value)
                 {
-                    Registry.SetValue(pathInk, "RestrictImplicitInkCollection",
-                        1, RegistryValueKind.DWord);
-                    Registry.SetValue(pathInk, "RestrictImplicitTextCollection",
-                        1, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.CurrentUser,
+                        @"SOFTWARE\Microsoft\InputPersonalization",
+                        "RestrictImplicitInkCollection", 1);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.CurrentUser,
+                        @"SOFTWARE\Microsoft\InputPersonalization",
+                        "RestrictImplicitTextCollection", 1);
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.CurrentUser,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                         @"SOFTWARE\Microsoft\InputPersonalization",
                         "RestrictImplicitInkCollection");
-                    DeleteRegistryValue(Registry.CurrentUser,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                         @"SOFTWARE\Microsoft\InputPersonalization",
                         "RestrictImplicitTextCollection");
                 }
@@ -346,13 +392,14 @@ namespace Optimisation_Tool.Pages
             {
                 if (doLoc.Value)
                 {
-                    Registry.SetValue(
-                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
-                        "DisableLocation", 1, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
+                        "DisableLocation", 1);
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.LocalMachine,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                         @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
                         "DisableLocation");
                 }
@@ -364,17 +411,18 @@ namespace Optimisation_Tool.Pages
             if (doWER.HasValue)
             try
             {
-                const string pathWER =
-                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting";
                 if (doWER.Value)
                 {
-                    Registry.SetValue(pathWER, "Disabled", 1, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting",
+                        "Disabled", 1);
                     SetSvc("WerSvc", disabled: true);
                     log("Rapport d'erreurs Windows : DÉSACTIVÉ.");
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.LocalMachine,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                         @"SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting",
                         "Disabled");
                     SetSvcStart("WerSvc", "demand", start: false);
@@ -387,10 +435,11 @@ namespace Optimisation_Tool.Pages
             if (doTailored.HasValue)
             try
             {
-                Registry.SetValue(
-                    @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
+                Helpers.VerifiedRegistry.SetDword(
+                    Registry.CurrentUser,
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
                     "TailoredExperiencesWithDiagnosticDataEnabled",
-                    doTailored.Value ? 0 : 1, RegistryValueKind.DWord);
+                    doTailored.Value ? 0 : 1);
                 log($"Tailored Experiences : {(doTailored.Value ? "DÉSACTIVÉES" : "ACTIVÉES")}.");
             }
             catch (Exception ex) { log($"TailoredExperiences : erreur — {ex.Message}"); }
@@ -401,13 +450,14 @@ namespace Optimisation_Tool.Pages
             {
                 if (doCompat.Value)
                 {
-                    Registry.SetValue(
-                        @"HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\AppCompat",
-                        "DisableInventory", 1, RegistryValueKind.DWord);
+                    Helpers.VerifiedRegistry.SetDword(
+                        Registry.LocalMachine,
+                        @"SOFTWARE\Policies\Microsoft\Windows\AppCompat",
+                        "DisableInventory", 1);
                 }
                 else
                 {
-                    DeleteRegistryValue(Registry.LocalMachine,
+                    Helpers.VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                         @"SOFTWARE\Policies\Microsoft\Windows\AppCompat",
                         "DisableInventory");
                 }
@@ -420,48 +470,74 @@ namespace Optimisation_Tool.Pages
 
         private static bool IsSvcDisabled(string name)
         {
-            try
-            {
-                using var p = Process.Start(new ProcessStartInfo("sc", $"qc \"{name}\"")
-                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true });
-                var output = p?.StandardOutput.ReadToEnd() ?? "";
-                p?.WaitForExit(5_000);
-                return output.Contains("DISABLED", StringComparison.OrdinalIgnoreCase);
-            }
-            catch { return false; }
+            object? value = Registry.GetValue(
+                $@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\{name}",
+                "Start", null);
+            return value != null && Convert.ToInt32(value) == 4;
         }
+
+        private static bool IsSvcDisabledOrMissing(string name)
+            => !ServiceExists(name) || IsSvcDisabled(name);
 
         private static void SetSvc(string name, bool disabled)
         {
+            if (!ServiceExists(name)) return;
             var startType = disabled ? "disabled" : "auto";
             RunCmd("sc", $"config \"{name}\" start= {startType}");
+            VerifyServiceStartType(name, disabled ? 4 : 2);
             if (disabled)
-                RunCmd("sc", $"stop \"{name}\"");
+                RunCmd("sc", $"stop \"{name}\"", 1062);
             else
                 RunCmd("sc", $"start \"{name}\"");
         }
 
         private static void SetSvcStart(string name, string startType, bool start)
         {
+            if (!ServiceExists(name)) return;
             RunCmd("sc", $"config \"{name}\" start= {startType}");
-            if (start) RunCmd("sc", $"start \"{name}\"");
+            VerifyServiceStartType(name, startType.Equals("auto", StringComparison.OrdinalIgnoreCase) ? 2 : 3);
+            if (start) RunCmd("sc", $"start \"{name}\"", 1056);
         }
 
-        private static void DeleteRegistryValue(RegistryKey root, string subKey, string name)
+        private static bool ServiceExists(string name)
         {
-            using var key = root.OpenSubKey(subKey, writable: true);
-            key?.DeleteValue(name, throwOnMissingValue: false);
+            using RegistryKey? key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{name}");
+            return key != null;
         }
 
-        private static void RunCmd(string exe, string args)
+        private static void VerifyServiceStartType(string name, int expected)
         {
-            try
+            object? value = Registry.GetValue(
+                $@"HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\{name}",
+                "Start", null);
+            if (value == null || Convert.ToInt32(value) != expected)
+                throw new InvalidOperationException($"Windows n'a pas conservé le type de démarrage du service {name}");
+        }
+
+        private static void RunCmd(string exe, string args, params int[] acceptedExitCodes)
+        {
+            using var p = Process.Start(new ProcessStartInfo(exe, args)
             {
-                using var p = Process.Start(new ProcessStartInfo(exe, args)
-                { UseShellExecute = false, CreateNoWindow = true });
-                p?.WaitForExit(10_000);
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            });
+            if (p == null) throw new InvalidOperationException($"{exe} n'a pas démarré");
+
+            string output = p.StandardOutput.ReadToEnd();
+            string error = p.StandardError.ReadToEnd();
+            if (!p.WaitForExit(10_000))
+            {
+                try { p.Kill(entireProcessTree: true); } catch { }
+                throw new TimeoutException($"{exe} n'a pas répondu sous 10 s");
             }
-            catch { }
+            if (p.ExitCode == 0 || Array.IndexOf(acceptedExitCodes, p.ExitCode) >= 0) return;
+
+            string detail = string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim();
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
+                ? $"{exe} a retourné le code {p.ExitCode}"
+                : detail);
         }
     }
 }

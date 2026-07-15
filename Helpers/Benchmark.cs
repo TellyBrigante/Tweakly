@@ -125,7 +125,8 @@ namespace Optimisation_Tool.Helpers
             // une mesure clean, sans aller en RealTime qui peut figer la machine)
             var proc = Process.GetCurrentProcess();
             var oldPrio = proc.PriorityClass;
-            try { proc.PriorityClass = ProcessPriorityClass.High; } catch { }
+            try { proc.PriorityClass = ProcessPriorityClass.High; }
+            catch (Exception ex) { AppLog.ErrorOnce("benchmark-process-priority", "Benchmark : priorité de processus inchangée", ex); }
 
             try
             {
@@ -179,7 +180,8 @@ namespace Optimisation_Tool.Helpers
             }
             finally
             {
-                try { proc.PriorityClass = oldPrio; } catch { }
+                try { proc.PriorityClass = oldPrio; }
+                catch (Exception ex) { AppLog.ErrorOnce("benchmark-process-priority-restore", "Benchmark : restauration de la priorité impossible", ex); }
             }
 
             // ── SCORING ──────────────────────────────────────────────────────
@@ -394,10 +396,12 @@ namespace Optimisation_Tool.Helpers
                 const int targetMs   = 16;   // ~60 Hz
                 const int iterations = 400;
                 bool periodSet = false;
-                try { if (timeBeginPeriod(1) == 0) periodSet = true; } catch { }
+                try { if (timeBeginPeriod(1) == 0) periodSet = true; }
+                catch (Exception ex) { AppLog.ErrorOnce("benchmark-frame-timer-period", "Benchmark : précision du minuteur inchangée", ex); }
                 var th = Thread.CurrentThread;
                 var oldPri = th.Priority;
-                try { th.Priority = ThreadPriority.Highest; } catch { }
+                try { th.Priority = ThreadPriority.Highest; }
+                catch (Exception ex) { AppLog.ErrorOnce("benchmark-frame-thread-priority", "Benchmark : priorité du thread de mesure inchangée", ex); }
                 try
                 {
                     long freq = Stopwatch.Frequency;
@@ -418,8 +422,9 @@ namespace Optimisation_Tool.Helpers
                 }
                 finally
                 {
-                    try { th.Priority = oldPri; } catch { }
-                    if (periodSet) { try { timeEndPeriod(1); } catch { } }
+                    try { th.Priority = oldPri; }
+                    catch (Exception ex) { AppLog.ErrorOnce("benchmark-frame-thread-priority-restore", "Benchmark : restauration de la priorité du thread impossible", ex); }
+                    if (periodSet) EndTimerPeriod();
                 }
             }, ct);
 
@@ -433,10 +438,12 @@ namespace Optimisation_Tool.Helpers
                 const int warmup = 100;
                 long freq = Stopwatch.Frequency;
                 bool periodSet = false;
-                try { if (timeBeginPeriod(1) == 0) periodSet = true; } catch { }
+                try { if (timeBeginPeriod(1) == 0) periodSet = true; }
+                catch (Exception ex) { AppLog.ErrorOnce("benchmark-input-timer-period", "Benchmark : précision du minuteur inchangée", ex); }
                 var th = Thread.CurrentThread;
                 var oldPri = th.Priority;
-                try { th.Priority = ThreadPriority.Highest; } catch { }
+                try { th.Priority = ThreadPriority.Highest; }
+                catch (Exception ex) { AppLog.ErrorOnce("benchmark-input-thread-priority", "Benchmark : priorité du thread de mesure inchangée", ex); }
                 try
                 {
                     var sw = Stopwatch.StartNew();
@@ -458,10 +465,25 @@ namespace Optimisation_Tool.Helpers
                 }
                 finally
                 {
-                    try { th.Priority = oldPri; } catch { }
-                    if (periodSet) { try { timeEndPeriod(1); } catch { } }
+                    try { th.Priority = oldPri; }
+                    catch (Exception ex) { AppLog.ErrorOnce("benchmark-input-thread-priority-restore", "Benchmark : restauration de la priorité du thread impossible", ex); }
+                    if (periodSet) EndTimerPeriod();
                 }
             }, ct);
+
+        private static void EndTimerPeriod()
+        {
+            try
+            {
+                uint result = timeEndPeriod(1);
+                if (result != 0)
+                    AppLog.Write($"Benchmark : timeEndPeriod(1) a échoué avec le code {result}.");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Benchmark : restauration de la résolution timer", ex);
+            }
+        }
 
         // ══════ SONDES RAM ═══════════════════════════════════════════════════
 
@@ -730,7 +752,10 @@ namespace Optimisation_Tool.Helpers
                     return n;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("benchmark-cpu-name", "Benchmark : nom du processeur indisponible", ex);
+            }
             return "";
         }
     }

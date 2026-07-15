@@ -123,26 +123,6 @@ namespace Optimisation_Tool.Helpers
             ["Zen 2"]       = 10, ["Zen+"]        = 9,  ["Zen 1"]      = 8,
         };
 
-        // Coefficient legacy v1 (formule SHA512). Garde pour compat fallback.
-        private static readonly Dictionary<string, (double pCoef, double eCoef)> GenCoef = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Zen 1"]       = (70,  0),
-            ["Zen+"]        = (75,  0),
-            ["Zen 2"]       = (85,  0),
-            ["Zen 3"]       = (105, 0),
-            ["Zen 4"]       = (125, 0),
-            ["Zen 5"]       = (140, 0),
-            ["Skylake"]     = (70,  0),
-            ["Coffee Lake"] = (75,  0),
-            ["Comet Lake"]  = (80,  0),
-            ["Rocket Lake"] = (95,  0),
-            ["Alder Lake"]  = (115, 75),
-            ["Raptor Lake"] = (130, 85),
-            ["Meteor Lake"] = (135, 95),
-            ["Arrow Lake"]  = (148, 110),
-            ["Lunar Lake"]  = (140, 105),
-        };
-
         private static List<CpuRefEntry>? _cache;
         private static string DataPath => PathLayout.CpuReference;
 
@@ -154,7 +134,11 @@ namespace Optimisation_Tool.Helpers
                 if (!File.Exists(DataPath)) return _cache = new();
                 _cache = JsonSerializer.Deserialize<List<CpuRefEntry>>(File.ReadAllText(DataPath)) ?? new();
             }
-            catch { _cache = new(); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("cpu-reference-load", "Benchmark : catalogue CPU illisible", ex);
+                _cache = new();
+            }
             return _cache!;
         }
 

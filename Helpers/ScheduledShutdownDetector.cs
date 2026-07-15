@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -72,17 +71,14 @@ namespace Optimisation_Tool.Helpers
             var list = new List<Task>();
             try
             {
-                using var p = Process.Start(new ProcessStartInfo("schtasks", "/query /xml ONE")
+                ProcessCommandResult query = ProcessCommand.Run("schtasks", "/query /xml ONE", 10_000);
+                if (!query.Success)
                 {
-                    UseShellExecute = false,
-                    CreateNoWindow  = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    StandardOutputEncoding = System.Text.Encoding.UTF8,
-                });
-                if (p == null) return list;
-                string output = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(10_000);
+                    AppLog.WriteOnce("scheduled-shutdown-query",
+                        "Arrêts planifiés : lecture des tâches impossible : " + query.FailureDescription);
+                    return list;
+                }
+                string output = query.Output;
                 if (string.IsNullOrWhiteSpace(output)) return list;
 
                 // schtasks /xml ONE produit DEJA un document unique avec un root <Tasks>,
@@ -139,10 +135,16 @@ namespace Optimisation_Tool.Helpers
                             });
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("scheduled-shutdown-task", "Arrêts planifiés : tâche illisible", ex);
+                    }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("scheduled-shutdown-detect", "Arrêts planifiés : détection impossible", ex);
+            }
             return list;
         }
 

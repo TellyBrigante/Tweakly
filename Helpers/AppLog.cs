@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 
@@ -24,6 +25,8 @@ namespace Optimisation_Tool.Helpers
     internal static class AppLog
     {
         private static readonly object _lock = new();
+        private static readonly ConcurrentDictionary<string, byte> _once =
+            new(StringComparer.Ordinal);
         private const long MaxBytes = 1_000_000;   // ~1 Mo avant rotation
 
         public static string LogFile => Path.Combine(PathLayout.Config, "tweakly-log.txt");
@@ -48,6 +51,23 @@ namespace Optimisation_Tool.Helpers
         /// <summary>Écrit une erreur avec contexte + exception complète (type, message, stack).</summary>
         public static void Error(string context, Exception ex)
             => Write($"ERREUR · {context} — {ex.GetType().Name}: {ex.Message}{Environment.NewLine}{ex.StackTrace}");
+
+        /// <summary>
+        /// Écrit un message une seule fois par exécution pour une clé stable. Destiné aux
+        /// sondes périodiques : une panne reste visible sans remplir le journal à chaque tick.
+        /// </summary>
+        public static void WriteOnce(string key, string message)
+        {
+            if (!string.IsNullOrWhiteSpace(key) && _once.TryAdd(key, 0))
+                Write(message);
+        }
+
+        /// <summary>Écrit une erreur une seule fois par exécution pour une clé stable.</summary>
+        public static void ErrorOnce(string key, string context, Exception ex)
+        {
+            if (!string.IsNullOrWhiteSpace(key) && _once.TryAdd(key, 0))
+                Error(context, ex);
+        }
 
         private static void RotateIfNeeded()
         {

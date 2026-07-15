@@ -176,8 +176,8 @@ public sealed class PresentMonCapture
 
         using var process = new Process { StartInfo = info };
         process.Start();
-        Task<string> stderr = process.StandardError.ReadToEndAsync();
-        Task<string> stdout = process.StandardOutput.ReadToEndAsync();
+        Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
+        Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(duration + TimeSpan.FromSeconds(10));
         try

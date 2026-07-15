@@ -556,7 +556,6 @@
         </Style>
 
         <!-- Convertisseur statut → couleur (Pack Réinstallation, conservé pour compat interne) -->
-        <pages:StatusToColorConverter x:Key="StatusColor"/>
 
         <!-- ════════ DA « OPTIM » v1.3.5 (validée sur Nettoyage, déployée sur CPU /
              Windows / Réseau / Confidentialité) : rangée switch-gauche + icône dégradé

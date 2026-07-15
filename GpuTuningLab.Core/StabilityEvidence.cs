@@ -60,8 +60,8 @@ public sealed class WevtutilEvidenceCollector : IStabilityEvidenceCollector
 
         using var process = new Process { StartInfo = info };
         process.Start();
-        Task<string> stdout = process.StandardOutput.ReadToEndAsync();
-        Task<string> stderr = process.StandardError.ReadToEndAsync();
+        Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         try
@@ -103,12 +103,14 @@ public static class WindowsEventEvidenceParser
         {
             XElement? system = element.Element(EventNs + "System");
             string provider = system?.Element(EventNs + "Provider")?.Attribute("Name")?.Value ?? "";
-            int.TryParse(system?.Element(EventNs + "EventID")?.Value, out int id);
-            DateTimeOffset.TryParse(
+            if (!int.TryParse(system?.Element(EventNs + "EventID")?.Value, out int id))
+                continue;
+            if (!DateTimeOffset.TryParse(
                 system?.Element(EventNs + "TimeCreated")?.Attribute("SystemTime")?.Value,
                 CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal,
-                out var timestamp);
+                out var timestamp))
+                continue;
             string payload = string.Join(" | ", element.Descendants(EventNs + "Data")
                 .Select(static data => data.Value.Trim())
                 .Where(static value => value.Length > 0));

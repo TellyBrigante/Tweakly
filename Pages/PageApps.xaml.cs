@@ -268,29 +268,21 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { _main.Log($"Applications : de-élévation — {ex.Message}"); }
 
             // Tentative 2 : direct (fallback)
-            try
+            ProcessCommandResult direct = ProcessCommand.Run("winget", arguments, 60_000);
+            if (direct.Success)
             {
-                using var p = Process.Start(new ProcessStartInfo("winget", arguments)
+                string raw = Regex.Replace(direct.Output, "\x1B\\[[0-9;?]*[A-Za-z]", "");
+                if (!string.IsNullOrWhiteSpace(raw))
                 {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                });
-                if (p != null)
-                {
-                    var raw = p.StandardOutput.ReadToEnd();
-                    p.WaitForExit(60_000);
-                    raw = Regex.Replace(raw ?? "", "\x1B\\[[0-9;?]*[A-Za-z]", "");
-                    if (!string.IsNullOrWhiteSpace(raw))
-                    {
-                        _main.Log($"Applications : winget direct OK — {raw.Length} chars.");
-                        return raw;
-                    }
-                    _main.Log($"Applications : winget direct exit={p.ExitCode}, sortie vide.");
+                    _main.Log($"Applications : winget direct OK — {raw.Length} chars.");
+                    return raw;
                 }
+                _main.Log("Applications : winget direct terminé, sortie vide.");
             }
-            catch (Exception ex) { _main.Log($"Applications : winget direct — {ex.Message}"); }
+            else
+            {
+                _main.Log("Applications : winget direct — " + direct.FailureDescription);
+            }
 
             return "";
         }
@@ -343,13 +335,29 @@ namespace Optimisation_Tool.Pages
             if (!_appProcesses.TryGetValue(wingetId, out var names)) return null;
             var running = new List<string>();
             foreach (var n in names)
-                if (Process.GetProcessesByName(n).Length > 0) running.Add(n);
+            {
+                Process[] processes = Process.GetProcessesByName(n);
+                try
+                {
+                    if (processes.Length > 0) running.Add(n);
+                }
+                finally
+                {
+                    foreach (Process process in processes) process.Dispose();
+                }
+            }
             return running.Count > 0 ? running.ToArray() : null;
         }
 
         private async Task UpdateSingleAppAsync(AppItem app)
         {
             if (string.IsNullOrEmpty(app.WingetId)) return;
+            if (!WingetCli.IsValidPackageId(app.WingetId))
+            {
+                app.UpdateStatus = UpdateStatus.Failed;
+                _main.Log($"Applications : ID Winget invalide pour « {app.Name} ».");
+                return;
+            }
 
             app.UpdateStatus = UpdateStatus.Updating;
             TxtStatus.Text   = $"Mise à jour de « {app.Name} »…";
@@ -477,82 +485,16 @@ namespace Optimisation_Tool.Pages
 
         private static List<AppItem> LoadFromRegistry()
         {
-            var result = new List<AppItem>();
-            var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            string[] hklmPaths =
-            {
-                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-                @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-            };
-
-            foreach (var path in hklmPaths)
-            {
-                try
+            return InstalledApplicationInventory.Read()
+                .Select(app => new AppItem
                 {
-                    using var root = Registry.LocalMachine.OpenSubKey(path);
-                    if (root == null) continue;
-                    foreach (var sub in root.GetSubKeyNames())
-                    {
-                        try
-                        {
-                            using var k = root.OpenSubKey(sub);
-                            if (k == null) continue;
-                            var item = KeyToAppItem(k);
-                            if (item != null && seen.Add(item.Name)) result.Add(item);
-                        }
-                        catch { }
-                    }
-                }
-                catch { }
-            }
-
-            try
-            {
-                using var root = Registry.CurrentUser.OpenSubKey(
-                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
-                if (root != null)
-                {
-                    foreach (var sub in root.GetSubKeyNames())
-                    {
-                        try
-                        {
-                            using var k = root.OpenSubKey(sub);
-                            if (k == null) continue;
-                            var item = KeyToAppItem(k);
-                            if (item != null && seen.Add(item.Name)) result.Add(item);
-                        }
-                        catch { }
-                    }
-                }
-            }
-            catch { }
-
-            return result;
-        }
-
-        private static AppItem? KeyToAppItem(RegistryKey k)
-        {
-            var name = k.GetValue("DisplayName")?.ToString()?.Trim();
-            if (string.IsNullOrEmpty(name)) return null;
-
-            if (k.GetValue("SystemComponent") is int sc && sc == 1) return null;
-
-            if (Regex.IsMatch(name, @"^KB\d{6,}", RegexOptions.IgnoreCase)) return null;
-            if (name.StartsWith("Security Update", StringComparison.OrdinalIgnoreCase)) return null;
-            if (name.StartsWith("Update for",      StringComparison.OrdinalIgnoreCase)) return null;
-            if (name.StartsWith("Hotfix for",      StringComparison.OrdinalIgnoreCase)) return null;
-
-            return new AppItem
-            {
-                Name            = name,
-                Publisher       = k.GetValue("Publisher")?.ToString()?.Trim()      ?? "",
-                Version         = k.GetValue("DisplayVersion")?.ToString()?.Trim() ?? "",
-                InstallLocation = k.GetValue("InstallLocation")?.ToString()?.Trim() ?? "",
-                UninstallString = k.GetValue("QuietUninstallString")?.ToString()?.Trim()
-                               ?? k.GetValue("UninstallString")?.ToString()?.Trim()
-                               ?? "",
-            };
+                    Name = app.Name,
+                    Publisher = app.Publisher,
+                    Version = app.Version,
+                    InstallLocation = app.InstallLocation,
+                    UninstallString = app.UninstallString,
+                })
+                .ToList();
         }
 
         // ── Lecture Winget ────────────────────────────────────────────────────
@@ -571,14 +513,7 @@ namespace Optimisation_Tool.Pages
         }
 
         private static bool IsWingetId(string tok)
-        {
-            // ID winget = contient un point, et le 1er segment a au moins une lettre.
-            // Distingue "Google.Chrome" (ID) de "19.4.0.10" (version).
-            if (!tok.Contains('.') || tok.Length < 4) return false;
-            // Rejette les pseudo-IDs internes ARP (ex. "ARP\Machine\X86\Battle.net") : non installables
-            if (tok.Contains('\\') || tok.StartsWith("ARP", StringComparison.OrdinalIgnoreCase)) return false;
-            return tok.Substring(0, tok.IndexOf('.')).Any(char.IsLetter);
-        }
+            => WingetCli.IsValidPackageId(tok);
 
         private static void ParseWingetList(string output, Dictionary<string, string> dict)
         {
@@ -742,7 +677,10 @@ namespace Optimisation_Tool.Pages
                         if (k != null && seen.Add($"{prefix}\\{rel}"))
                             found.Add(new Leftover { Type = Leftover.LType.Reg, Target = $@"{prefix}\{rel}", Display = $@"Registre : {prefix}\{rel}" });
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("apps-leftovers-registry", "Applications : recherche de résidus registre", ex);
+                    }
                 }
 
                 if (!string.IsNullOrWhiteSpace(publisher))
@@ -758,7 +696,10 @@ namespace Optimisation_Tool.Pages
                             if (k != null && seen.Add($"{prefix}\\{rel}"))
                                 found.Add(new Leftover { Type = Leftover.LType.Reg, Target = $@"{prefix}\{rel}", Display = $@"Registre : {prefix}\{rel}" });
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            AppLog.ErrorOnce("apps-leftovers-publisher", "Applications : recherche de résidus éditeur", ex);
+                        }
                     }
                 }
             }
@@ -781,7 +722,10 @@ namespace Optimisation_Tool.Pages
                         if (Directory.Exists(p) && seen.Add(p))
                             found.Add(new Leftover { Type = Leftover.LType.File, Target = p, Display = $"Dossier : {p}" });
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("apps-leftovers-folder", "Applications : recherche de dossiers résiduels", ex);
+                    }
                 }
             }
 
@@ -793,7 +737,10 @@ namespace Optimisation_Tool.Pages
                     if (Directory.Exists(il) && seen.Add(il))
                         found.Add(new Leftover { Type = Leftover.LType.File, Target = il, Display = $"Dossier install : {il}" });
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("apps-leftovers-install-folder", "Applications : dossier d'installation résiduel", ex);
+                }
             }
 
             try
@@ -816,7 +763,10 @@ namespace Optimisation_Tool.Pages
                                 var content = File.ReadAllText(file);
                                 match = cands.Any(kw => content.Contains(kw, StringComparison.OrdinalIgnoreCase));
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                AppLog.ErrorOnce("apps-leftovers-task-content", "Applications : lecture d'une tâche planifiée", ex);
+                            }
                         }
 
                         if (!match) continue;
@@ -828,7 +778,10 @@ namespace Optimisation_Tool.Pages
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("apps-leftovers-tasks", "Applications : inventaire des tâches planifiées", ex);
+            }
 
             return found;
         }
@@ -895,7 +848,11 @@ namespace Optimisation_Tool.Pages
                             break;
                     }
                 }
-                catch { errors++; }
+                catch (Exception ex)
+                {
+                    errors++;
+                    AppLog.Error("Applications : suppression du résidu " + item.Display, ex);
+                }
             }
             return (cleaned, errors);
         }
@@ -914,15 +871,16 @@ namespace Optimisation_Tool.Pages
 
         private static void DeleteScheduledTask(string taskPath)
         {
-            using var p = Process.Start(new ProcessStartInfo(
-                "schtasks", $"/delete /tn \"{taskPath}\" /f")
-            {
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-            });
-            p?.WaitForExit(15_000);
+            ProcessCommandResult result = ProcessCommand.Run(
+                "schtasks", $"/delete /tn \"{taskPath}\" /f", 15_000);
+            if (result.Success) return;
+
+            string detail = result.Error.Length > 0
+                ? result.Error
+                : result.Output.Length > 0
+                    ? result.Output.Trim()
+                    : $"code {result.ExitCode}";
+            throw new InvalidOperationException("Suppression de la tâche impossible : " + detail);
         }
 
         // ── Désinstallation ───────────────────────────────────────────────────
@@ -931,19 +889,13 @@ namespace Optimisation_Tool.Pages
         {
             if (!string.IsNullOrEmpty(app.WingetId))
             {
-                try
-                {
-                    using var p = Process.Start(new ProcessStartInfo(
-                        "winget",
-                        $"uninstall --id \"{app.WingetId}\" --silent --accept-source-agreements --disable-interactivity")
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow  = true,
-                    });
-                    p?.WaitForExit(120_000);
-                    if (p?.ExitCode == 0) return true;
-                }
-                catch { }
+                ProcessCommandResult byId = ProcessCommand.Run(
+                    "winget",
+                    $"uninstall --id \"{app.WingetId}\" --silent --accept-source-agreements --disable-interactivity",
+                    120_000);
+                if (byId.Success) return true;
+                AppLog.Write($"Applications : winget n'a pas désinstallé {app.Name} par ID — "
+                    + byId.FailureDescription);
             }
 
             if (!string.IsNullOrEmpty(app.UninstallString))
@@ -965,25 +917,37 @@ namespace Optimisation_Tool.Pages
                         args = sp > 0 ? us.Substring(sp + 1).Trim() : "";
                     }
                     using var p = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = true });
-                    p?.WaitForExit(120_000);
-                    return true;
+                    if (p == null)
+                    {
+                        AppLog.Write($"Applications : lancement du désinstalleur impossible pour {app.Name}.");
+                    }
+                    else if (!p.WaitForExit(120_000))
+                    {
+                        AppLog.Write($"Applications : le désinstalleur de {app.Name} est encore actif après 120 s.");
+                    }
+                    else if (p.ExitCode == 0)
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        AppLog.Write($"Applications : désinstalleur de {app.Name} terminé avec le code {p.ExitCode}.");
+                    }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.Error("Applications : désinstalleur de " + app.Name, ex);
+                }
             }
 
-            try
-            {
-                using var p = Process.Start(new ProcessStartInfo(
-                    "winget",
-                    $"uninstall --name \"{app.Name}\" --silent --accept-source-agreements --disable-interactivity")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow  = true,
-                });
-                p?.WaitForExit(120_000);
-                return p?.ExitCode == 0;
-            }
-            catch { return false; }
+            ProcessCommandResult byName = ProcessCommand.Run(
+                "winget",
+                $"uninstall --name \"{app.Name}\" --silent --accept-source-agreements --disable-interactivity",
+                120_000);
+            if (!byName.Success)
+                AppLog.Write($"Applications : winget n'a pas désinstallé {app.Name} par nom — "
+                    + byName.FailureDescription);
+            return byName.Success;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

@@ -125,7 +125,7 @@ public sealed class MemtestVulkanWorkloadRunner : IWorkloadRunner
         Task<GpuContaminationResult>? contaminationTask = _contaminationMonitor?.ObserveAsync(
             process.Id,
             contaminationStop.Token);
-        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(definition.Timeout);
         bool timedOut = false;
@@ -151,7 +151,7 @@ public sealed class MemtestVulkanWorkloadRunner : IWorkloadRunner
         }
         timer.Stop();
         DateTimeOffset endedAt = DateTimeOffset.Now;
-        contaminationStop.Cancel();
+        await contaminationStop.CancelAsync().ConfigureAwait(false);
         GpuContaminationResult contamination = contaminationTask == null
             ? new GpuContaminationResult(true, [], "")
             : await contaminationTask.ConfigureAwait(false);

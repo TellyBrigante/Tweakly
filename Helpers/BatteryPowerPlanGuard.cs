@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
@@ -83,38 +82,15 @@ namespace Optimisation_Tool.Helpers
             error = "";
             output = "";
 
-            try
-            {
-                using var p = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "powercfg",
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true
-                });
-                if (p == null)
-                {
-                    error = "powercfg : lancement impossible.";
-                    return false;
-                }
+            ProcessCommandResult result = ProcessCommand.Run("powercfg", arguments, 15_000);
+            output = result.Output;
+            if (result.Success) return true;
 
-                output = p.StandardOutput.ReadToEnd();
-                var stderr = p.StandardError.ReadToEnd();
-                p.WaitForExit();
-                if (p.ExitCode == 0) return true;
-
-                error = string.IsNullOrWhiteSpace(stderr)
-                    ? $"powercfg : code {p.ExitCode}."
-                    : $"powercfg : {stderr.Trim()}";
-                return false;
-            }
-            catch (Exception ex)
-            {
-                error = $"powercfg : {ex.Message}";
-                return false;
-            }
+            string detail = !string.IsNullOrWhiteSpace(result.Error)
+                ? result.Error
+                : $"code {result.ExitCode}";
+            error = $"powercfg : {detail}";
+            return false;
         }
 
         private static string FirstNonEmpty(params string[] values)

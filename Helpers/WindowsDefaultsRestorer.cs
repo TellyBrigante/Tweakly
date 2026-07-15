@@ -3,9 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Management;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
@@ -36,9 +33,6 @@ public sealed class RestoreDefaultsReport
 
 public static class WindowsDefaultsRestorer
 {
-    private const string MmPath =
-        @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile";
-
     public static RestoreDefaultsReport RestoreAll(Action<string>? log = null)
     {
         var report = new RestoreDefaultsReport();
@@ -67,13 +61,14 @@ public static class WindowsDefaultsRestorer
     {
         Step(report, "CPU", "Plan d'alimentation", () =>
         {
-            RunCmd("powercfg", "/setactive SCHEME_BALANCED", 15_000);
-            return "Equilibre.";
+            if (!PowerPlanManager.TrySetUltimate(false, out string result))
+                throw new InvalidOperationException(result);
+            return result;
         });
 
         Step(report, "CPU", "Power Throttling", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling",
                 "PowerThrottlingOff");
             return "Override supprime, Windows gere le bridage normalement.";
@@ -81,14 +76,22 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "CPU", "SystemResponsiveness", () =>
         {
-            Registry.SetValue(MmPath, "SystemResponsiveness",
-                RegistryValueLogic.SystemResponsivenessDefault, RegistryValueKind.DWord);
+            VerifiedRegistry.SetDword(
+                Registry.LocalMachine,
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
+                "SystemResponsiveness",
+                RegistryValueLogic.SystemResponsivenessDefault);
             return $"{RegistryValueLogic.SystemResponsivenessDefault}.";
         });
 
         Step(report, "CPU", "Memory Integrity (HVCI)", () =>
         {
-            return Skip("Valeur dependante de l'installation Windows; reglage laisse intact.");
+            VerifiedRegistry.DeleteValue(
+                Registry.LocalMachine,
+                @"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
+                "Enabled");
+            report.NeedsRestart = true;
+            return "Override supprime, Windows reprend son comportement par defaut.";
         });
     }
 
@@ -96,7 +99,7 @@ public static class WindowsDefaultsRestorer
     {
         Step(report, "Windows", "HAGS", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
                 "HwSchMode");
             report.NeedsRestart = true;
@@ -105,46 +108,48 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Windows", "Barre de jeu Xbox", () =>
         {
-            Registry.SetValue(
-                @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
-                "AppCaptureEnabled", 1, RegistryValueKind.DWord);
-            Registry.SetValue(
-                @"HKEY_CURRENT_USER\System\GameConfigStore",
-                "GameDVR_Enabled", 1, RegistryValueKind.DWord);
+            VerifiedRegistry.SetDword(
+                Registry.CurrentUser,
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
+                "AppCaptureEnabled", 1);
+            VerifiedRegistry.SetDword(
+                Registry.CurrentUser,
+                @"System\GameConfigStore",
+                "GameDVR_Enabled", 1);
             return "Activee.";
         });
 
         Step(report, "Windows", "Enregistrement DVR", () =>
         {
-            Registry.SetValue(
-                @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
-                "HistoricalCaptureEnabled", 1, RegistryValueKind.DWord);
+            VerifiedRegistry.SetDword(
+                Registry.CurrentUser,
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
+                "HistoricalCaptureEnabled", 1);
             return "Active.";
         });
 
         Step(report, "Windows", "Priorite GPU jeux", () =>
         {
             const string path =
-                @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
-            Registry.SetValue(path, "GPU Priority", 8, RegistryValueKind.DWord);
-            Registry.SetValue(path, "Priority", 2, RegistryValueKind.DWord);
-            Registry.SetValue(path, "Scheduling Category", "Medium", RegistryValueKind.String);
-            Registry.SetValue(path, "SFIO Priority", "Normal", RegistryValueKind.String);
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games";
+            VerifiedRegistry.SetDword(Registry.LocalMachine, path, "GPU Priority", 8);
+            VerifiedRegistry.SetDword(Registry.LocalMachine, path, "Priority", 2);
+            VerifiedRegistry.SetString(Registry.LocalMachine, path, "Scheduling Category", "Medium");
+            VerifiedRegistry.SetString(Registry.LocalMachine, path, "SFIO Priority", "Normal");
             return "8 / 2 / Medium / Normal.";
         });
 
         Step(report, "Windows", "Mode MSI GPU", () =>
         {
-            var path = FindGpuMsiPath();
-            if (path == null)
-                return Skip("Aucun GPU Display trouve dans le registre.");
+            if (!GpuMsiMode.TryGetRegistryPath(out _))
+                return Skip("Aucun GPU PCI compatible avec le mode MSI n'a ete trouve.");
 
             return Skip("Valeur definie par le pilote GPU; reglage laisse intact.");
         });
 
         Step(report, "Windows", "Mode Jeu", () =>
         {
-            DeleteValue(Registry.CurrentUser,
+            VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                 @"Software\Microsoft\GameBar",
                 "AutoGameModeEnabled");
             return "Override supprime, comportement Windows par defaut.";
@@ -162,9 +167,11 @@ public static class WindowsDefaultsRestorer
             var updated = RegistryValueLogic.SetSemicolonValue(
                 raw, "SwapEffectUpgradeEnable", null);
             if (updated == null)
-                key.DeleteValue("DirectXUserGlobalSettings", false);
+                VerifiedRegistry.DeleteValue(
+                    Registry.CurrentUser, subKey, "DirectXUserGlobalSettings");
             else
-                key.SetValue("DirectXUserGlobalSettings", updated, RegistryValueKind.String);
+                VerifiedRegistry.SetString(
+                    Registry.CurrentUser, subKey, "DirectXUserGlobalSettings", updated);
 
             return "Override SwapEffectUpgradeEnable retire.";
         });
@@ -182,48 +189,28 @@ public static class WindowsDefaultsRestorer
     {
         Step(report, "Reseau", "Nagle", () =>
         {
-            DeleteValue(Registry.LocalMachine,
-                @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters",
-                "TcpAckFrequency");
-            DeleteValue(Registry.LocalMachine,
-                @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters",
-                "TcpNoDelay");
-
-            using var root = Registry.LocalMachine.OpenSubKey(
-                @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces",
-                writable: true);
-            if (root != null)
-            {
-                foreach (var name in root.GetSubKeyNames())
-                {
-                    using var ifKey = root.OpenSubKey(name, writable: true);
-                    ifKey?.DeleteValue("TcpAckFrequency", false);
-                    ifKey?.DeleteValue("TcpNoDelay", false);
-                }
-            }
-            return "Overrides TCP retires.";
+            if (!NetworkOptimizationSettings.TrySetNagle(false, out string result))
+                throw new InvalidOperationException(result);
+            return result;
         });
 
         Step(report, "Reseau", "DNS", () =>
         {
-            using var searcher = new ManagementObjectSearcher(
-                "SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True");
-            foreach (ManagementObject obj in searcher.Get())
-            {
-                obj.InvokeMethod("SetDNSServerSearchOrder", new object?[] { null });
-                obj.Dispose();
-            }
-            return "Automatique via DHCP.";
+            if (!NetworkOptimizationSettings.TrySetDns(false, out string result))
+                throw new InvalidOperationException(result);
+            return result;
         });
 
         Step(report, "Reseau", "Mise en veille adaptateurs", () =>
         {
-            return Skip("Valeur propre a chaque pilote reseau; reglages laisses intacts.");
+            if (!NetworkAdapterPower.TrySet(false, out string result))
+                throw new InvalidOperationException(result);
+            return result;
         });
 
         Step(report, "Reseau", "WPAD", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp",
                 "DisableWpad");
             return "Override retire.";
@@ -231,8 +218,11 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Reseau", "NetworkThrottlingIndex", () =>
         {
-            Registry.SetValue(MmPath, "NetworkThrottlingIndex",
-                RegistryValueLogic.NetworkThrottlingDefault, RegistryValueKind.DWord);
+            VerifiedRegistry.SetDword(
+                Registry.LocalMachine,
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
+                "NetworkThrottlingIndex",
+                RegistryValueLogic.NetworkThrottlingDefault);
             report.NeedsRestart = true;
             return $"{RegistryValueLogic.NetworkThrottlingDefault}, redemarrage conseille.";
         });
@@ -242,25 +232,26 @@ public static class WindowsDefaultsRestorer
     {
         Step(report, "Confidentialite", "Telemetrie Windows", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
                 "AllowTelemetry");
-            RunCmd("sc", "config \"DiagTrack\" start= auto", 10_000, throwOnError: false);
-            RunCmd("sc", "config \"dmwappushservice\" start= demand", 10_000, throwOnError: false);
+            RestoreServiceStart("DiagTrack", "auto", 2);
+            RestoreServiceStart("dmwappushservice", "demand", 3);
             return "Strategie retiree, services remis en type de demarrage standard.";
         });
 
         Step(report, "Confidentialite", "Identifiant publicitaire", () =>
         {
-            Registry.SetValue(
-                @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-                "Enabled", 1, RegistryValueKind.DWord);
+            VerifiedRegistry.SetDword(
+                Registry.CurrentUser,
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
+                "Enabled", 1);
             return "Active.";
         });
 
         Step(report, "Confidentialite", "Historique d'activite", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SOFTWARE\Policies\Microsoft\Windows\System",
                 "EnableActivityFeed");
             return "Strategie retiree.";
@@ -268,7 +259,7 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Confidentialite", "Recherche Bing", () =>
         {
-            DeleteValue(Registry.CurrentUser,
+            VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                 @"SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
                 "BingSearchEnabled");
             return "Override retire.";
@@ -276,10 +267,10 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Confidentialite", "Personnalisation de saisie", () =>
         {
-            DeleteValue(Registry.CurrentUser,
+            VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                 @"SOFTWARE\Microsoft\InputPersonalization",
                 "RestrictImplicitInkCollection");
-            DeleteValue(Registry.CurrentUser,
+            VerifiedRegistry.DeleteValue(Registry.CurrentUser,
                 @"SOFTWARE\Microsoft\InputPersonalization",
                 "RestrictImplicitTextCollection");
             return "Overrides retires.";
@@ -287,7 +278,7 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Confidentialite", "Localisation", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
                 "DisableLocation");
             return "Strategie retiree.";
@@ -295,24 +286,25 @@ public static class WindowsDefaultsRestorer
 
         Step(report, "Confidentialite", "Rapports d'erreurs Windows", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting",
                 "Disabled");
-            RunCmd("sc", "config \"WerSvc\" start= demand", 10_000, throwOnError: false);
+            RestoreServiceStart("WerSvc", "demand", 3);
             return "Strategie retiree, service remis en manuel.";
         });
 
         Step(report, "Confidentialite", "Experiences personnalisees", () =>
         {
-            Registry.SetValue(
-                @"HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
-                "TailoredExperiencesWithDiagnosticDataEnabled", 1, RegistryValueKind.DWord);
+            VerifiedRegistry.SetDword(
+                Registry.CurrentUser,
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Privacy",
+                "TailoredExperiencesWithDiagnosticDataEnabled", 1);
             return "Activees.";
         });
 
         Step(report, "Confidentialite", "Inventaire applications", () =>
         {
-            DeleteValue(Registry.LocalMachine,
+            VerifiedRegistry.DeleteValue(Registry.LocalMachine,
                 @"SOFTWARE\Policies\Microsoft\Windows\AppCompat",
                 "DisableInventory");
             return "Strategie retiree.";
@@ -329,11 +321,7 @@ public static class WindowsDefaultsRestorer
             var path = FindDiscordSettingsPath();
             if (path == null) return Skip("settings.json introuvable.");
 
-            var node = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
-            if (node == null) return Skip("settings.json non modifiable.");
-
-            node["enableHardwareAcceleration"] = true;
-            File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            JsonSettingsEditor.SetBooleanAtomically(path, "enableHardwareAcceleration", true);
             return "Activee.";
         });
 
@@ -376,87 +364,48 @@ public static class WindowsDefaultsRestorer
 
     private static string Skip(string detail) => throw new RestoreSkippedException(detail);
 
-    private static void DeleteValue(RegistryKey root, string subKey, string valueName)
-    {
-        using var key = root.OpenSubKey(subKey, writable: true);
-        key?.DeleteValue(valueName, false);
-    }
-
     private static void RestoreAccessibilityHotkey(string subKey, int defaultValue)
     {
         var path = $@"HKEY_CURRENT_USER\Control Panel\Accessibility\{subKey}";
         var raw = Registry.GetValue(path, "Flags", null)?.ToString();
         var flags = int.TryParse(raw, out var parsed) ? parsed : defaultValue;
-        Registry.SetValue(path, "Flags",
-            RegistryValueLogic.EnsureBits(flags, 0x4).ToString(), RegistryValueKind.String);
+        VerifiedRegistry.SetString(
+            Registry.CurrentUser,
+            $@"Control Panel\Accessibility\{subKey}",
+            "Flags",
+            RegistryValueLogic.EnsureBits(flags, 0x4).ToString());
     }
 
-    private static void RunCmd(string exe, string args, int timeoutMs, bool throwOnError = true)
+    private static void RestoreServiceStart(string name, string startType, int expected)
     {
-        using var p = Process.Start(new ProcessStartInfo(exe, args)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardError = true,
-            RedirectStandardOutput = true
-        });
+        using RegistryKey? service = Registry.LocalMachine.OpenSubKey(
+            $@"SYSTEM\CurrentControlSet\Services\{name}");
+        if (service == null) return;
 
-        if (p == null)
-        {
-            if (throwOnError) throw new InvalidOperationException($"{exe} : lancement impossible.");
-            return;
-        }
-
-        if (!p.WaitForExit(timeoutMs))
-        {
-            try { p.Kill(entireProcessTree: true); } catch { }
-            if (throwOnError) throw new TimeoutException($"{exe} : delai depasse.");
-            return;
-        }
-
-        if (throwOnError && p.ExitCode != 0)
-        {
-            var err = p.StandardError.ReadToEnd().Trim();
-            if (string.IsNullOrWhiteSpace(err)) err = p.StandardOutput.ReadToEnd().Trim();
-            if (string.IsNullOrWhiteSpace(err)) err = $"code {p.ExitCode}";
-            throw new InvalidOperationException($"{exe} : {err}");
-        }
+        RunCmd("sc", $"config \"{name}\" start= {startType}", 10_000);
+        if (!VerifiedRegistry.IsDword(
+                Registry.LocalMachine,
+                $@"SYSTEM\CurrentControlSet\Services\{name}",
+                "Start",
+                expected))
+            throw new InvalidOperationException(
+                $"Windows n'a pas conserve le type de demarrage du service {name}.");
     }
 
-    private static string? FindGpuMsiPath()
+    private static void RunCmd(string exe, string args, int timeoutMs)
     {
-        const string classRoot = @"SYSTEM\CurrentControlSet\Enum";
-        try
+        ProcessCommandResult result = ProcessCommand.Run(exe, args, timeoutMs);
+        if (!result.Success)
         {
-            using var root = Registry.LocalMachine.OpenSubKey(classRoot);
-            if (root == null) return null;
-
-            foreach (var busName in root.GetSubKeyNames())
-            {
-                if (!busName.StartsWith("PCI", StringComparison.OrdinalIgnoreCase)) continue;
-                using var bus = root.OpenSubKey(busName);
-                if (bus == null) continue;
-
-                foreach (var devName in bus.GetSubKeyNames())
-                {
-                    using var dev = bus.OpenSubKey(devName);
-                    if (dev == null) continue;
-
-                    foreach (var instName in dev.GetSubKeyNames())
-                    {
-                        using var inst = dev.OpenSubKey(instName);
-                        var cls = inst?.GetValue("Class")?.ToString() ?? "";
-                        if (!cls.Equals("Display", StringComparison.OrdinalIgnoreCase)) continue;
-
-                        return @"HKEY_LOCAL_MACHINE\" + $@"{classRoot}\{busName}\{devName}\{instName}" +
-                               @"\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties";
-                    }
-                }
-            }
+            string detail = !string.IsNullOrWhiteSpace(result.Error)
+                ? result.Error
+                : !string.IsNullOrWhiteSpace(result.Output)
+                    ? result.Output.Trim()
+                    : $"code {result.ExitCode}";
+            if (result.TimedOut)
+                throw new TimeoutException($"{exe} : {detail}");
+            throw new InvalidOperationException($"{exe} : {detail}");
         }
-        catch { }
-
-        return null;
     }
 
     private static string? FindDiscordSettingsPath()

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
 using System.Globalization;
 using System.Linq;
@@ -777,8 +778,21 @@ namespace Optimisation_Tool.Helpers
             {
                 bool Has(string name)
                 {
-                    try { return System.Diagnostics.Process.GetProcessesByName(name).Length > 0; }
-                    catch { return false; }
+                    Process[] processes = Array.Empty<Process>();
+                    try
+                    {
+                        processes = Process.GetProcessesByName(name);
+                        return processes.Length > 0;
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("incident-runtime-process", "Diagnostic incident : processus actifs illisibles", ex);
+                        return false;
+                    }
+                    finally
+                    {
+                        foreach (Process process in processes) process.Dispose();
+                    }
                 }
 
                 if (vendor == "NVIDIA" && Has("MSIAfterburner"))
@@ -790,7 +804,10 @@ namespace Optimisation_Tool.Helpers
                 if (Has("parsecd") || Has("Parsec"))
                     suspects.Add("Parsec lancé");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("incident-runtime-suspects", "Diagnostic incident : logiciels GPU actifs illisibles", ex);
+            }
             return suspects;
         }
 
@@ -810,6 +827,13 @@ namespace Optimisation_Tool.Helpers
         // Récupère un BugCheckCode (hex ou décimal) depuis l'EventData. 0 si absent.
         private static uint ParseBugCheck(RawEvent e)
         {
+            bool kernelPower = e.Provider.Equals(
+                "Microsoft-Windows-Kernel-Power",
+                StringComparison.OrdinalIgnoreCase) && e.Id == 41;
+            bool bugCheckProvider = e.Provider.Contains("BugCheck", StringComparison.OrdinalIgnoreCase)
+                || e.Provider.Contains("WER-SystemErrorReporting", StringComparison.OrdinalIgnoreCase);
+            if (!kernelPower && !bugCheckProvider) return 0;
+
             // Champ direct (Kernel-Power 41 nomme BugcheckCode ; BugCheck 1001 utilise des positions)
             foreach (var key in new[] { "BugcheckCode", "BugCheckCode", "param1", "#0" })
             {
@@ -931,13 +955,20 @@ namespace Optimisation_Tool.Helpers
                                 if (props != null && props.Count > 4)
                                     reason    = props[4]?.Value?.ToString() ?? "";
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                AppLog.ErrorOnce("incident-shutdown-properties", "Diagnostic incident : détails d'arrêt Windows illisibles", ex);
+                            }
                         }
                     }
                 }
                 return (found, initiator, reason);
             }
-            catch { return (false, "", ""); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("incident-shutdown-events", "Diagnostic incident : événements d'arrêt Windows illisibles", ex);
+                return (false, "", "");
+            }
         }
     }
 }

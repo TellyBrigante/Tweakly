@@ -71,6 +71,7 @@ namespace Optimisation_Tool.Helpers
 
     public static class BatteryCalibrationStore
     {
+        private static readonly object Gate = new();
         public static string FilePath => Path.Combine(PathLayout.Config, "tweakly-battery-calibration.json");
         private static string BackupFilePath => FilePath + ".bak";
         private static string TempFilePath => FilePath + ".tmp";
@@ -83,54 +84,79 @@ namespace Optimisation_Tool.Helpers
 
         public static BatteryCalibrationSession Load()
         {
-            var candidates = new[]
+            lock (Gate)
             {
-                TryLoad(FilePath, "principal"),
-                TryLoad(BackupFilePath, "backup"),
-                TryLoad(TempFilePath, "temporaire")
-            }.Where(s => s != null).Cast<BatteryCalibrationSession>().ToList();
+                var candidates = new[]
+                {
+                    TryLoad(FilePath, "principal"),
+                    TryLoad(BackupFilePath, "backup"),
+                    TryLoad(TempFilePath, "temporaire")
+                }.Where(s => s != null).Cast<BatteryCalibrationSession>().ToList();
 
-            if (candidates.Count == 0) return new BatteryCalibrationSession();
-            return candidates
-                .OrderByDescending(SessionSortDate)
-                .ThenByDescending(s => s.Samples.Count)
-                .First();
+                if (candidates.Count == 0) return new BatteryCalibrationSession();
+                return candidates
+                    .OrderByDescending(SessionSortDate)
+                    .ThenByDescending(s => s.Samples.Count)
+                    .First();
+            }
         }
 
-        public static void Save(BatteryCalibrationSession session)
+        public static bool Save(BatteryCalibrationSession session)
         {
-            try
+            lock (Gate)
             {
-                session.LastSavedAt = DateTime.Now;
-                Directory.CreateDirectory(PathLayout.Config);
-                File.WriteAllText(TempFilePath, JsonSerializer.Serialize(session, Options));
+                try
+                {
+                    session.LastSavedAt = DateTime.Now;
+                    Directory.CreateDirectory(PathLayout.Config);
+                    byte[] json = JsonSerializer.SerializeToUtf8Bytes(session, Options);
+                    using (var stream = new FileStream(
+                        TempFilePath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None,
+                        bufferSize: 16 * 1024,
+                        FileOptions.WriteThrough))
+                    {
+                        stream.Write(json);
+                        stream.Flush(flushToDisk: true);
+                    }
 
-                if (File.Exists(FilePath))
-                {
-                    File.Replace(TempFilePath, FilePath, BackupFilePath, ignoreMetadataErrors: true);
+                    if (File.Exists(FilePath))
+                    {
+                        File.Replace(TempFilePath, FilePath, BackupFilePath, ignoreMetadataErrors: true);
+                    }
+                    else
+                    {
+                        File.Move(TempFilePath, FilePath);
+                        File.Copy(FilePath, BackupFilePath, overwrite: true);
+                    }
+                    return true;
                 }
-                else
+                catch (Exception ex)
                 {
-                    File.Move(TempFilePath, FilePath);
-                    File.Copy(FilePath, BackupFilePath, overwrite: true);
+                    AppLog.Error("Calibrage batterie : enregistrement impossible", ex);
+                    TryCopyCurrentToBackup();
+                    return false;
                 }
-            }
-            catch (Exception ex)
-            {
-                AppLog.Write("BatteryCalibrationStore.Save ERREUR : " + ex.Message + " | path=" + FilePath);
-                TryCopyCurrentToBackup();
             }
         }
 
         public static void Reset()
         {
-            try
+            lock (Gate)
             {
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-                if (File.Exists(BackupFilePath)) File.Delete(BackupFilePath);
-                if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
+                try
+                {
+                    if (File.Exists(FilePath)) File.Delete(FilePath);
+                    if (File.Exists(BackupFilePath)) File.Delete(BackupFilePath);
+                    if (File.Exists(TempFilePath)) File.Delete(TempFilePath);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Error("Calibrage batterie : réinitialisation du stockage impossible", ex);
+                }
             }
-            catch { }
         }
 
         public static void RestorePowerPlanGuardIfNeeded()
@@ -193,7 +219,10 @@ namespace Optimisation_Tool.Helpers
                 if (File.Exists(FilePath))
                     File.Copy(FilePath, BackupFilePath, overwrite: true);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("battery-calibration-backup", "Calibrage batterie : sauvegarde de secours impossible", ex);
+            }
         }
 
         public static BatteryCalibrationSample FromSnapshot(BatterySnapshot snapshot, BatteryCalibrationPhase phase)

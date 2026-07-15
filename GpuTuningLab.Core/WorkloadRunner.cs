@@ -77,8 +77,10 @@ public sealed class ExternalWorkloadRunner : IWorkloadRunner
         Task<GpuContaminationResult>? contaminationTask = _contaminationMonitor?.ObserveAsync(
             process.Id,
             contaminationStop.Token);
-        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+        // Les flux doivent etre vides apres l'arret du processus, meme si l'appelant
+        // annule. Le processus est tue par le chemin d'annulation ci-dessous.
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(definition.Timeout);
         bool timedOut = false;
@@ -96,7 +98,7 @@ public sealed class ExternalWorkloadRunner : IWorkloadRunner
         }
         started.Stop();
         DateTimeOffset endedAt = DateTimeOffset.Now;
-        contaminationStop.Cancel();
+        await contaminationStop.CancelAsync().ConfigureAwait(false);
         GpuContaminationResult contamination = contaminationTask == null
             ? new GpuContaminationResult(true, [], "")
             : await contaminationTask.ConfigureAwait(false);
@@ -220,7 +222,7 @@ public sealed class GpuTestOrchestrator
         }
         finally
         {
-            telemetryStop.Cancel();
+            await telemetryStop.CancelAsync().ConfigureAwait(false);
         }
 
         TelemetryCapture capture = await telemetryTask.ConfigureAwait(false);

@@ -48,7 +48,7 @@
                             HorizontalAlignment="Right" Margin="0,12,0,0">
                     <Button x:Name="BtnViewIncident" Content="Par incident" Style="{StaticResource SecondaryBtnStyle}"
                             Padding="14,8" Margin="0,0,8,0" Click="BtnViewIncident_Click"/>
-                    <Button x:Name="BtnViewSource" Content="Par source" Style="{StaticResource SecondaryBtnStyle}"
+                    <Button x:Name="BtnViewSource" Content="Détails techniques" Style="{StaticResource SecondaryBtnStyle}"
                             Padding="14,8" Margin="0,0,16,0" Click="BtnViewSource_Click"/>
                     <Button x:Name="Btn7"  Content="7 j"  Style="{StaticResource SecondaryBtnStyle}"
                             Padding="12,8" Margin="0,0,8,0" Click="Btn7_Click"/>

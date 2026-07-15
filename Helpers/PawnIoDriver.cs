@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Win32;
@@ -25,7 +24,11 @@ namespace Optimisation_Tool.Helpers
                     @"SYSTEM\CurrentControlSet\Services\PawnIO");
                 return k != null;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("pawnio-state", "PawnIO : état du pilote indisponible", ex);
+                return false;
+            }
         }
 
         /// <summary>
@@ -38,25 +41,19 @@ namespace Optimisation_Tool.Helpers
             if (IsInstalled()) return (true, "pilote déjà présent");
             if (!File.Exists(SetupPath)) return (false, "installeur PawnIO introuvable dans data\\");
 
-            bool launched = await Task.Run(() =>
-            {
-                try
-                {
-                    using var p = Process.Start(new ProcessStartInfo(SetupPath, "-install -silent")
-                    { UseShellExecute = false, CreateNoWindow = true });
-                    if (p == null) return false;
-                    p.WaitForExit(120_000);
-                    return true;
-                }
-                catch { return false; }
-            });
+            ProcessCommandResult install = await Task.Run(() =>
+                ProcessCommand.Run(SetupPath, "-install -silent", 120_000));
 
             // Le service peut apparaître avec un léger délai après la fin de l'installeur.
             for (int i = 0; i < 12 && !IsInstalled(); i++) await Task.Delay(300);
 
             if (IsInstalled())   return (true, "pilote PawnIO installé");
-            return launched ? (false, "installeur exécuté mais pilote absent")
-                            : (false, "impossible de lancer l'installeur");
+            if (!install.Success)
+            {
+                AppLog.WriteOnce("pawnio-install", "PawnIO : installation échouée : " + install.FailureDescription);
+                return (false, "installation PawnIO impossible");
+            }
+            return (false, "installeur terminé mais pilote absent");
         }
 
         /// <summary>
@@ -66,17 +63,12 @@ namespace Optimisation_Tool.Helpers
         public static async Task<bool> UninstallAsync()
         {
             if (!IsInstalled()) return true;
-            return await Task.Run(() =>
-            {
-                try
-                {
-                    using var p = Process.Start(new ProcessStartInfo(SetupPath, "-uninstall -silent")
-                    { UseShellExecute = false, CreateNoWindow = true });
-                    p?.WaitForExit(120_000);
-                }
-                catch { }
-                return !IsInstalled();
-            });
+            ProcessCommandResult uninstall = await Task.Run(() =>
+                ProcessCommand.Run(SetupPath, "-uninstall -silent", 120_000));
+            bool removed = !IsInstalled();
+            if (!uninstall.Success && !removed)
+                AppLog.WriteOnce("pawnio-uninstall", "PawnIO : désinstallation échouée : " + uninstall.FailureDescription);
+            return removed;
         }
     }
 }

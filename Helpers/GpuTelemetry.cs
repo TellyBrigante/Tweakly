@@ -39,15 +39,20 @@ namespace Optimisation_Tool.Helpers
                 MemMhz = double.NaN, VramUsedMB = double.NaN, PowerW = double.NaN,
             };
             if (!_ok || _gpu == null) return r;
-            try { foreach (var s in _gpu.ThermalInformation.ThermalSensors) { r.TempC = s.CurrentTemperature; break; } } catch { }
-            try { r.UsagePct = _gpu.UsageInformation.GPU.Percentage; } catch { }
+            try { foreach (var s in _gpu.ThermalInformation.ThermalSensors) { r.TempC = s.CurrentTemperature; break; } }
+            catch (Exception ex) { AppLog.ErrorOnce("gpu-telemetry-temperature", "Monitoring GPU : température indisponible", ex); }
+            try { r.UsagePct = _gpu.UsageInformation.GPU.Percentage; }
+            catch (Exception ex) { AppLog.ErrorOnce("gpu-telemetry-usage", "Monitoring GPU : charge indisponible", ex); }
             try
             {
                 var c = _gpu.CurrentClockFrequencies;
                 r.CoreMhz = c.GraphicsClock.Frequency / 1000.0;
                 r.MemMhz = c.MemoryClock.Frequency / 1000.0;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("gpu-telemetry-clocks", "Monitoring GPU : fréquences indisponibles", ex);
+            }
             try
             {
                 var mi = _gpu.MemoryInformation;
@@ -56,7 +61,10 @@ namespace Optimisation_Tool.Helpers
                 r.VramUsedMB = (totalKb - freeKb) / 1024.0;
                 r.VramTotalMB = totalKb / 1024.0;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("gpu-telemetry-memory", "Monitoring GPU : mémoire vidéo indisponible", ex);
+            }
             return r;
         }
 

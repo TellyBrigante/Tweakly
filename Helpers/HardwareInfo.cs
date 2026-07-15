@@ -52,8 +52,8 @@ namespace Optimisation_Tool.Helpers
                     if (realSocket.Length > 0) socket = realSocket;
 
                     // Hyper-Threading actif si threads > cores
-                    int.TryParse(cores,   out int ic);
-                    int.TryParse(threads, out int it);
+                    int ic = int.TryParse(cores, out int parsedCores) ? parsedCores : 0;
+                    int it = int.TryParse(threads, out int parsedThreads) ? parsedThreads : 0;
                     var ht = (ic > 0 && it > 0)
                         ? (it > ic ? "Hyper-Threading actif" : "Hyper-Threading absent / désactivé")
                         : "";
@@ -123,7 +123,10 @@ namespace Optimisation_Tool.Helpers
                             break;
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-info-ram-capacity", "Informations système : capacité maximale de RAM indisponible", ex);
+                    }
 
                     // Configuration channels (déduit du nb de modules vs slots)
                     var channels = DeriveRamChannels(mods.Count);
@@ -238,7 +241,10 @@ namespace Optimisation_Tool.Helpers
                             "UBR", null);
                         if (v != null) ubr = $".{v}";
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-info-windows-ubr", "Informations système : révision Windows indisponible", ex);
+                    }
 
                     // Uptime à partir du dernier démarrage
                     var uptimeStr = "";
@@ -256,7 +262,10 @@ namespace Optimisation_Tool.Helpers
                                        : $"{up.Minutes}min";
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-info-uptime", "Informations système : durée de fonctionnement indisponible", ex);
+                    }
 
                     var pcName  = Environment.MachineName;
                     var upLine  = uptimeStr.Length > 0 ? $"\nUptime : {uptimeStr}" : "";
@@ -272,7 +281,10 @@ namespace Optimisation_Tool.Helpers
                             installLine = $"\nInstallé le : {inst:dd/MM/yyyy}";
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-info-install-date", "Informations système : date d'installation indisponible", ex);
+                    }
 
                     d["os"] = $"{name}\nBuild {build}{ubr}  |  {arch}\nPC : {pcName}{upLine}{installLine}";
                     o.Dispose();
@@ -598,7 +610,10 @@ namespace Optimisation_Tool.Helpers
                     if (dw != null) return Convert.ToInt64(dw);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("hardware-info-vram-registry", "Informations système : mémoire vidéo du registre indisponible", ex);
+            }
             return 0;
         }
 

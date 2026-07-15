@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Eventing.Reader;
 using System.Globalization;
+using System.IO;
 using System.Management;
 using System.Text.RegularExpressions;
 
@@ -32,21 +33,44 @@ namespace Optimisation_Tool.Helpers
         public static List<HealthItem> Scan()
         {
             var items = new List<HealthItem>();
-            try { CheckStorageHealth(items); }       catch { }
-            try { CheckMemory(items); }              catch { }
-            try { CheckGpuLink(items); }             catch { }
-            try { CheckGpuTemp(items); }             catch { }
-            try { CheckGpuCrashes(items); }          catch { }
-            try { CheckDevices(items); }             catch { }
-            try { CheckUnexpectedShutdowns(items); } catch { }
-            try { CheckBsod(items); }                catch { }
-            try { CheckWhea(items); }                catch { }
-            try { CheckDiskErrors(items); }          catch { }
-            try { CheckFsCorruption(items); }        catch { }
-            try { CheckServices(items); }            catch { }
-            try { CheckDriverLoad(items); }          catch { }
-            try { CheckAppCrashes(items); }          catch { }
+            RunCheck(items, "Stockage", "État des disques", CheckStorageHealth);
+            RunCheck(items, "Mémoire", "Configuration RAM", CheckMemory);
+            RunCheck(items, "Carte graphique", "Lien PCIe", CheckGpuLink);
+            RunCheck(items, "Carte graphique", "Température GPU", CheckGpuTemp);
+            RunCheck(items, "Carte graphique", "Plantages pilote GPU", CheckGpuCrashes);
+            RunCheck(items, "Matériel", "Périphériques", CheckDevices);
+            RunCheck(items, "Système", "Stabilité", CheckUnexpectedShutdowns);
+            RunCheck(items, "Système", "Écrans bleus", CheckBsod);
+            RunCheck(items, "Système", "Erreurs matérielles", CheckWhea);
+            RunCheck(items, "Système", "Erreurs disque", CheckDiskErrors);
+            RunCheck(items, "Système", "Intégrité fichiers", CheckFsCorruption);
+            RunCheck(items, "Système", "Services Windows", CheckServices);
+            RunCheck(items, "Système", "Pilotes système", CheckDriverLoad);
+            RunCheck(items, "Système", "Plantages de logiciels", CheckAppCrashes);
             return items;
+        }
+
+        private static void RunCheck(
+            List<HealthItem> items,
+            string category,
+            string title,
+            Action<List<HealthItem>> check)
+        {
+            try
+            {
+                check(items);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error($"Bilan de santé : {title}", ex);
+                items.Add(new HealthItem
+                {
+                    Category = category,
+                    Title = title,
+                    Message = "Contrôle indisponible",
+                    Status = HStatus.Info,
+                });
+            }
         }
 
         // ── Stockage : 1 ligne par disque = nom | espace libre | santé+usure ────
@@ -73,11 +97,17 @@ namespace Optimisation_Tool.Helpers
                         if (!diskLetters.TryGetValue(dn, out var list)) { list = new List<string>(); diskLetters[dn] = list; }
                         list.Add(char.ToUpperInvariant(dl) + ":");
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("health-storage-partition", "Bilan de santé : partition ignorée", ex);
+                    }
                     finally { p.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("health-storage-partition-map", "Bilan de santé : association disque/partition indisponible", ex);
+            }
 
             // Map lettre → (libre, total) depuis Win32_LogicalDisk
             var letterSpace = new Dictionary<string, (double free, double size)>(StringComparer.OrdinalIgnoreCase);
@@ -94,11 +124,17 @@ namespace Optimisation_Tool.Helpers
                         double free = d["FreeSpace"] != null ? Convert.ToDouble(d["FreeSpace"]) : 0;
                         if (!string.IsNullOrEmpty(id)) letterSpace[id] = (free, size);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("health-storage-logical-disk", "Bilan de santé : volume logique ignoré", ex);
+                    }
                     finally { d.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("health-storage-space-map", "Bilan de santé : espace disque indisponible", ex);
+            }
 
             // Disques physiques
             var q = new ObjectQuery("SELECT DeviceId, FriendlyName, HealthStatus, BusType FROM MSFT_PhysicalDisk");
@@ -195,7 +231,10 @@ namespace Optimisation_Tool.Helpers
                         ExtraStatus  = extraSt,
                     });
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("health-storage-physical-disk", "Bilan de santé : disque physique ignoré", ex);
+                }
                 finally { disk.Dispose(); }
             }
         }
@@ -245,19 +284,28 @@ namespace Optimisation_Tool.Helpers
                 CreateNoWindow         = true,
                 RedirectStandardOutput = true,
             });
-            if (p == null) return;
+            if (p == null)
+                throw new InvalidOperationException("nvidia-smi n'a pas démarré");
 
             var line = p.StandardOutput.ReadLine();
-            p.WaitForExit(4000);
-            if (string.IsNullOrWhiteSpace(line)) return;
+            if (!p.WaitForExit(4000))
+            {
+                try { p.Kill(entireProcessTree: true); }
+                catch (Exception ex) { AppLog.ErrorOnce("health-gpu-link-kill", "Bilan de santé : arrêt de nvidia-smi impossible", ex); }
+                throw new TimeoutException("nvidia-smi n'a pas répondu en 4 s");
+            }
+            if (string.IsNullOrWhiteSpace(line))
+                throw new InvalidDataException("nvidia-smi n'a retourné aucun lien PCIe");
 
             var parts = line.Split(',');
-            if (parts.Length < 3) return;
+            if (parts.Length < 3)
+                throw new InvalidDataException("réponse PCIe de nvidia-smi incomplète");
 
             var name = parts[0].Trim();
             int cur  = ParseInt(parts[1]);
             int max  = ParseInt(parts[2]);
-            if (cur <= 0 || max <= 0) return;
+            if (cur <= 0 || max <= 0)
+                throw new InvalidDataException("largeur du lien PCIe invalide");
 
             var st  = cur < max ? HStatus.Warning : HStatus.Ok;
             var msg = cur < max
@@ -291,7 +339,10 @@ namespace Optimisation_Tool.Helpers
                     });
                     found++;
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("health-device-entry", "Bilan de santé : périphérique ignoré", ex);
+                }
                 finally { d.Dispose(); }
             }
 
@@ -315,30 +366,25 @@ namespace Optimisation_Tool.Helpers
         };
 
         // ── Événements système (30 derniers jours) via le journal Windows ──────
-        // Compte les événements correspondant au filtre XPath. Retourne -1 si inaccessible.
+        // Compte les événements correspondant au filtre XPath.
         private static int CountEvents(string log, string xpath)
         {
-            try
+            var query = new EventLogQuery(log, PathType.LogName, xpath);
+            using var reader = new EventLogReader(query);
+            int count = 0;
+            for (EventRecord? ev = reader.ReadEvent(); ev != null; ev = reader.ReadEvent())
             {
-                var query = new EventLogQuery(log, PathType.LogName, xpath);
-                using var reader = new EventLogReader(query);
-                int count = 0;
-                for (EventRecord? ev = reader.ReadEvent(); ev != null; ev = reader.ReadEvent())
-                {
-                    count++;
-                    ev.Dispose();
-                    if (count >= 999) break;
-                }
-                return count;
+                count++;
+                ev.Dispose();
+                if (count >= 999) break;
             }
-            catch { return -1; }
+            return count;
         }
 
         private static void AddEventCheck(List<HealthItem> items, string category, string log, string title,
             string xpath, string okMsg, string koMsgFmt, HStatus koStatus)
         {
             int n = CountEvents(log, xpath);
-            if (n < 0) return;   // journal inaccessible → on n'affiche rien
             items.Add(new HealthItem
             {
                 Category = category,
@@ -352,50 +398,49 @@ namespace Optimisation_Tool.Helpers
         private static void AddEventCheckNamed(List<HealthItem> items, string category, string log, string title,
             string xpath, string okMsg, string koMsgFmt, HStatus koStatus)
         {
-            try
+            var query = new EventLogQuery(log, PathType.LogName, xpath);
+            using var reader = new EventLogReader(query);
+
+            int total = 0;
+            var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (EventRecord? ev = reader.ReadEvent(); ev != null; ev = reader.ReadEvent())
             {
-                var query = new EventLogQuery(log, PathType.LogName, xpath);
-                using var reader = new EventLogReader(query);
-
-                int total = 0;
-                var byName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                for (EventRecord? ev = reader.ReadEvent(); ev != null; ev = reader.ReadEvent())
+                try
                 {
-                    try
+                    total++;
+                    if (ev.Properties != null && ev.Properties.Count > 0)
                     {
-                        total++;
-                        if (ev.Properties != null && ev.Properties.Count > 0)
-                        {
-                            var name = CleanName(ev.Properties[0].Value?.ToString());
-                            if (name.Length > 0) { byName.TryGetValue(name, out int c); byName[name] = c + 1; }
-                        }
-                    }
-                    catch { }
-                    finally { ev.Dispose(); }
-                    if (total >= 999) break;
-                }
-
-                string  msg;
-                HStatus st;
-                if (total == 0) { msg = okMsg; st = HStatus.Ok; }
-                else
-                {
-                    st  = koStatus;
-                    msg = string.Format(koMsgFmt, total);
-                    if (byName.Count > 0 && byName.Count <= 3)
-                    {
-                        msg += " : " + string.Join(", ", byName.Keys);   // peu d'éléments → on les liste
-                    }
-                    else if (byName.Count > 3)
-                    {
-                        string topName = ""; int topCount = 0;            // beaucoup → on cite le pire
-                        foreach (var kv in byName) if (kv.Value > topCount) { topCount = kv.Value; topName = kv.Key; }
-                        msg += $" — surtout {topName} ({topCount} fois)";
+                        var name = CleanName(ev.Properties[0].Value?.ToString());
+                        if (name.Length > 0) { byName.TryGetValue(name, out int c); byName[name] = c + 1; }
                     }
                 }
-                items.Add(new HealthItem { Category = category, Title = title, Message = msg, Status = st });
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("health-event-entry:" + log, "Bilan de santé : événement illisible", ex);
+                }
+                finally { ev.Dispose(); }
+                if (total >= 999) break;
             }
-            catch { }
+
+            string  msg;
+            HStatus st;
+            if (total == 0) { msg = okMsg; st = HStatus.Ok; }
+            else
+            {
+                st  = koStatus;
+                msg = string.Format(koMsgFmt, total);
+                if (byName.Count > 0 && byName.Count <= 3)
+                {
+                    msg += " : " + string.Join(", ", byName.Keys);   // peu d'éléments → on les liste
+                }
+                else if (byName.Count > 3)
+                {
+                    string topName = ""; int topCount = 0;            // beaucoup → on cite le pire
+                    foreach (var kv in byName) if (kv.Value > topCount) { topCount = kv.Value; topName = kv.Key; }
+                    msg += $" — surtout {topName} ({topCount} fois)";
+                }
+            }
+            items.Add(new HealthItem { Category = category, Title = title, Message = msg, Status = st });
         }
 
         private static string CleanName(string? raw)
@@ -463,23 +508,26 @@ namespace Optimisation_Tool.Helpers
         // Surchauffe : température GPU instantanée vs seuils (refroidissement défaillant)
         private static void CheckGpuTemp(List<HealthItem> items)
         {
-            try
+            using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
+                "--query-gpu=temperature.gpu --format=csv,noheader,nounits")
             {
-                using var p = Process.Start(new ProcessStartInfo("nvidia-smi",
-                    "--query-gpu=temperature.gpu --format=csv,noheader,nounits")
-                {
-                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
-                });
-                if (p == null) return;
-                var line = p.StandardOutput.ReadLine();
-                p.WaitForExit(4000);
-                if (!int.TryParse((line ?? "").Trim(), out int t) || t <= 0 || t > 150) return;
-
-                var st  = t >= 90 ? HStatus.Critical : t >= 83 ? HStatus.Warning : HStatus.Ok;
-                var msg = t >= 83 ? $"{t} °C — élevée (refroidissement à vérifier)" : $"{t} °C — normale";
-                items.Add(new HealthItem { Category = "Carte graphique", Title = "Température GPU", Message = msg, Status = st });
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
+            });
+            if (p == null)
+                throw new InvalidOperationException("nvidia-smi n'a pas démarré");
+            var line = p.StandardOutput.ReadLine();
+            if (!p.WaitForExit(4000))
+            {
+                try { p.Kill(entireProcessTree: true); }
+                catch (Exception ex) { AppLog.ErrorOnce("health-gpu-temperature-kill", "Bilan de santé : arrêt de nvidia-smi impossible", ex); }
+                throw new TimeoutException("nvidia-smi n'a pas répondu en 4 s");
             }
-            catch { }
+            if (!int.TryParse((line ?? "").Trim(), out int t) || t <= 0 || t > 150)
+                throw new InvalidDataException("température GPU invalide");
+
+            var st  = t >= 90 ? HStatus.Critical : t >= 83 ? HStatus.Warning : HStatus.Ok;
+            var msg = t >= 83 ? $"{t} °C — élevée (refroidissement à vérifier)" : $"{t} °C — normale";
+            items.Add(new HealthItem { Category = "Carte graphique", Title = "Température GPU", Message = msg, Status = st });
         }
 
         private static int ParseInt(string s)

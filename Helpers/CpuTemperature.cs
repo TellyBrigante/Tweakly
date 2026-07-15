@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using LibreHardwareMonitor.Hardware;
@@ -45,7 +46,12 @@ namespace Optimisation_Tool.Helpers
             {
                 // PawnIOLib.dll (user-mode) est livré dans data\drivers\ → on ajoute ce dossier au
                 // chemin de recherche des DLL natives pour que le P/Invoke de LHM la trouve.
-                try { SetDllDirectory(PathLayout.DataDrv); } catch { }
+                if (!SetDllDirectory(PathLayout.DataDrv))
+                {
+                    AppLog.ErrorOnce("cpu-temperature-dll-directory",
+                        "Température CPU : dossier PawnIO non enregistré",
+                        new Win32Exception(Marshal.GetLastWin32Error()));
+                }
 
                 var c = new Computer { IsCpuEnabled = true };
                 c.Open();
@@ -55,7 +61,13 @@ namespace Optimisation_Tool.Helpers
                 _opened = true;
                 return _cpu != null;
             }
-            catch { _failed = true; Close(); return false; }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("cpu-temperature-open", "Température CPU : initialisation impossible", ex);
+                _failed = true;
+                CloseCore(resetFailure: false);
+                return false;
+            }
         }
 
         /// <summary>Ferme LHM et réinitialise l'état (réouverture possible ensuite).</summary>
@@ -63,12 +75,21 @@ namespace Optimisation_Tool.Helpers
         {
             lock (_lock)
             {
-                try { _computer?.Close(); } catch { }
-                _computer = null;
-                _cpu      = null;
-                _opened   = false;
-                _failed   = false;
+                CloseCore(resetFailure: true);
             }
+        }
+
+        private static void CloseCore(bool resetFailure)
+        {
+            try { _computer?.Close(); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("cpu-temperature-close", "Température CPU : fermeture de la sonde impossible", ex);
+            }
+            _computer = null;
+            _cpu      = null;
+            _opened   = false;
+            if (resetFailure) _failed = false;
         }
 
         /// <summary>
@@ -101,7 +122,11 @@ namespace Optimisation_Tool.Helpers
                     var t = pkg ?? coreMax ?? anyCore;
                     return (t is > 0 and < 130) ? t : null;   // garde-fou contre les valeurs aberrantes
                 }
-                catch { return null; }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("cpu-temperature-read", "Température CPU : lecture impossible", ex);
+                    return null;
+                }
             }
         }
 

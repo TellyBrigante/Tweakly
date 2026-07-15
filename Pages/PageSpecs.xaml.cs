@@ -198,39 +198,31 @@ namespace Optimisation_Tool.Pages
             // Slots RAM : remplir les barrettes du schéma selon la config RÉELLE
             // (parse « Slots : 2 / 4 » produit par CollectHardware). L'illustration
             // dessine toujours 4 slots (ATX standard) — on en allume min(occupés, 4).
-            try
+            var m = Regex.Match(d.GetValueOrDefault("ram", ""), @"Slots\s*:\s*(\d+)\s*/\s*(\d+)");
+            if (m.Success)
             {
-                var m = Regex.Match(d.GetValueOrDefault("ram", ""), @"Slots\s*:\s*(\d+)\s*/\s*(\d+)");
-                if (m.Success)
+                int used  = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+                int total = int.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+                TxtRamSlots.Text = $"{used} / {total} slots occupés";
+                var sticks = new[] { RamStick0, RamStick1, RamStick2, RamStick3 };
+                // Remplissage réaliste : 2 barrettes sur 4 → slots 2 et 4 (dual channel A2/B2)
+                var pattern = used switch
                 {
-                    int used  = int.Parse(m.Groups[1].Value);
-                    int total = int.Parse(m.Groups[2].Value);
-                    TxtRamSlots.Text = $"{used} / {total} slots occupés";
-                    var sticks = new[] { RamStick0, RamStick1, RamStick2, RamStick3 };
-                    // Remplissage réaliste : 2 barrettes sur 4 → slots 2 et 4 (dual channel A2/B2)
-                    var pattern = used switch
-                    {
-                        1 => new[] { 1 },
-                        2 => new[] { 1, 3 },
-                        3 => new[] { 0, 1, 3 },
-                        _ => new[] { 0, 1, 2, 3 },
-                    };
-                    foreach (var idx in pattern.Where(i => i < sticks.Length).Take(Math.Min(used, 4)))
-                    {
-                        sticks[idx].SetResourceReference(Border.BackgroundProperty, "ThInfoTint");
-                        sticks[idx].SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
-                    }
+                    1 => new[] { 1 },
+                    2 => new[] { 1, 3 },
+                    3 => new[] { 0, 1, 3 },
+                    _ => new[] { 0, 1, 2, 3 },
+                };
+                foreach (var idx in pattern.Where(i => i < sticks.Length).Take(Math.Min(used, 4)))
+                {
+                    sticks[idx].SetResourceReference(Border.BackgroundProperty, "ThInfoTint");
+                    sticks[idx].SetResourceReference(Border.BorderBrushProperty, "ThAccentIcon");
                 }
             }
-            catch { }
 
             // Sérigraphie : le VRAI modèle de la carte mère imprimé sur le PCB
-            try
-            {
-                if (_biosModel.Length > 0)
-                    TxtMbSilk.Text = _biosModel.ToUpperInvariant();
-            }
-            catch { }
+            if (_biosModel.Length > 0)
+                TxtMbSilk.Text = _biosModel.ToUpperInvariant();
 
             // Teinte les valeurs chargées (compat)
             foreach (var tb in new[] { TxtCPU, TxtRAM, TxtGPU, TxtOS, TxtDisk, TxtMB })
@@ -541,7 +533,10 @@ namespace Optimisation_Tool.Pages
                     break;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-mainboard", "Informations système : carte mère", ex);
+            }
 
             try
             {
@@ -555,7 +550,10 @@ namespace Optimisation_Tool.Pages
                     break;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-bios", "Informations système : BIOS", ex);
+            }
 
             return (manufacturer, board, bios, biosDate);
         }
@@ -575,7 +573,10 @@ namespace Optimisation_Tool.Pages
                     };
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-firmware-mode", "Informations système : mode firmware", ex);
+            }
 
             try
             {
@@ -583,7 +584,10 @@ namespace Optimisation_Tool.Pages
                 if (k?.GetValue("UEFISecureBootEnabled") is int)
                     return Info("UEFI", "PEFirmwareType absent, mais l'état Secure Boot UEFI est exposé par Windows.", "Registre", "ThOk");
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-firmware-fallback", "Informations système : détection UEFI de secours", ex);
+            }
 
             return Info("Non exposé", "Windows ne fournit pas le type de firmware sur cette machine.", "Registre", "ThTextDim");
         }
@@ -600,7 +604,10 @@ namespace Optimisation_Tool.Pages
                         : Info("Désactivé", "Secure Boot est disponible mais désactivé.", "Registre", "ThWarn");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-secure-boot", "Informations système : Secure Boot", ex);
+            }
             return Info("Non exposé", "La valeur Secure Boot n'est pas lisible depuis Windows.", "Registre", "ThTextDim");
         }
 
@@ -627,7 +634,10 @@ namespace Optimisation_Tool.Pages
                     return Info("Désactivé", "TPM détecté mais pas entièrement activé.", "WMI TPM", "ThWarn");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-tpm", "Informations système : TPM", ex);
+            }
             return Info("Non détecté", "TPM non trouvé ou namespace TPM inaccessible.", "WMI TPM", "ThTextDim");
         }
 
@@ -648,7 +658,10 @@ namespace Optimisation_Tool.Pages
                         : Info("Désactivée", "La virtualisation CPU est désactivée dans le firmware/BIOS.", "WMI CPU", "ThWarn");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-cpu-virtualization", "Informations système : virtualisation CPU", ex);
+            }
             return Info("Non exposé", "Windows ne fournit pas l'état de virtualisation firmware.", "WMI CPU", "ThTextDim");
         }
 
@@ -666,7 +679,10 @@ namespace Optimisation_Tool.Pages
                         : Info("Inactif", "Aucun hyperviseur Windows actif détecté.", "WMI", "ThOk");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-hypervisor", "Informations système : hyperviseur", ex);
+            }
             return Info("Non exposé", "État Hyper-V/hyperviseur non lisible.", "WMI", "ThTextDim");
         }
 
@@ -690,7 +706,10 @@ namespace Optimisation_Tool.Pages
                     };
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-vbs", "Informations système : VBS", ex);
+            }
             return Info("Non exposé", "DeviceGuard n'est pas lisible sur cette machine.", "DeviceGuard", "ThTextDim");
         }
 
@@ -707,7 +726,10 @@ namespace Optimisation_Tool.Pages
                         : Info("Désactivée", "L'intégrité mémoire est désactivée côté Windows.", "Registre", "ThOk");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-hvci", "Informations système : HVCI", ex);
+            }
             return Info("Désactivée", "La clé HVCI est absente : Windows n'expose pas d'intégrité mémoire active.", "Registre", "ThOk");
         }
 
@@ -724,9 +746,13 @@ namespace Optimisation_Tool.Pages
                 {
                     modules++;
                     total += Convert.ToInt64(o["Capacity"] ?? 0);
-                    if (speed == 0) int.TryParse(o["Speed"]?.ToString(), out speed);
-                    if (configured == 0) int.TryParse(o["ConfiguredClockSpeed"]?.ToString(), out configured);
-                    if (type == 0) int.TryParse(o["SMBIOSMemoryType"]?.ToString(), out type);
+                    if (speed == 0 && int.TryParse(o["Speed"]?.ToString(), out int parsedSpeed))
+                        speed = parsedSpeed;
+                    if (configured == 0 && int.TryParse(
+                            o["ConfiguredClockSpeed"]?.ToString(), out int parsedConfigured))
+                        configured = parsedConfigured;
+                    if (type == 0 && int.TryParse(o["SMBIOSMemoryType"]?.ToString(), out int parsedType))
+                        type = parsedType;
                     var part = (o["PartNumber"]?.ToString() ?? "").Trim();
                     if (part.Length > 0) parts.Add(part);
                     o.Dispose();
@@ -752,7 +778,10 @@ namespace Optimisation_Tool.Pages
                     };
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-memory", "Informations système : mémoire SMBIOS", ex);
+            }
             return new MemoryClockInfo();
         }
 
@@ -1031,41 +1060,40 @@ namespace Optimisation_Tool.Pages
         // Une mesure nvidia-smi : renvoie aussi le pstate (P0=0, P1=1, …, P8=8). pstate=-1 si indispo.
         private static (string, int, int, int, int, int) QueryGpuPcieOnce()
         {
-            try
+            foreach (var genField in new[] { "pcie.link.gen.gpumax", "pcie.link.gen.max" })
             {
-                foreach (var genField in new[] { "pcie.link.gen.gpumax", "pcie.link.gen.max" })
+                var args = $"--query-gpu=name,{genField},pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current,pstate " +
+                           "--format=csv,noheader,nounits";
+                ProcessCommandResult result = ProcessCommand.Run("nvidia-smi", args, 4000);
+                if (!result.Success)
                 {
-                    var args = $"--query-gpu=name,{genField},pcie.link.gen.current,pcie.link.width.max,pcie.link.width.current,pstate " +
-                               "--format=csv,noheader,nounits";
-                    using var p = Process.Start(new ProcessStartInfo("nvidia-smi", args)
-                    {
-                        UseShellExecute = false, CreateNoWindow = true,
-                        RedirectStandardOutput = true, RedirectStandardError = true,
-                    });
-                    if (p == null) continue;
-                    var line = p.StandardOutput.ReadLine();
-                    p.WaitForExit(4000);
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var parts = line.Split(',');
-                    if (parts.Length < 5) continue;
-                    int I(string v) => int.TryParse(v.Trim(), out var n) ? n : 0;
-                    var name = parts[0].Trim();
-                    var mg = I(parts[1]); var cg = I(parts[2]);
-                    var mw = I(parts[3]); var cw = I(parts[4]);
-                    int ps = -1;
-                    if (parts.Length >= 6)
-                    {
-                        var psRaw = parts[5].Trim().TrimStart('P', 'p');
-                        if (int.TryParse(psRaw, out var n)) ps = n;
-                    }
-                    if (mg > 0 && cg > 0)
-                        return (name, mg, cg, mw, cw, ps);
-                    // nom récupéré mais gen=0 → tenter l'autre champ
-                    if (genField == "pcie.link.gen.max") return (name, 0, 0, 0, 0, ps);
+                    AppLog.WriteOnce("specs-gpu-pcie-" + genField,
+                        "Informations système : lecture PCIe Nvidia impossible — "
+                        + (result.Error.Length > 0 ? result.Error : $"code {result.ExitCode}"));
+                    continue;
                 }
+
+                string line = result.Output.Split(new[] { '\r', '\n' },
+                    StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var parts = line.Split(',');
+                if (parts.Length < 5) continue;
+                int I(string v) => int.TryParse(v.Trim(), out var n) ? n : 0;
+                var name = parts[0].Trim();
+                var mg = I(parts[1]); var cg = I(parts[2]);
+                var mw = I(parts[3]); var cw = I(parts[4]);
+                int ps = -1;
+                if (parts.Length >= 6)
+                {
+                    var psRaw = parts[5].Trim().TrimStart('P', 'p');
+                    if (int.TryParse(psRaw, out var n)) ps = n;
+                }
+                if (mg > 0 && cg > 0)
+                    return (name, mg, cg, mw, cw, ps);
+                // nom récupéré mais gen=0 → tenter l'autre champ
+                if (genField == "pcie.link.gen.max") return (name, 0, 0, 0, 0, ps);
             }
-            catch { }
             return ("", 0, 0, 0, 0, -1);
         }
 
@@ -1184,7 +1212,10 @@ namespace Optimisation_Tool.Pages
                     o.Dispose();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("specs-nvme-cimv2", "Informations système : inventaire NVMe CIMV2", ex);
+            }
 
             if (disks.Count == 0)
             {
@@ -1204,7 +1235,10 @@ namespace Optimisation_Tool.Pages
                         o.Dispose();
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("specs-nvme-storage", "Informations système : inventaire NVMe Storage", ex);
+                }
             }
 
             return disks;
@@ -1288,9 +1322,19 @@ $rows = foreach ($d in $devices) {
                 var stderrTask = p.StandardError.ReadToEndAsync();
                 if (!p.WaitForExit(9000))
                 {
-                    try { p.Kill(entireProcessTree: true); } catch { }
-                    try { p.WaitForExit(2000); } catch { }
-                    try { Task.WhenAll(stdoutTask, stderrTask).GetAwaiter().GetResult(); } catch { }
+                    try
+                    {
+                        p.Kill(entireProcessTree: true);
+                        p.WaitForExit(2000);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("specs-nvme-controller-stop",
+                            "Informations système : arrêt de la sonde PCIe NVMe", ex);
+                    }
+                    ObserveProcessStreams(stdoutTask, stderrTask);
+                    AppLog.WriteOnce("specs-nvme-controller-timeout",
+                        "Informations système : délai de 9 s dépassé pendant la lecture PCIe NVMe.");
                     return new List<NvmeControllerInfo>();
                 }
 
@@ -1306,9 +1350,26 @@ $rows = foreach ($d in $devices) {
                 var one = JsonSerializer.Deserialize<NvmeControllerInfo>(json, options);
                 return one is null ? new List<NvmeControllerInfo>() : new List<NvmeControllerInfo> { one };
             }
-            catch
+            catch (Exception ex)
             {
+                AppLog.ErrorOnce("specs-nvme-controller", "Informations système : contrôleurs PCIe NVMe", ex);
                 return new List<NvmeControllerInfo>();
+            }
+        }
+
+        private static void ObserveProcessStreams(params Task<string>[] streams)
+        {
+            foreach (Task<string> stream in streams)
+            {
+                if (stream.IsFaulted)
+                {
+                    _ = stream.Exception;
+                    continue;
+                }
+                if (stream.IsCompleted) continue;
+                _ = stream.ContinueWith(
+                    static completed => _ = completed.Exception,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
             }
         }
 

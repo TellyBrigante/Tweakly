@@ -39,19 +39,19 @@
                                 </Grid>
                                 <TextBlock Style="{StaticResource CleanRowDesc}">
                                     <InlineUIContainer BaselineAlignment="Center">
-                                        <Border Style="{StaticResource CleanMiniStateOn}">
+                                        <Border Style="{StaticResource CleanMiniStateOff}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" Text="I" Style="{StaticResource CleanMiniStateText}"/>
-                                                <Border Grid.Column="1" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <Border Grid.Column="0" Style="{StaticResource CleanMiniStateKnob}"/>
+                                                <TextBlock Grid.Column="1" Text="O" Style="{StaticResource CleanMiniStateTextOff}"/>
                                             </Grid>
                                         </Border>
                                     </InlineUIContainer>
                                     <Run Text="D&#233;faut &#183; "/>
-                                    <Run Text="Windows 11 r&#233;cent : Test latence ; red&#233;marrage requis."/>
+                                    <Run Text="Coche pour tester HAGS ; red&#233;marrage requis."/>
                                 </TextBlock>
                             </StackPanel>
                         </Grid>

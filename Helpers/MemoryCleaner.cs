@@ -86,8 +86,10 @@ namespace Optimisation_Tool.Helpers
         public static double FreeMemory()
         {
             ulong before = AvailBytes();
-            try { TrimAllWorkingSets(); }                          catch { }
-            try { EnableProfilePrivilege(); PurgeStandbyList(); }  catch { }
+            try { TrimAllWorkingSets(); }
+            catch (Exception ex) { AppLog.Error("Nettoyage mémoire : working sets", ex); }
+            try { EnableProfilePrivilege(); PurgeStandbyList(); }
+            catch (Exception ex) { AppLog.Error("Nettoyage mémoire : standby list", ex); }
             ulong after = AvailBytes();
 
             return after > before ? (after - before) / (1024.0 * 1024.0 * 1024.0) : 0.0;
@@ -115,7 +117,10 @@ namespace Optimisation_Tool.Helpers
         private static void PurgeStandbyList()
         {
             int cmd = MemoryPurgeStandbyList;
-            NtSetSystemInformation(SystemMemoryListInformation, ref cmd, sizeof(int));
+            int status = NtSetSystemInformation(SystemMemoryListInformation, ref cmd, sizeof(int));
+            if (status < 0)
+                throw new InvalidOperationException(
+                    $"NtSetSystemInformation a échoué avec NTSTATUS 0x{status:X8}");
         }
 
         private static void EnableProfilePrivilege()

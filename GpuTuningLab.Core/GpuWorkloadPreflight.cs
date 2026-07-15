@@ -45,8 +45,8 @@ public static class GpuWorkloadPreflight
         info.ArgumentList.Add("um");
         using var process = new Process { StartInfo = info };
         process.Start();
-        Task<string> stdout = process.StandardOutput.ReadToEndAsync();
-        Task<string> stderr = process.StandardError.ReadToEndAsync();
+        Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
         bool timedOut = false;
@@ -68,17 +68,26 @@ public static class GpuWorkloadPreflight
         if (process.ExitCode != 0)
             return new(false, [], $"GPU preflight failed: {error.Trim()}");
 
-        ActiveGpuProcess[] busy = Parse(output)
-            .Select(ResolveProcessName)
-            .Where(item => allowedProcessIds == null || !allowedProcessIds.Contains(item.ProcessId))
-            .Where(IsContaminating)
-            .OrderByDescending(Peak)
-            .ToArray();
+        ActiveGpuProcess[] busy = SelectContaminatingProcesses(
+            Parse(output).Select(ResolveProcessName),
+            allowedProcessIds,
+            Environment.ProcessId);
         if (busy.Length == 0) return new(true, [], "GPU is idle enough for a controlled test.");
         string details = string.Join(", ", busy.Select(item =>
             $"{item.Name} (PID {item.ProcessId}, compute {Percent(item.ComputePercent)}, memory {Percent(item.MemoryPercent)}, encode {Percent(item.EncoderPercent)}, decode {Percent(item.DecoderPercent)})"));
         return new(false, busy, "GPU workload already active: " + details);
     }
+
+    public static ActiveGpuProcess[] SelectContaminatingProcesses(
+        IEnumerable<ActiveGpuProcess> processes,
+        IReadOnlySet<int>? allowedProcessIds,
+        int hostProcessId)
+        => processes
+            .Where(item => item.ProcessId != hostProcessId)
+            .Where(item => allowedProcessIds == null || !allowedProcessIds.Contains(item.ProcessId))
+            .Where(IsContaminating)
+            .OrderByDescending(Peak)
+            .ToArray();
 
     public static IReadOnlyList<ActiveGpuProcess> Parse(string output)
     {

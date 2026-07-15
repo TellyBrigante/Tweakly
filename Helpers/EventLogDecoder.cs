@@ -88,6 +88,15 @@ namespace Optimisation_Tool.Helpers
         public string          Icon    = "";
         public List<string>    Steps   = new();
         public List<LogAction> Actions = new();
+
+        // Diagnostic v2 : la vue principale n'affiche plus les conseils statiques.
+        // Elle montre ce que les preuves établissent et ne propose une correction
+        // que lorsqu'un exécuteur sait la contrôler puis la vérifier.
+        public IncidentCauseState CauseState = IncidentCauseState.Insufficient;
+        public string Conclusion = "";
+        public List<string> Evidence = new();
+        public IncidentRepairPlan? Repair;
+        public IncidentInvestigationPlan? Investigation;
     }
 
     /// <summary>
@@ -131,10 +140,15 @@ namespace Optimisation_Tool.Helpers
                                     raw     = rawFull.Split('\n')[0].Trim();
                                 }
                             }
-                            catch { }
+                            catch (Exception ex)
+                            {
+                                string provider = rec.ProviderName ?? "inconnu";
+                                AppLog.ErrorOnce("eventlog-format:" + provider, "Erreurs Windows : description d'événement indisponible", ex);
+                            }
+                            DateTime eventTime = rec.TimeCreated ?? DateTime.Now;
                             var re = new RawEvent
                             {
-                                Time = rec.TimeCreated ?? DateTime.Now,
+                                Time = ResolveOriginalEventTime(rec.ProviderName ?? "", rec.Id, eventTime, rawFull),
                                 Provider = rec.ProviderName ?? "?",
                                 Id = rec.Id,
                                 Raw = raw,
@@ -164,9 +178,62 @@ namespace Optimisation_Tool.Helpers
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("eventlog-read:" + log, $"Erreurs Windows : lecture du journal {log} impossible", ex);
+                }
             }
-            return list.OrderBy(e => e.Time).ToList();
+            DateTime cutoff = DateTime.Now.AddDays(-days);
+            return DeduplicateWerReports(list)
+                .Where(e => e.Time >= cutoff)
+                .OrderBy(e => e.Time)
+                .ToList();
+        }
+
+        private static DateTime ResolveOriginalEventTime(
+            string provider,
+            int id,
+            DateTime recordedAt,
+            string rawFull)
+        {
+            if (!provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase)
+                || id != 1001
+                || rawFull.IndexOf("LiveKernelEvent", StringComparison.OrdinalIgnoreCase) < 0)
+                return recordedAt;
+
+            var match = Regex.Match(rawFull,
+                @"WATCHDOG-(\d{8})-(\d{4,6})\.dmp",
+                RegexOptions.IgnoreCase);
+            if (!match.Success) return recordedAt;
+
+            string stamp = match.Groups[1].Value + match.Groups[2].Value.PadRight(6, '0');
+            return DateTime.TryParseExact(
+                stamp,
+                "yyyyMMddHHmmss",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal,
+                out DateTime parsed)
+                ? parsed
+                : recordedAt;
+        }
+
+        private static IEnumerable<RawEvent> DeduplicateWerReports(IEnumerable<RawEvent> events)
+        {
+            var seenDumps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (RawEvent ev in events)
+            {
+                if (ev.Provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase)
+                    && ev.Id == 1001
+                    && ev.RawFull.IndexOf("LiveKernelEvent", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var dump = Regex.Match(ev.RawFull,
+                        @"(?:[A-Za-z]:)?[^\r\n]*\\(WATCHDOG-[^\\\r\n]+\.dmp)",
+                        RegexOptions.IgnoreCase);
+                    if (dump.Success && !seenDumps.Add(dump.Groups[1].Value))
+                        continue;
+                }
+                yield return ev;
+            }
         }
 
         /// <summary>Vue « par source » : regroupe par Provider+EventID.</summary>
@@ -257,7 +324,9 @@ namespace Optimisation_Tool.Helpers
             // de portable qui décharge à heure fixe, redémarrage manuel rituel, etc.). On
             // filtre ces faux positifs même si on n'a pas su prouver l'arrêt clean autrement.
             var filtered = FilterRecurringScheduled(incidents);
-            return MergeNearbyRepeatedIncidents(filtered).OrderByDescending(i => i.Start).ToList();
+            var nearby = MergeNearbyRepeatedIncidents(filtered);
+            var recurringTdr = MergeRecurringTdrIncidents(nearby);
+            return MergeRecurringApplicationCrashes(recurringTdr).OrderByDescending(i => i.End).ToList();
         }
 
         // ── Analyse d'un cluster → incident (cause racine + conseil) ───────────
@@ -273,11 +342,23 @@ namespace Optimisation_Tool.Helpers
                 .Select(e => (e.Time, e.Raw, Info: Decode(e.Provider, e.Id, e.Raw, e.RawFull), Kind: KindOf(e.Provider, e.Id)))
                 .ToList();
 
-            // On ne retient un incident que s'il y a un vrai signal : >=2 events OU au moins un sérieux
+            // On ne retient un incident que s'il y a un vrai signal : >=2 events, au
+            // moins un sérieux, ou une famille pour laquelle Tweakly possède un vrai
+            // diagnostic correctif. Une erreur VSS isolée doit rester accessible au
+            // moteur VSS au lieu d'être perdue dans la seule vue technique.
             bool hasSerious = decoded.Any(d => d.Info.Sev == LogSev.Serious);
-            if (cluster.Count < 2 && !hasSerious) return null;
+            bool hasCorrectableSignal = cluster.Any(IsCorrectableSignal);
+            if (cluster.Count < 2 && !hasSerious && !hasCorrectableSignal) return null;
             // Cluster purement bénin → pas un incident à mettre en avant
             if (decoded.All(d => d.Info.Sev == LogSev.Benign)) return null;
+            // SCM 7043 = un service n'a pas répondu assez vite à la notification de
+            // pré-arrêt. Ce n'est pas un crash du service. S'il n'est accompagné que
+            // de bruit bénin (DCOM/Perflib), on ne fabrique pas un faux dossier.
+            var nonBenignEvents = cluster.Where(e => KindOf(e.Provider, e.Id) != Kind.Benign).ToList();
+            if (nonBenignEvents.Count > 0 && nonBenignEvents.All(e =>
+                    e.Provider.Equals("Service Control Manager", StringComparison.OrdinalIgnoreCase)
+                    && e.Id == 7043))
+                return null;
 
             // Cause racine = plus haut rang, le plus tôt
             var root = decoded.OrderByDescending(d => Rank(d.Kind)).ThenBy(d => d.Time).First();
@@ -333,9 +414,11 @@ namespace Optimisation_Tool.Helpers
                 inc.Advice  = narration.Advice;
                 inc.Steps   = narration.Steps;
                 inc.Actions = narration.Actions;
+                IncidentDiagnosticEngine.Enrich(inc, cluster);
                 return inc;
             }
             Recommend(root.Kind, root.Info, rootCount, span, app, decoded.Count, inc, recDays, daysAgo, appPath);
+            IncidentDiagnosticEngine.Enrich(inc, cluster);
             return inc;
         }
 
@@ -372,6 +455,12 @@ namespace Optimisation_Tool.Helpers
                 || ev.Provider.Equals("Application Error", StringComparison.OrdinalIgnoreCase)
                 || (ev.Provider.Equals("Windows Error Reporting", StringComparison.OrdinalIgnoreCase) && ev.Id == 1001);
         }
+
+        private static bool IsCorrectableSignal(RawEvent ev)
+            => (ev.Provider.Equals("VSS", StringComparison.OrdinalIgnoreCase)
+                && ev.Id is not 8224 and not 8231)
+            || (ev.Provider.Contains("ntfs", StringComparison.OrdinalIgnoreCase)
+                && ev.Id is 55 or 98);
 
         // Plus le rang est élevé, plus l'event est une CAUSE (vs un effet)
         private static int Rank(Kind k) => k switch
@@ -585,7 +674,10 @@ namespace Optimisation_Tool.Helpers
                                           : prod.Length > 0 ? prod : comp;
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            AppLog.ErrorOnce("eventlog-file-owner", "Erreurs Windows : propriétaire du fichier fautif indisponible", ex);
+                        }
                         (svcName, svcDisplay) = FindServiceByExe(appPath);
                         locLine = fileExists
                             ? $" Le fichier est ici : {appPath}" + (owner.Length > 0 ? $" — il appartient à « {owner} »." : ".")
@@ -1389,7 +1481,10 @@ namespace Optimisation_Tool.Helpers
                         return (o["Name"]?.ToString() ?? "", o["DisplayName"]?.ToString() ?? "");
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("eventlog-service-owner", "Erreurs Windows : recherche du service fautif impossible", ex);
+            }
             return ("", "");
         }
 
@@ -1421,7 +1516,10 @@ namespace Optimisation_Tool.Helpers
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("eventlog-nvidia-driver", "Erreurs Windows : version du pilote NVIDIA indisponible", ex);
+            }
             return _nvDriverCache = "";
         }
 
@@ -1454,7 +1552,10 @@ namespace Optimisation_Tool.Helpers
                     found.Add(name);
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("eventlog-virtual-display", "Erreurs Windows : adaptateurs d'affichage virtuels indisponibles", ex);
+            }
             return _vDispCache = found.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
@@ -1466,7 +1567,10 @@ namespace Optimisation_Tool.Helpers
                 var m = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
                 if (m.Success && m.Groups.Count > 1) return m.Groups[1].Value.Trim().Trim(',', '.', ';');
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("eventlog-regex:" + pattern, "Erreurs Windows : extraction d'une preuve impossible", ex);
+            }
             return "";
         }
     }

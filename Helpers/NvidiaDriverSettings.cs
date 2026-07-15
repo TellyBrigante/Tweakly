@@ -97,8 +97,12 @@ namespace Optimisation_Tool.Helpers
         public static bool IsAvailable()
         {
             try { NVIDIA.Initialize(); return true; }
-            catch { return false; }
-            finally { try { NVIDIA.Unload(); } catch { } }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("nvidia-settings-availability", "Réglages NVIDIA : initialisation indisponible", ex);
+                return false;
+            }
+            finally { TryUnload(); }
         }
 
         /// <summary>Lit les valeurs courantes du profil GLOBAL (ID → valeur uint). Vide si indisponible.</summary>
@@ -113,12 +117,19 @@ namespace Optimisation_Tool.Helpers
                     using var session = DriverSettingsSession.CreateAndLoad();
                     foreach (var s in session.CurrentGlobalProfile.Settings)
                     {
-                        try { result[(uint)s.SettingId] = Convert.ToUInt32(s.CurrentValue); } catch { }
+                        try { result[(uint)s.SettingId] = Convert.ToUInt32(s.CurrentValue); }
+                        catch (Exception ex)
+                        {
+                            AppLog.ErrorOnce("nvidia-settings-value", "Réglages NVIDIA : valeur pilote illisible", ex);
+                        }
                     }
                 }
-                finally { try { NVIDIA.Unload(); } catch { } }
+                finally { TryUnload(); }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("nvidia-settings-read", "Réglages NVIDIA : lecture du profil global impossible", ex);
+            }
             return result;
         }
 
@@ -137,9 +148,22 @@ namespace Optimisation_Tool.Helpers
                     session.Save();
                     return true;
                 }
-                finally { try { NVIDIA.Unload(); } catch { } }
+                finally { TryUnload(); }
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                AppLog.Error("Réglages NVIDIA : écriture du profil global impossible", ex);
+                return false;
+            }
+        }
+
+        private static void TryUnload()
+        {
+            try { NVIDIA.Unload(); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("nvidia-settings-unload", "Réglages NVIDIA : libération de NvAPI impossible", ex);
+            }
         }
 
         /// <summary>

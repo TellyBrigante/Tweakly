@@ -27,7 +27,7 @@ namespace Optimisation_Tool.Helpers
         public static int StartAndWait(string fileName, string arguments,
                                        int timeoutMs, string? workingDir = null)
         {
-            var explorer = Process.GetProcessesByName("explorer").FirstOrDefault()
+            using var explorer = Process.GetProcessesByName("explorer").FirstOrDefault()
                 ?? throw new InvalidOperationException("explorer.exe introuvable (session utilisateur absente).");
 
             IntPtr hExplorer = OpenProcess(PROCESS_QUERY_INFORMATION, false, explorer.Id);
@@ -78,9 +78,22 @@ namespace Optimisation_Tool.Helpers
                 try
                 {
                     uint wait = WaitForSingleObject(pi.hProcess, (uint)timeoutMs);
-                    if (wait == WAIT_TIMEOUT) return -1;
-
-                    return GetExitCodeProcess(pi.hProcess, out uint ec) ? (int)ec : 0;
+                    if (wait == WAIT_TIMEOUT)
+                    {
+                        if (!TerminateProcess(pi.hProcess, 1))
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Arrêt du processus expiré impossible.");
+                        uint terminatedWait = WaitForSingleObject(pi.hProcess, 2000);
+                        if (terminatedWait == WAIT_FAILED)
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Confirmation de l'arrêt impossible.");
+                        if (terminatedWait == WAIT_TIMEOUT)
+                            throw new TimeoutException("Le processus expiré ne s'est pas arrêté sous 2 000 ms.");
+                        return -1;
+                    }
+                    if (wait == WAIT_FAILED)
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "Attente du processus impossible.");
+                    if (!GetExitCodeProcess(pi.hProcess, out uint exitCode))
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "Lecture du code de sortie impossible.");
+                    return (int)exitCode;
                 }
                 finally
                 {
@@ -111,6 +124,7 @@ namespace Optimisation_Tool.Helpers
         private const uint CREATE_NO_WINDOW                  = 0x08000000;
         private const uint LOGON_WITH_PROFILE                = 0x00000001;
         private const uint WAIT_TIMEOUT                      = 0x00000102;
+        private const uint WAIT_FAILED                       = 0xFFFFFFFF;
 
         private enum SECURITY_IMPERSONATION_LEVEL { SecurityAnonymous, SecurityIdentification, SecurityImpersonation, SecurityDelegation }
         private enum TOKEN_TYPE { TokenPrimary = 1, TokenImpersonation }
@@ -155,6 +169,9 @@ namespace Optimisation_Tool.Helpers
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool GetExitCodeProcess(IntPtr hProcess, out uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateProcess(IntPtr hProcess, uint exitCode);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool CloseHandle(IntPtr h);

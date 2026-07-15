@@ -107,7 +107,7 @@ public sealed class NvidiaSmiTelemetrySource : IGpuTelemetrySource
             catch (InvalidOperationException) { }
         }
 
-        string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
+        string stderr = await process.StandardError.ReadToEndAsync(CancellationToken.None).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(stderr)) warnings.Add(stderr.Trim());
         if (identity == null)
             throw new InvalidOperationException("No NVIDIA telemetry sample was returned. " + string.Join(" | ", warnings));

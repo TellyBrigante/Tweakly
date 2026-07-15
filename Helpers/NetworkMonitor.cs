@@ -1,9 +1,7 @@
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
@@ -40,6 +38,8 @@ namespace Optimisation_Tool.Helpers
         private long _prevRx, _prevTx;
         private DateTime _prevStamp;
         private bool _haveBase;
+        private DateTime _wifiSignalCacheTime;
+        private int _wifiSignalCache = -1;
 
         private NetworkMonitor() { }
 
@@ -77,7 +77,10 @@ namespace Optimisation_Tool.Helpers
                     _prevRx = rx; _prevTx = tx; _prevStamp = now; _haveBase = true;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("network-monitor-stats", "Monitoring réseau : compteurs indisponibles", ex);
+            }
 
             return s;
         }
@@ -109,7 +112,10 @@ namespace Optimisation_Tool.Helpers
                 if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
                     info.WifiSignal = ReadWifiSignal();
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("network-monitor-info", "Monitoring réseau : informations de connexion indisponibles", ex);
+            }
             return info;
         }
 
@@ -122,7 +128,11 @@ namespace Optimisation_Tool.Helpers
                     .FirstOrDefault(g => g.Address.AddressFamily == AddressFamily.InterNetwork);
                 return gw?.Address.ToString() ?? "";
             }
-            catch { return ""; }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("network-monitor-gateway", "Monitoring réseau : passerelle indisponible", ex);
+                return "";
+            }
         }
 
         // Interface "primaire" = celle qui est Up, non-loopback, avec une passerelle IPv4 valide.
@@ -146,31 +156,37 @@ namespace Optimisation_Tool.Helpers
                     .OrderByDescending(n => n.Speed)
                     .FirstOrDefault();
             }
-            catch { _primaryCache = null; }
+            catch (Exception ex)
+            {
+                _primaryCache = null;
+                AppLog.ErrorOnce("network-monitor-primary-interface", "Monitoring réseau : interface principale indisponible", ex);
+            }
             _primaryCacheTime = DateTime.UtcNow;
             return _primaryCache;
         }
 
-        private static int ReadWifiSignal()
+        private int ReadWifiSignal()
         {
-            try
+            if (_wifiSignalCacheTime != default
+                && (DateTime.UtcNow - _wifiSignalCacheTime).TotalMilliseconds < 5000)
+                return _wifiSignalCache;
+
+            ProcessCommandResult result = ProcessCommand.Run("netsh", "wlan show interfaces", 3000);
+            if (!result.Success)
             {
-                using var p = Process.Start(new ProcessStartInfo("netsh", "wlan show interfaces")
-                {
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    RedirectStandardOutput = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                });
-                if (p == null) return -1;
-                string outp = p.StandardOutput.ReadToEnd();
-                p.WaitForExit(3000);
-                // "Signal" est le libellé en EN comme en FR ; on prend le 1er pourcentage qui suit.
-                var m = Regex.Match(outp, @"Signal[^\d]*(\d{1,3})\s*%");
-                if (m.Success) return int.Parse(m.Groups[1].Value);
+                AppLog.WriteOnce("network-monitor-wifi-signal", "Monitoring réseau : signal Wi-Fi indisponible : " + result.Error);
+                _wifiSignalCache = -1;
+                _wifiSignalCacheTime = DateTime.UtcNow;
+                return _wifiSignalCache;
             }
-            catch { }
-            return -1;
+
+            // "Signal" est le libellé en EN comme en FR ; on prend le 1er pourcentage qui suit.
+            Match match = Regex.Match(result.Output, @"Signal[^\d]*(\d{1,3})\s*%");
+            _wifiSignalCache = match.Success && int.TryParse(match.Groups[1].Value, out int signal)
+                ? Math.Clamp(signal, 0, 100)
+                : -1;
+            _wifiSignalCacheTime = DateTime.UtcNow;
+            return _wifiSignalCache;
         }
     }
 }

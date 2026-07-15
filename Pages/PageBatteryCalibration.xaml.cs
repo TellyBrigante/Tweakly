@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Management;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -24,8 +23,9 @@ namespace Optimisation_Tool.Pages
         private BatterySnapshot _lastSnapshot = new();
         private CancellationTokenSource? _drainCts;
         private readonly List<Thread> _drainThreads = new();
+        private readonly ExecutionStateGuard _sleepGuard = new();
         private volatile int _drainDutyPercent = DrainStartDutyPercent;
-        private bool _idleSleepGuardActive;
+        private bool _sleepGuardFailureReported;
         private bool _telemetryGapLogged;
 #if DEBUG
         private Button? _debugSimulationButton;
@@ -658,15 +658,28 @@ namespace Optimisation_Tool.Pages
 
         private void EnsureIdleSleepGuard()
         {
-            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
-            _idleSleepGuardActive = true;
+            if (_sleepGuard.TryAcquire(keepDisplayAwake: true, out string error))
+            {
+                _sleepGuardFailureReported = false;
+                return;
+            }
+
+            if (_sleepGuardFailureReported) return;
+            _sleepGuardFailureReported = true;
+            AppLog.Write($"Calibrage batterie : {error}");
+            MarkProtocolWarning(
+                "Windows n'a pas confirmé le blocage de la veille. Désactive la veille automatique avant de poursuivre.");
         }
 
         private void ReleaseIdleSleepGuard()
         {
-            if (!_idleSleepGuardActive) return;
-            SetThreadExecutionState(ES_CONTINUOUS);
-            _idleSleepGuardActive = false;
+            if (_sleepGuard.TryRelease(out string error))
+            {
+                _sleepGuardFailureReported = false;
+                return;
+            }
+
+            AppLog.Write($"Calibrage batterie : {error}");
         }
 
         private void EnsureDrainPowerPlanGuard()
@@ -930,13 +943,15 @@ namespace Optimisation_Tool.Pages
         {
             if (_drainCts != null) return;
 
-            _drainCts = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
+            CancellationToken token = cts.Token;
+            _drainCts = cts;
             int workers = Math.Clamp(Environment.ProcessorCount, 2, 8);
             _drainThreads.Clear();
 
             for (int i = 0; i < workers; i++)
             {
-                var thread = new Thread(() => DrainLoop(_drainCts.Token))
+                var thread = new Thread(() => DrainLoop(token))
                 {
                     IsBackground = true,
                     Priority = ThreadPriority.Normal,
@@ -946,18 +961,22 @@ namespace Optimisation_Tool.Pages
                 thread.Start();
             }
 
-            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
         }
 
         private void StopDrainLoad()
         {
-            if (_drainCts == null) return;
+            CancellationTokenSource? cts = _drainCts;
+            if (cts == null) return;
 
-            try { _drainCts.Cancel(); } catch { }
-            _drainCts.Dispose();
             _drainCts = null;
+            cts.Cancel();
+            foreach (Thread thread in _drainThreads)
+            {
+                if (!thread.Join(millisecondsTimeout: 500))
+                    AppLog.Write($"Calibrage batterie : le thread de drain {thread.ManagedThreadId} ne s'est pas arrêté en 500 ms.");
+            }
             _drainThreads.Clear();
-            SetThreadExecutionState(ES_CONTINUOUS);
+            cts.Dispose();
         }
 
         private void AdjustDrainLoad(BatterySnapshot snapshot)
@@ -1064,11 +1083,5 @@ namespace Optimisation_Tool.Pages
             return ThemeManager.Brush(role);
         }
 
-        private const uint ES_CONTINUOUS = 0x80000000;
-        private const uint ES_SYSTEM_REQUIRED = 0x00000001;
-        private const uint ES_DISPLAY_REQUIRED = 0x00000002;
-
-        [DllImport("kernel32.dll")]
-        private static extern uint SetThreadExecutionState(uint esFlags);
     }
 }

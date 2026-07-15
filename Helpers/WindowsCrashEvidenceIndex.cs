@@ -101,10 +101,9 @@ namespace Optimisation_Tool.Helpers
             {
                 if (++scanned > 2000) break;
                 if (!path.EndsWith(".wer", StringComparison.OrdinalIgnoreCase)) continue;
-                DateTime time = SafeLastWrite(path);
-                if (time < from || time > to) continue;
-
                 var values = ReadWer(path);
+                DateTime time = ResolveWerTime(values, path, SafeLastWrite(path));
+                if (time < from || time > to) continue;
                 string app = SignatureValue(values,
                     "application name",
                     "nom de l'application",
@@ -166,8 +165,44 @@ namespace Optimisation_Tool.Helpers
                     values[key] = line.Substring(equals + 1).Trim();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("crash-evidence-wer-read", "Diagnostic Windows : rapport WER illisible", ex);
+            }
             return values;
+        }
+
+        private static DateTime ResolveWerTime(
+            IReadOnlyDictionary<string, string> values,
+            string reportPath,
+            DateTime fallback)
+        {
+            if (values.TryGetValue("EventTime", out string? eventTime)
+                && long.TryParse(eventTime, out long fileTime))
+            {
+                try { return DateTime.FromFileTimeUtc(fileTime).ToLocalTime(); }
+                catch (ArgumentOutOfRangeException ex)
+                {
+                    AppLog.ErrorOnce("crash-evidence-wer-time", "Diagnostic Windows : horodatage WER invalide", ex);
+                }
+            }
+
+            foreach (string candidate in values.Values.Append(reportPath))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(candidate ?? "",
+                    @"WATCHDOG-(\d{8})-(\d{4,6})\.dmp",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!match.Success) continue;
+                string stamp = match.Groups[1].Value + match.Groups[2].Value.PadRight(6, '0');
+                if (DateTime.TryParseExact(
+                    stamp,
+                    "yyyyMMddHHmmss",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeLocal,
+                    out DateTime parsed))
+                    return parsed;
+            }
+            return fallback;
         }
 
         private static string SignatureValue(Dictionary<string, string> values, params string[] labels)
@@ -206,19 +241,31 @@ namespace Optimisation_Tool.Helpers
         private static IEnumerable<string> SafeFiles(string path)
         {
             try { return Directory.EnumerateFiles(path).ToArray(); }
-            catch { return Array.Empty<string>(); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("crash-evidence-files", "Diagnostic Windows : dossier de preuves inaccessible", ex);
+                return Array.Empty<string>();
+            }
         }
 
         private static IEnumerable<string> SafeDirectories(string path)
         {
             try { return Directory.EnumerateDirectories(path).ToArray(); }
-            catch { return Array.Empty<string>(); }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("crash-evidence-directories", "Diagnostic Windows : sous-dossiers de preuves inaccessibles", ex);
+                return Array.Empty<string>();
+            }
         }
 
         private static DateTime SafeLastWrite(string path)
         {
             try { return File.GetLastWriteTime(path); }
-            catch { return DateTime.MinValue; }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("crash-evidence-timestamp", "Diagnostic Windows : date d'une preuve illisible", ex);
+                return DateTime.MinValue;
+            }
         }
 
         private static string AppFromDumpName(string path)

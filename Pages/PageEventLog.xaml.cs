@@ -107,7 +107,7 @@ namespace Optimisation_Tool.Pages
             // ── En-tête : grosse icône + titre 16 + badge sévérité + meta ──
             int spanSeconds = Math.Max(0, (int)(inc.End - inc.Start).TotalSeconds);
             string meta = inc.Episodes > 1
-                ? $"{inc.Start:dd/MM HH:mm}  ·  {inc.Episodes} séquences  ·  {inc.Count} évts  ·  {spanSeconds} s"
+                ? $"{inc.Start:dd/MM} → {inc.End:dd/MM}  ·  {inc.Episodes} épisodes  ·  {inc.Count} signaux"
                 : $"{inc.Start:dd/MM HH:mm}  ·  {inc.Count} évts  ·  {spanSeconds} s";
             stack.Children.Add(BuildHeader(inc.Icon, inc.Title, inc.Sev, meta));
 
@@ -116,50 +116,20 @@ namespace Optimisation_Tool.Pages
                 stack.Children.Add(Tb("Enchaînement : " + inc.Chain, "ThTextDim", 12, wrap: true,
                                       margin: new Thickness(58, 6, 0, 0)));
 
-            // ── Pourquoi (Advice court) ──
-            if (!string.IsNullOrWhiteSpace(inc.Advice))
+            // Diagnostic v2 : une conclusion courte, le niveau de preuve et les faits
+            // retenus. Les anciennes listes Advice/Steps/Actions restent dans le modèle
+            // pour la compatibilité de la vue technique, mais ne sont plus présentées
+            // comme des corrections dans la vue principale.
+            stack.Children.Add(BuildDiagnosisBlock(inc));
+
+            if (inc.Evidence.Count > 0)
             {
-                stack.Children.Add(BuildSectionHeader("", "Pourquoi"));  // Info glyph
-                stack.Children.Add(BuildAdviceBlock(inc.Advice));
+                stack.Children.Add(BuildSectionHeader("", "Preuves retenues"));
+                stack.Children.Add(BuildEvidenceList(inc.Evidence));
             }
 
-            // ── Que faire (étapes numérotées) ──
-            if (inc.Steps != null && inc.Steps.Count > 0)
-            {
-                stack.Children.Add(BuildSectionHeader("", "Que faire"));  // Repair glyph
-                var box = BuildStepsList(inc.Steps);
-                box.Margin = new Thickness(58, 2, 0, 0);
-                stack.Children.Add(box);
-            }
-
-            // ── Boutons d'action ──
-            if (inc.Actions != null && inc.Actions.Count > 0)
-            {
-                var ar = BuildActionsRow(inc.Actions);
-                ar.Margin = new Thickness(58, 12, 0, 0);
-                stack.Children.Add(ar);
-            }
-
-            // ── Détail des événements (capé) ──
-            int showN = Math.Min(8, inc.Events.Count);
-            for (int i = 0; i < showN; i++)
-            {
-                var (t, ttl, sev) = inc.Events[i];
-                var line = new StackPanel { Orientation = Orientation.Horizontal,
-                                            Margin = new Thickness(58, i == 0 ? 14 : 3, 0, 0) };
-                var edot = new Ellipse
-                {
-                    Width = 6, Height = 6,
-                    VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 8, 0),
-                };
-                edot.SetResourceReference(Shape.FillProperty, SevRole(sev));
-                line.Children.Add(edot);
-                line.Children.Add(Tb($"{t:HH:mm:ss}   {ttl}", "ThTextDim", 11));
-                stack.Children.Add(line);
-            }
-            if (inc.Events.Count > showN)
-                stack.Children.Add(Tb($"+ {inc.Events.Count - showN} autre(s) événement(s)", "ThTextDim", 11,
-                                      margin: new Thickness(74, 3, 0, 0)));
+            stack.Children.Add(BuildInvestigationBlock(inc));
+            stack.Children.Add(BuildRepairBlock(inc));
 
             card.Child = stack;
             Grid.SetColumn(card, 1); wrapper.Children.Add(card);
@@ -175,8 +145,8 @@ namespace Optimisation_Tool.Pages
             var aRegarder = _bySource.Where(i => i.Sev != LogSev.Benign).ToList();
             var benins    = _bySource.Where(i => i.Sev == LogSev.Benign).ToList();
             int total     = _bySource.Sum(i => i.Count);
-            TxtSummary.Text = $"Vue par source · {aRegarder.Count} à regarder · {benins.Count} bénin(s) · {total} évts sur {_days} j";
-            TxtStatus.Text  = $"{_bySource.Count} source(s) distincte(s).";
+            TxtSummary.Text = $"Détails techniques · {aRegarder.Count} à regarder · {benins.Count} bénin(s) · {total} évts sur {_days} j";
+            TxtStatus.Text  = $"{_bySource.Count} source(s) distincte(s), affichées sans conseil automatique.";
 
             if (_bySource.Count == 0)
             {
@@ -215,58 +185,9 @@ namespace Optimisation_Tool.Pages
             stack.Children.Add(Tb(it.What, "ThTextBody", 12.5, wrap: true,
                                   margin: new Thickness(58, 6, 0, 0)));
 
-            // ── Pourquoi (Cause) ──
-            if (!string.IsNullOrWhiteSpace(it.Cause))
-            {
-                stack.Children.Add(BuildSectionHeader("", "Pourquoi"));
-                stack.Children.Add(Tb(it.Cause, "ThTextBody", 12.5, wrap: true,
-                                      margin: new Thickness(58, 2, 0, 0)));
-            }
-
-            // ── Que faire ──
-            if (it.Steps != null && it.Steps.Count > 0)
-            {
-                stack.Children.Add(BuildSectionHeader("", "Que faire"));
-                var box = BuildStepsList(it.Steps);
-                box.Margin = new Thickness(58, 2, 0, 0);
-                stack.Children.Add(box);
-            }
-            else if (!string.IsNullOrWhiteSpace(it.Fix))
-            {
-                stack.Children.Add(BuildSectionHeader("", "Que faire"));
-                stack.Children.Add(Tb(it.Fix, "ThTextBody", 12.5, wrap: true,
-                                      margin: new Thickness(58, 2, 0, 0)));
-            }
-
-            // ── Boutons d'action ──
-            if (it.Actions != null && it.Actions.Count > 0)
-            {
-                var ar = BuildActionsRow(it.Actions);
-                ar.Margin = new Thickness(58, 12, 0, 0);
-                stack.Children.Add(ar);
-            }
-
             if (!string.IsNullOrWhiteSpace(it.Raw))
                 stack.Children.Add(Tb("Détail : " + it.Raw, "ThTextDim", 11, wrap: true, italic: true,
                                       margin: new Thickness(58, 10, 0, 0)));
-
-            if (!it.Known)
-            {
-                var btn = new Button
-                {
-                    Content = "Rechercher sur le web",
-                    Style = (Style)FindResource("SecondaryBtnStyle"),
-                    Padding = new Thickness(12, 6, 12, 6), Margin = new Thickness(58, 10, 0, 0),
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                };
-                string q = it.Provider + " " + it.Id + " event windows";
-                btn.Click += (_, _) =>
-                {
-                    try { using var _ = Process.Start(new ProcessStartInfo("https://www.google.com/search?q=" + Uri.EscapeDataString(q)) { UseShellExecute = true }); }
-                    catch { }
-                };
-                stack.Children.Add(btn);
-            }
 
             card.Child = stack;
             Grid.SetColumn(card, 1); wrapper.Children.Add(card);
@@ -291,6 +212,308 @@ namespace Optimisation_Tool.Pages
             }
             return sp;
         }
+
+        private Grid BuildDiagnosisBlock(Incident incident)
+        {
+            var grid = new Grid { Margin = new Thickness(58, 12, 0, 0) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            string label = incident.CauseState switch
+            {
+                IncidentCauseState.Established => "CAUSE ÉTABLIE",
+                IncidentCauseState.Probable => "CAUSE PROBABLE",
+                _ => "CAUSE NON ÉTABLIE",
+            };
+            string role = CauseRole(incident.CauseState);
+
+            var badge = new Border
+            {
+                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8, 3, 8, 3),
+                Margin = new Thickness(0, 0, 12, 0),
+                VerticalAlignment = VerticalAlignment.Top,
+            };
+            badge.SetResourceReference(Border.BorderBrushProperty, role);
+            var badgeText = Tb(label, role, 9.5, bold: true);
+            badge.Child = badgeText;
+            Grid.SetColumn(badge, 0);
+            grid.Children.Add(badge);
+
+            var conclusion = Tb(
+                string.IsNullOrWhiteSpace(incident.Conclusion)
+                    ? "La conclusion n'est pas disponible."
+                    : incident.Conclusion,
+                "ThTextBody", 12.5, wrap: true);
+            conclusion.LineHeight = 17;
+            Grid.SetColumn(conclusion, 1);
+            grid.Children.Add(conclusion);
+            return grid;
+        }
+
+        private StackPanel BuildEvidenceList(IReadOnlyList<string> evidence)
+        {
+            var panel = new StackPanel { Margin = new Thickness(58, 2, 0, 0) };
+            foreach (string item in evidence.Take(7))
+            {
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+                var dot = new Ellipse
+                {
+                    Width = 5,
+                    Height = 5,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                };
+                dot.SetResourceReference(Shape.FillProperty, "ThAccentIcon");
+                Grid.SetColumn(dot, 0);
+                row.Children.Add(dot);
+
+                var text = Tb(item, "ThTextDim", 11.5, wrap: true);
+                Grid.SetColumn(text, 1);
+                row.Children.Add(text);
+                panel.Children.Add(row);
+            }
+            return panel;
+        }
+
+        private StackPanel BuildRepairBlock(Incident incident)
+        {
+            var block = new StackPanel();
+            block.Children.Add(BuildSectionHeader("", "Correction"));
+
+            if (incident.Repair == null)
+            {
+                block.Children.Clear();
+                return block;
+            }
+
+            IncidentRepairPlan plan = incident.Repair;
+            string title = plan.Phase switch
+            {
+                IncidentRepairPhase.Ready => "Correction prête",
+                IncidentRepairPhase.Running => "Opération en cours",
+                IncidentRepairPhase.Corrected => "Correction validée",
+                IncidentRepairPhase.NotPresent => "Défaut absent",
+                IncidentRepairPhase.Blocked => "Correction non disponible",
+                _ => plan.Title,
+            };
+            string role = RepairRole(plan.Phase);
+
+            var titleText = Tb(title, role, 12.5, bold: true,
+                margin: new Thickness(58, 2, 0, 0));
+            block.Children.Add(titleText);
+
+            string detail = plan.Status.Length > 0 ? plan.Status : plan.Detail;
+            if (detail.Length > 0)
+                block.Children.Add(Tb(detail, "ThTextBody", 12, wrap: true,
+                    margin: new Thickness(58, 4, 0, 0)));
+
+            if (plan.Phase is IncidentRepairPhase.NeedsDiagnosis or IncidentRepairPhase.Ready)
+            {
+                bool correction = plan.Phase == IncidentRepairPhase.Ready;
+                var button = new Button
+                {
+                    Content = correction ? "CORRIGER" : "POURSUIVRE LE DIAGNOSTIC",
+                    Style = (Style)FindResource(correction ? "CleanRunBtn" : "SecondaryBtnStyle"),
+                    Padding = new Thickness(14, 8, 14, 8),
+                    Margin = new Thickness(58, 10, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                };
+                button.Click += async (_, _) => await ExecuteRepairPlanAsync(incident);
+                block.Children.Add(button);
+            }
+
+            return block;
+        }
+
+        private StackPanel BuildInvestigationBlock(Incident incident)
+        {
+            var block = new StackPanel();
+            IncidentInvestigationPlan? plan = incident.Investigation;
+            if (plan == null) return block;
+
+            block.Children.Add(BuildSectionHeader("", "Investigation active"));
+
+            string title = plan.Phase switch
+            {
+                IncidentInvestigationPhase.Capturing => "Surveillance en cours",
+                IncidentInvestigationPhase.Analyzing => "Analyse des dernières secondes",
+                IncidentInvestigationPhase.Completed => "Analyse terminée",
+                IncidentInvestigationPhase.Failed => "Capture interrompue",
+                _ => plan.Title,
+            };
+            string role = plan.Phase == IncidentInvestigationPhase.Failed ? "ThWarn" : "ThAccentIcon";
+            block.Children.Add(Tb(title, role, 12.5, bold: true,
+                margin: new Thickness(58, 2, 0, 0)));
+
+            string detail = plan.Status.Length > 0 ? plan.Status : plan.Detail;
+            if (detail.Length > 0)
+                block.Children.Add(Tb(detail, "ThTextBody", 12, wrap: true,
+                    margin: new Thickness(58, 4, 0, 0)));
+
+            if (plan.Phase is IncidentInvestigationPhase.Ready or IncidentInvestigationPhase.Capturing)
+            {
+                bool capturing = plan.Phase == IncidentInvestigationPhase.Capturing;
+                var buttons = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Margin = new Thickness(58, 10, 0, 0),
+                };
+                var primary = new Button
+                {
+                    Content = capturing ? "LE PROBLÈME VIENT DE SE PRODUIRE" : "SURVEILLER LE PROCHAIN INCIDENT",
+                    Style = (Style)FindResource(capturing ? "CleanRunBtn" : "SecondaryBtnStyle"),
+                    Padding = new Thickness(14, 8, 14, 8),
+                    IsEnabled = capturing || !WindowsFreezeInvestigator.IsCapturing,
+                };
+                primary.Click += async (_, _) => await ExecuteInvestigationAsync(incident);
+                buttons.Children.Add(primary);
+
+                if (capturing)
+                {
+                    var cancel = new Button
+                    {
+                        Content = "ANNULER",
+                        Style = (Style)FindResource("SecondaryBtnStyle"),
+                        Padding = new Thickness(14, 8, 14, 8),
+                        Margin = new Thickness(8, 0, 0, 0),
+                    };
+                    cancel.Click += (_, _) =>
+                    {
+                        WindowsFreezeInvestigator.Cancel();
+                        plan.Phase = IncidentInvestigationPhase.Ready;
+                        plan.Status = "Surveillance annulée.";
+                        Render();
+                    };
+                    buttons.Children.Add(cancel);
+                }
+                block.Children.Add(buttons);
+            }
+
+            return block;
+        }
+
+        private async Task ExecuteInvestigationAsync(Incident incident)
+        {
+            IncidentInvestigationPlan? plan = incident.Investigation;
+            if (plan == null || plan.Phase == IncidentInvestigationPhase.Analyzing) return;
+
+            try
+            {
+                if (plan.Phase == IncidentInvestigationPhase.Ready)
+                {
+                    await WindowsFreezeInvestigator.StartAsync();
+                    plan.Phase = IncidentInvestigationPhase.Capturing;
+                    plan.Status = $"Capture active depuis {WindowsFreezeInvestigator.StartedAt:HH:mm:ss}. Reproduis {plan.Target}, puis clique sur le bouton dès que Windows répond de nouveau.";
+                    _main.Log($"Erreurs Windows : capture active pour {incident.Title}");
+                    Render();
+                    return;
+                }
+
+                if (plan.Phase != IncidentInvestigationPhase.Capturing) return;
+                plan.Phase = IncidentInvestigationPhase.Analyzing;
+                plan.Status = "Arrêt de la capture et analyse des 20 dernières secondes…";
+                Render();
+
+                FreezeInvestigationReport report = await WindowsFreezeInvestigator.StopAndAnalyzeAsync();
+                plan.Phase = report.IsValid
+                    ? IncidentInvestigationPhase.Completed
+                    : IncidentInvestigationPhase.Failed;
+                plan.Status = report.Conclusion;
+                incident.CauseState = report.CauseState;
+                incident.Conclusion = report.Conclusion;
+                foreach (string evidence in report.Evidence)
+                    if (!incident.Evidence.Contains(evidence, StringComparer.OrdinalIgnoreCase))
+                        incident.Evidence.Add(evidence);
+                _main.Log($"Erreurs Windows : analyse de capture — {report.Conclusion}");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Erreurs Windows : capture active", ex);
+                WindowsFreezeInvestigator.Cancel();
+                plan.Phase = IncidentInvestigationPhase.Failed;
+                plan.Status = "La capture n'a pas pu être analysée : " + ex.Message;
+            }
+
+            Render();
+        }
+
+        private async Task ExecuteRepairPlanAsync(Incident incident)
+        {
+            IncidentRepairPlan? plan = incident.Repair;
+            if (plan == null || plan.Phase == IncidentRepairPhase.Running) return;
+
+            IncidentRepairPhase requested = plan.Phase;
+            if (requested == IncidentRepairPhase.Ready)
+            {
+                string targets = plan.VerifiedTargets.Count > 0
+                    ? "\n\nComposants concernés : " + string.Join(", ", plan.VerifiedTargets)
+                    : "";
+                var answer = MessageBox.Show(
+                    plan.Detail + targets + "\n\nTweakly vérifiera le résultat avant de déclarer l'incident corrigé.",
+                    "Tweakly — Confirmer la correction",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Question);
+                if (answer != MessageBoxResult.OK) return;
+            }
+
+            plan.Phase = IncidentRepairPhase.Running;
+            plan.Status = requested == IncidentRepairPhase.Ready
+                ? "Correction en cours, puis contrôle du résultat…"
+                : "Diagnostic approfondi en cours…";
+            Render();
+
+            try
+            {
+                IncidentRepairResult result = requested == IncidentRepairPhase.Ready
+                    ? await WindowsIncidentRemediator.RepairAsync(plan)
+                    : await WindowsIncidentRemediator.DiagnoseAsync(plan);
+
+                plan.Phase = result.Phase;
+                plan.Status = result.Message;
+                plan.VerifiedTargets = result.VerifiedTargets;
+                foreach (string evidence in result.Evidence)
+                    if (!incident.Evidence.Contains(evidence, StringComparer.OrdinalIgnoreCase))
+                        incident.Evidence.Add(evidence);
+
+                if (result.Phase == IncidentRepairPhase.Corrected)
+                {
+                    incident.CauseState = IncidentCauseState.Established;
+                    incident.Conclusion = result.Message;
+                    _main.Log($"Erreurs Windows : correction validée — {incident.Title}");
+                }
+                else
+                {
+                    _main.Log($"Erreurs Windows : diagnostic — {result.Message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("Erreurs Windows : diagnostic/correction", ex);
+                plan.Phase = IncidentRepairPhase.Blocked;
+                plan.Status = "L'opération a été interrompue avant validation. Aucune correction n'est annoncée.";
+            }
+
+            Render();
+        }
+
+        private static string CauseRole(IncidentCauseState state) => state switch
+        {
+            IncidentCauseState.Established => "ThOk",
+            IncidentCauseState.Probable => "ThWarn",
+            _ => "ThTextDim",
+        };
+
+        private static string RepairRole(IncidentRepairPhase phase) => phase switch
+        {
+            IncidentRepairPhase.Corrected or IncidentRepairPhase.NotPresent => "ThOk",
+            IncidentRepairPhase.Blocked => "ThWarn",
+            _ => "ThAccentIcon",
+        };
 
         // TextBlock dont la couleur SUIT le thème (DynamicResource via SetResourceReference)
         private TextBlock Tb(string text, string fgKey, double size,

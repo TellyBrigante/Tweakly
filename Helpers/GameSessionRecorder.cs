@@ -107,16 +107,26 @@ namespace Optimisation_Tool.Helpers
                 _pm = Process.Start(psi);
                 if (_pm == null) { error = "Impossible de lancer PresentMon."; return false; }
                 // Priorité basse : l'enregistreur ne doit JAMAIS voler du temps CPU au jeu.
-                try { _pm.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+                try { _pm.PriorityClass = ProcessPriorityClass.BelowNormal; }
+                catch (Exception ex)
+                {
+                    AppLog.ErrorOnce("game-session-priority", "GameSession : priorité de PresentMon", ex);
+                }
 
                 _startedUtc = DateTime.UtcNow;
                 _reading = true;
-                _reader = Task.Run(ReadLoop);   // lecture du flux stdout sur un thread de fond
+                var presentMonOutput = _pm.StandardOutput;
+                _reader = Task.Run(() => ReadLoop(presentMonOutput));
 
                 // Snapshot contexte UNE FOIS (~100 ms, hors fenêtre de mesure) : disque du jeu,
                 // RAM totale, plan d'alim, refresh moniteur. Process.GetProcesses ici = OK (one-shot).
                 _sysContext = SystemContextSnap.Capture();
-                try { _gpu = new GpuTelemetry(); } catch { _gpu = null; }
+                try { _gpu = new GpuTelemetry(); }
+                catch (Exception ex)
+                {
+                    _gpu = null;
+                    AppLog.ErrorOnce("game-session-gpu-init", "GameSession : initialisation NvAPI", ex);
+                }
                 // Sampler 1 Hz cheap (GetSystemTimes + GlobalMemoryStatusEx + GPU NvAPI) → SysSample
                 // (% CPU global, RAM, télémétrie GPU) + médiane FPS live. Rien de lourd.
                 _sampler = new System.Threading.Timer(_ => TakeSample(), null, 1000, 1000);
@@ -139,22 +149,48 @@ namespace Optimisation_Tool.Helpers
         public async Task<SessionCapture?> StopAsync()
         {
             if (_pm == null) return null;
-            try { _sampler?.Dispose(); _sampler = null; } catch { }
-            try { _gpu?.Dispose(); _gpu = null; } catch { }
+            System.Threading.Timer? sampler = _sampler;
+            _sampler = null;
+            if (sampler != null)
+            {
+                try { await sampler.DisposeAsync(); }
+                catch (Exception ex) { AppLog.Error("GameSession : arrêt du sampler", ex); }
+            }
+            try { _gpu?.Dispose(); }
+            catch (Exception ex) { AppLog.ErrorOnce("game-session-gpu-stop", "GameSession : arrêt NvAPI", ex); }
+            _gpu = null;
 
             var pm = _pm;
             _pm = null;
             _reading = false;
             try
             {
-                if (!pm.HasExited) { try { pm.Kill(); } catch { } }
-                await Task.Run(() => pm.WaitForExit(3000));
+                if (!pm.HasExited)
+                    pm.Kill(entireProcessTree: true);
+                using var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await pm.WaitForExitAsync(timeout.Token);
             }
-            catch { }
-            finally { try { pm.Dispose(); } catch { } }
+            catch (OperationCanceledException)
+            {
+                AppLog.WriteOnce("game-session-presentmon-timeout",
+                    "GameSession : PresentMon ne s'est pas arrêté dans le délai de 3 s.");
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("game-session-presentmon-stop", "GameSession : arrêt de PresentMon", ex);
+            }
+            finally { pm.Dispose(); }
 
             // Le pipe stdout se ferme à la mort de PresentMon → ReadLine renvoie null, le lecteur sort.
-            try { if (_reader != null) await Task.WhenAny(_reader, Task.Delay(2500)); } catch { }
+            if (_reader != null)
+            {
+                Task completed = await Task.WhenAny(_reader, Task.Delay(2500));
+                if (completed == _reader)
+                    await _reader;
+                else
+                    AppLog.WriteOnce("game-session-reader-timeout",
+                        "GameSession : le lecteur PresentMon ne s'est pas arrêté dans le délai de 2,5 s.");
+            }
             _reader = null;
 
             SessionCapture cap;
@@ -212,23 +248,27 @@ namespace Optimisation_Tool.Helpers
                 lock (_samplesLock) _samples.Add(s);
                 LastSample = s;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("game-session-sample", "GameSession : échantillon système", ex);
+            }
         }
 
         // Boucle de lecture du flux stdout de PresentMon (thread de fond). Bloque sur ReadLine ;
         // se termine quand le pipe se ferme (mort de PresentMon) ou _reading=false. Lecture de
         // pipe, pas de sonde → aucun impact sur le jeu.
-        private void ReadLoop()
+        private void ReadLoop(StreamReader reader)
         {
             try
             {
-                var sr = _pm?.StandardOutput;
-                if (sr == null) return;
                 string? line;
-                while (_reading && (line = sr.ReadLine()) != null)
+                while (_reading && (line = reader.ReadLine()) != null)
                     ProcessLine(line);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("game-session-reader", "GameSession : lecture du flux PresentMon", ex);
+            }
         }
 
         // Une ligne CSV PresentMon (en-tête repérée PAR NOM de colonne, jamais par index — l'ordre
@@ -298,11 +338,19 @@ namespace Optimisation_Tool.Helpers
         private void Cleanup()
         {
             _reading = false;
-            try { _sampler?.Dispose(); } catch { }
+            try { _sampler?.Dispose(); }
+            catch (Exception ex) { AppLog.ErrorOnce("game-session-sampler-cleanup", "GameSession : nettoyage du sampler", ex); }
             _sampler = null;
-            try { _gpu?.Dispose(); } catch { }
+            try { _gpu?.Dispose(); }
+            catch (Exception ex) { AppLog.ErrorOnce("game-session-gpu-cleanup", "GameSession : nettoyage NvAPI", ex); }
             _gpu = null;
-            try { if (_pm != null && !_pm.HasExited) _pm.Kill(); } catch { }
+            try
+            {
+                if (_pm != null && !_pm.HasExited)
+                    _pm.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex) { AppLog.ErrorOnce("game-session-presentmon-cleanup", "GameSession : nettoyage de PresentMon", ex); }
+            finally { _pm?.Dispose(); }
             _pm = null;
         }
 
@@ -314,7 +362,8 @@ namespace Optimisation_Tool.Helpers
         {
             _reading = false;
             Cleanup();
-            try { _reader?.Wait(1500); } catch { }
+            try { _reader?.Wait(1500); }
+            catch (Exception ex) { AppLog.ErrorOnce("game-session-reader-abort", "GameSession : arrêt forcé du lecteur", ex); }
             _reader = null;
         }
     }

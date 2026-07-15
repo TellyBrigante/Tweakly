@@ -43,11 +43,17 @@ namespace Optimisation_Tool.Helpers
                         if (mdl.Length == 0) mdl = $"disque #{idx}";
                         byIndex[idx] = mdl;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-namer-disk-entry", "Matériel : disque WMI ignoré", ex);
+                    }
                     finally { o.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("hardware-namer-disks", "Matériel : noms des disques indisponibles", ex);
+            }
 
             // Mapping Disque → Partition → LogicalDisk (lettre). 2 jointures WMI.
             try
@@ -69,7 +75,10 @@ namespace Optimisation_Tool.Helpers
                         var let  = Regex.Match(ld,   @"DeviceID=""([^""]+)""").Groups[1].Value;
                         if (pId.Length > 0 && let.Length > 0) partToLetter[pId] = let;
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-namer-partition-letter", "Matériel : lettre de partition ignorée", ex);
+                    }
                     finally { o.Dispose(); }
                 }
 
@@ -90,11 +99,17 @@ namespace Optimisation_Tool.Helpers
                             if (!list.Contains(letter)) list.Add(letter);
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-namer-disk-partition", "Matériel : association disque/partition ignorée", ex);
+                    }
                     finally { o.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("hardware-namer-volume-map", "Matériel : association des volumes indisponible", ex);
+            }
 
             _diskByIndex   = byIndex;
             _lettersByDisk = letters.ToDictionary(
@@ -168,11 +183,17 @@ namespace Optimisation_Tool.Helpers
                         string key = !string.IsNullOrWhiteSpace(slot) ? slot : bank;
                         if (key.Length > 0) map[key] = $"{desc} dans {key}";
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        AppLog.ErrorOnce("hardware-namer-ram-entry", "Matériel : module mémoire ignoré", ex);
+                    }
                     finally { o.Dispose(); }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("hardware-namer-ram", "Matériel : noms des modules mémoire indisponibles", ex);
+            }
             _ramBySlot = map;
         }
 
