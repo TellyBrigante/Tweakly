@@ -2,6 +2,25 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using GpuTuningLab.Core;
 
+if (args is ["--session-smoke", string sessionPath])
+{
+    try
+    {
+        LabSession session = await LabStore.LoadAsync(sessionPath);
+        int fingerprinted = session.Runs.Count(static run =>
+            !string.IsNullOrWhiteSpace(run.WorkloadPackageFingerprint));
+        Console.WriteLine(
+            $"OK session | schema={session.SchemaVersion} | runs={session.Runs.Count} | " +
+            $"fingerprinted={fingerprinted} | legacy={session.Runs.Count - fingerprinted}");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine("FAIL session: " + ex.Message);
+        return 1;
+    }
+}
+
 var tests = new List<(string Name, Func<Task> Run)>
 {
     ("Parse NVIDIA CSV", () => Run(ParseNvidiaCsv)),
@@ -9,11 +28,14 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Throttle bit masks", () => Run(ThrottleMasks)),
     ("Detect competing GPU workload", () => Run(DetectCompetingGpuWorkload)),
     ("Ignore host GPU process", () => Run(IgnoreHostGpuProcess)),
+    ("Ignore Windows desktop compositor", () => Run(IgnoreWindowsDesktopCompositor)),
     ("Classify sustained GPU contamination", () => Run(ClassifySustainedGpuContamination)),
     ("Load text enum evaluation policy", () => Run(LoadTextEnumEvaluationPolicy)),
     ("Detect competing GPU video workload", () => Run(DetectCompetingGpuVideoWorkload)),
     ("Sanitize NVIDIA process name", () => Run(SanitizeNvidiaProcessName)),
     ("Telemetry aggregation", () => Run(TelemetryAggregation)),
+    ("Reject telemetry gaps across workload windows", () => Run(RejectTelemetryGaps)),
+    ("Reject missing required telemetry metric", () => Run(RejectMissingRequiredMetric)),
     ("Exclude idle telemetry from load metrics", () => Run(ExcludeIdleTelemetryFromLoadMetrics)),
     ("Verify observable stock state", () => Run(VerifyObservableStockState)),
     ("Reject direct instability", () => Run(RejectInstability)),
@@ -22,6 +44,10 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Reject incomplete profile comparison", () => Run(RejectIncompleteProfileComparison)),
     ("Reject different GPU comparison", () => Run(RejectDifferentGpuComparison)),
     ("Reject different driver comparison", () => Run(RejectDifferentDriverComparison)),
+    ("Reject different workload package comparison", () => Run(RejectDifferentWorkloadPackageComparison)),
+    ("Reject one weak workload despite good average", () => Run(RejectWeakIndividualWorkload)),
+    ("Do not compare temperature from different starting state", () => Run(RejectUnfairThermalComparison)),
+    ("Verify the profile actually applied under load", () => Run(VerifyAppliedProfile)),
     ("Parse Windows stability evidence", () => Run(ParseWindowsEvidence)),
     ("Filter unrelated application crash", () => Run(FilterUnrelatedCrash)),
     ("Filter unrelated WHEA", () => Run(FilterUnrelatedWhea)),
@@ -39,11 +65,13 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Match GPU variant by VRAM", () => Run(MatchGpuVariantByVram)),
     ("Block mismatched reference VRAM", () => Run(BlockMismatchedReferenceVram)),
     ("Validate repeatable stock baseline", () => Run(ValidateStockBaseline)),
+    ("Reject stock baseline across driver change", () => Run(RejectBaselineDriverChange)),
     ("Reject noisy stock baseline", () => Run(RejectNoisyBaseline)),
     ("Reject short stock baseline", () => Run(RejectShortBaseline)),
     ("Reject contaminated stock baseline", () => Run(RejectContaminatedBaseline)),
     ("Consolidate stock baseline", () => Run(ConsolidateStockBaseline)),
     ("Keep latest valid stock baseline", () => Run(KeepLatestValidStockBaseline)),
+    ("Reject outdated stock workload package", () => Run(RejectOutdatedStockWorkloadPackage)),
     ("Rank Pareto profiles", () => Run(RankParetoProfiles)),
     ("Allow bounded profile", () => Run(AllowBoundedProfile)),
     ("Block unsafe profile", () => Run(BlockUnsafeProfile)),
@@ -53,6 +81,12 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Validate workload package hashes", ValidateWorkloadPackageHashes),
     ("Validate shipped workload package", ValidateShippedWorkloadPackage),
     ("Atomic session roundtrip", AtomicSessionRoundtrip),
+    ("Recover newest valid temporary session", RecoverNewestTemporarySession),
+    ("Preserve corrupt session instead of resetting it", PreserveCorruptSession),
+    ("Reject malformed workload manifest safely", RejectMalformedWorkloadManifest),
+    ("Load legacy session with null package fingerprints", LoadLegacyNullFingerprintSession),
+    ("Reload latest compatible profile result", ReloadLatestCompatibleProfileResult),
+    ("Keep latest result when public advice is corrupt", KeepLatestResultWhenAdviceIsCorrupt),
     ("Reference catalog rules", ReferenceCatalogRules),
     ("Published evidence registry rules", PublishedEvidenceRegistryRules),
     ("Classify public evidence quality dimensions", ClassifyEvidenceQualityDimensions),
@@ -60,7 +94,8 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Block sparse mixed evidence", BlockSparseMixedEvidence),
     ("Block every under-documented GPU model", BlockEveryUnderDocumentedModel),
     ("Do not suggest stock-or-higher voltage", RejectNonUndervoltSeed),
-    ("Build measured next profile", BuildMeasuredNextProfile)
+    ("Build measured next profile", BuildMeasuredNextProfile),
+    ("Isolate memory before raising voltage", IsolateMemoryBeforeRaisingVoltage)
 };
 
 int passed = 0;
@@ -141,6 +176,20 @@ static void IgnoreHostGpuProcess()
     Equal("brave.exe", busy[0].Name);
 }
 
+static void IgnoreWindowsDesktopCompositor()
+{
+    var compositor = new ActiveGpuProcess(2092, "dwm.exe", 86, 0);
+
+    ActiveGpuProcess[] busy = GpuWorkloadPreflight.SelectContaminatingProcesses(
+        [compositor],
+        allowedProcessIds: null,
+        hostProcessId: 15540);
+
+    Equal(0, busy.Length);
+    True(!GpuContaminationPolicy.IsSignificant(compositor, 7, 7),
+        "Le compositeur Windows ne doit pas invalider le workload qu'il compose.");
+}
+
 static void DetectCompetingGpuVideoWorkload()
 {
     const string output = """
@@ -194,12 +243,19 @@ static void LoadTextEnumEvaluationPolicy()
     string path = Path.Combine(Path.GetTempPath(), $"gpu-policy-{Guid.NewGuid():N}.json");
     try
     {
-        File.WriteAllText(path, """
+        var source = new EvaluationPolicy
+        {
+            SamplingIntervalMs = 750,
+            RequiredValidationWorkloads =
+                [WorkloadKind.Graphics, WorkloadKind.RayTracing, WorkloadKind.Vram, WorkloadKind.Transient]
+        };
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(source, new JsonSerializerOptions
             {
-              "samplingIntervalMs": 750,
-              "requiredValidationWorkloads": ["Graphics", "RayTracing", "Vram", "Transient"]
-            }
-            """);
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            }));
         EvaluationPolicy policy = EvaluationPolicyStore.Load(path);
         Equal(750, policy.SamplingIntervalMs);
         Equal(4, policy.RequiredValidationWorkloads.Length);
@@ -219,7 +275,39 @@ static void TelemetryAggregation()
     Equal(StabilityVerdict.ShortPass, summary.Verdict);
     Near(200, summary.AveragePowerW!.Value, 0.1);
     Near(80, summary.AverageTemperatureC!.Value, 0.1);
-    Near(6.6667, summary.EnergyWh, 0.05);
+    Near(8.3333, summary.EnergyWh, 0.05);
+}
+
+static void RejectTelemetryGaps()
+{
+    TestRun source = MakeRun(1000, 200, 80, minutes: 2);
+    TestRun interrupted = source with
+    {
+        Samples = source.Samples
+            .Where((_, index) => index < 100 || index >= source.Samples.Count - 100)
+            .ToArray()
+    };
+    RunSummary summary = RunAnalyzer.Summarize(interrupted, Policy());
+    Equal(StabilityVerdict.InvalidTelemetry, summary.Verdict);
+    True(summary.TelemetryCoveragePercent < 95, "A long missing interval must reduce telemetry coverage.");
+}
+
+static void RejectMissingRequiredMetric()
+{
+    TestRun source = MakeRun(1000, 200, 80, minutes: 2);
+    TestRun missingPower = source with
+    {
+        Samples = source.Samples.Select(static sample => sample with
+        {
+            PowerAverageW = null,
+            PowerInstantW = null
+        }).ToArray()
+    };
+    RunSummary summary = RunAnalyzer.Summarize(missingPower, Policy());
+    Equal(StabilityVerdict.InvalidTelemetry, summary.Verdict);
+    True(summary.Reasons.Any(static reason =>
+            reason.Contains("power", StringComparison.OrdinalIgnoreCase)),
+        string.Join(" | ", summary.Reasons));
 }
 
 static void ExcludeIdleTelemetryFromLoadMetrics()
@@ -336,6 +424,109 @@ static void RejectDifferentDriverComparison()
         Identity = baseline.Identity with { DriverVersion = "other-driver" }
     };
     Throws<InvalidOperationException>(() => ProfileEvaluator.Compare(baseline, candidate, Policy()));
+}
+
+static void RejectDifferentWorkloadPackageComparison()
+{
+    TestRun baseline = MakeRun(1000, 200, 80, 2);
+    TestRun candidate = MakeRun(990, 160, 70, 2, ProfileKind.Undervolt) with
+    {
+        WorkloadPackageFingerprint = "test-package-v2"
+    };
+    Throws<InvalidOperationException>(() => ProfileEvaluator.Compare(baseline, candidate, Policy()));
+}
+
+static void RejectWeakIndividualWorkload()
+{
+    TestRun baseline = MakeRun(100, 200, 70, 2);
+    TestRun candidateSource = MakeRun(103, 160, 70, 2, ProfileKind.Undervolt);
+    TestRun candidate = candidateSource with
+    {
+        Workloads = candidateSource.Workloads.Select(static workload =>
+            workload.Kind == WorkloadKind.Vram
+                ? workload with { Score = 89 }
+                : workload).ToArray()
+    };
+    ProfileComparison comparison = ProfileEvaluator.Compare(baseline, candidate, Policy());
+    True(comparison.PerformanceIndex >= Policy().MinimumPerformanceRetentionPercent,
+        "The aggregate should pass so the individual floor is what rejects this profile.");
+    Near(89, comparison.MinimumWorkloadPerformanceIndex, 0.01);
+    True(!comparison.MeetsPerformanceFloor, "One weak workload must reject an otherwise good average.");
+    Recommendation recommendation = RecommendationEngine.Recommend(
+        baseline,
+        candidate,
+        Policy(),
+        trustedSearchEnvelopeAvailable: false);
+    True(recommendation.Reason.Contains("Vram", StringComparison.OrdinalIgnoreCase),
+        "The recommendation must identify the individual workload that failed.");
+}
+
+static void RejectUnfairThermalComparison()
+{
+    TestRun baseline = MakeRun(100, 200, 80, 2);
+    TestRun candidate = MakeRun(100, 160, 70, 2, ProfileKind.Undervolt);
+    ProfileComparison comparison = ProfileEvaluator.Compare(baseline, candidate, Policy());
+    True(!comparison.ThermalComparisonReliable,
+        "A 10 °C difference at test start must make the thermal comparison unreliable.");
+    True(!comparison.TemperatureDeltaC.HasValue,
+        "An unreliable thermal delta must not be shown or scored.");
+}
+
+static void VerifyAppliedProfile()
+{
+    TestRun baselineSource = MakeRun(100, 200, 70, 2);
+    TestRun baseline = baselineSource with
+    {
+        Samples = baselineSource.Samples.Select((sample, index) => sample with
+        {
+            VoltageV = 1.05,
+            GpuUtilizationPercent = index < 20 ? 0 : 99,
+            MemoryClockMhz = index < 20 ? 405 : 10501,
+            RequestedPowerLimitW = 220,
+            DefaultPowerLimitW = 220
+        }).ToArray()
+    };
+    TestRun candidateSource = MakeRun(100, 160, 65, 2, ProfileKind.Undervolt);
+    TestRun candidate = candidateSource with
+    {
+        Profile = new GpuTuningProfile
+        {
+            Name = "Measured profile",
+            Kind = ProfileKind.Undervolt,
+            TargetVoltageMv = 920,
+            TargetClockMhz = 2670,
+            MemoryOffsetMhz = 0,
+            PowerLimitPercent = 100
+        },
+        Samples = candidateSource.Samples.Select(static sample => sample with
+        {
+            VoltageV = 0.92,
+            CoreClockMhz = 2670,
+            MemoryClockMhz = 10501,
+            RequestedPowerLimitW = 220,
+            DefaultPowerLimitW = 220
+        }).ToArray()
+    };
+    ProfileApplicationAssessment verified = ProfileApplicationVerifier.Assess(
+        baseline,
+        candidate,
+        Policy());
+    True(verified.Verified, string.Join(" | ", verified.BlockingReasons));
+    Equal(0, verified.ObservedMemoryOffsetMhz);
+
+    ProfileApplicationAssessment mismatch = ProfileApplicationVerifier.Assess(
+        baseline,
+        candidate with
+        {
+            Profile = candidate.Profile with
+            {
+                TargetVoltageMv = 975,
+                MemoryOffsetMhz = 1000
+            }
+        },
+        Policy());
+    True(!mismatch.Verified, "Declared values that were not observed must block comparison.");
+    True(mismatch.BlockingReasons.Count >= 2, string.Join(" | ", mismatch.BlockingReasons));
 }
 
 static void ParseWindowsEvidence()
@@ -588,6 +779,21 @@ static void ValidateStockBaseline()
     True(result.ScoreCoefficientOfVariationPercent < 1, "Stock variation should be below 1 %.");
 }
 
+static void RejectBaselineDriverChange()
+{
+    TestRun first = MakeRun(1000, 200, 80, 2);
+    TestRun second = MakeRun(1001, 200, 80, 2);
+    TestRun third = MakeRun(999, 200, 80, 2) with
+    {
+        Identity = first.Identity with { DriverVersion = "different-driver" }
+    };
+    BaselineValidationResult result = BaselineValidator.Validate([first, second, third], Policy());
+    True(!result.Valid, "A stock baseline spanning two drivers must be rejected.");
+    True(result.Reasons.Any(static reason =>
+            reason.Contains("driver changed", StringComparison.OrdinalIgnoreCase)),
+        string.Join(" | ", result.Reasons));
+}
+
 static void RejectNoisyBaseline()
 {
     var result = BaselineValidator.Validate(
@@ -635,7 +841,8 @@ static void ConsolidateStockBaseline()
     True(result.Workloads.All(workload => workload.ScoreVariancePercent > 0),
         "Consolidated workloads must retain stock variation.");
     Equal("manual-confirmed-stock", result.Profile.AppliedBy);
-    Equal(15, result.WorkloadWindows.Count);
+    Equal(5, result.WorkloadWindows.Count);
+    Equal(result.Samples.Count, result.WorkloadWindows.Sum(static window => window.SampleCount) - 4);
 }
 
 static void KeepLatestValidStockBaseline()
@@ -660,6 +867,36 @@ static void KeepLatestValidStockBaseline()
     Equal(3, selected.Length);
     True(selected.All(run => run.BatchId == validBatch),
         "An interrupted stock retry must not replace the latest valid baseline.");
+}
+
+static void RejectOutdatedStockWorkloadPackage()
+{
+    TestRun[] runs =
+    [
+        MakeRun(1000, 200, 80, 2),
+        MakeRun(1002, 200, 80, 2),
+        MakeRun(998, 200, 80, 2)
+    ];
+    BaselineValidationResult result = BaselineValidator.Validate(
+        runs,
+        Policy(),
+        "test-package-v2");
+    True(!result.Valid, "A stock baseline from another workload package must be rejected.");
+    True(result.Reasons.Any(static reason =>
+            reason.Contains("different workload package", StringComparison.OrdinalIgnoreCase)),
+        string.Join(" | ", result.Reasons));
+
+    TestRun[] legacyRuns = runs
+        .Select(static run => run with { WorkloadPackageFingerprint = null })
+        .ToArray();
+    BaselineValidationResult legacy = BaselineValidator.Validate(
+        legacyRuns,
+        Policy(),
+        "test-package-v1");
+    True(!legacy.Valid, "A legacy stock baseline without a package fingerprint must be rejected.");
+    True(legacy.Reasons.Any(static reason =>
+            reason.Contains("predates workload package fingerprinting", StringComparison.OrdinalIgnoreCase)),
+        string.Join(" | ", legacy.Reasons));
 }
 
 static async Task ValidateWorkloadPackageHashes()
@@ -701,6 +938,7 @@ static async Task ValidateWorkloadPackageHashes()
 
         WorkloadPackageValidation valid = await WorkloadPackageValidator.ValidateAsync(root);
         True(valid.Valid, string.Join(" | ", valid.Errors));
+        True(!string.IsNullOrWhiteSpace(valid.Fingerprint), "A valid package needs a fingerprint.");
 
         await File.AppendAllTextAsync(Path.Combine(root, "d3d11", "GpuTuningLab.Workload.exe"), "tampered");
         WorkloadPackageValidation altered = await WorkloadPackageValidator.ValidateAsync(root);
@@ -729,7 +967,11 @@ static void RankParetoProfiles()
     var fast = MakeRun(1010, 230, 85, 2, ProfileKind.Overclock);
     var rows = ProfileRanker.Rank(baseline, [dominated, fast, efficient], Policy());
     True(rows.Single(row => row.Run.Id == efficient.Id).ParetoEfficient, "Efficient profile should be Pareto-efficient.");
-    True(!rows.Single(row => row.Run.Id == dominated.Id).ParetoEfficient, "Dominated profile must be marked.");
+    True(!rows.Single(row => row.Run.Id == dominated.Id).ParetoEfficient,
+        "Dominated profile must be marked. " + string.Join(" | ", rows.Select(row =>
+            $"{row.Run.Profile.Kind}: perf {row.Comparison.PerformanceIndex:0.0}, " +
+            $"eff {row.Comparison.EfficiencyIndex:0.0}, temp {row.Comparison.TemperatureDeltaC:0.0}, " +
+            $"pareto {row.ParetoEfficient}")));
 }
 
 static async Task RunExternalWorkload()
@@ -898,8 +1140,231 @@ static async Task AtomicSessionRoundtrip()
         var loaded = await LabStore.LoadAsync(path);
         Equal(1, loaded.Runs.Count);
         Equal(loaded.Runs[0].Workloads.Count, loaded.Runs[0].WorkloadWindows.Count);
+        Equal("test-package-v1", loaded.Runs[0].WorkloadPackageFingerprint);
         await LabStore.SaveAsync(path, loaded);
         True(File.Exists(path + ".bak"), "Second save must preserve a backup.");
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task RecoverNewestTemporarySession()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GpuTuningLabTests", Guid.NewGuid().ToString("N"));
+    string path = Path.Combine(root, "session.json");
+    try
+    {
+        var original = new LabSession { Runs = [MakeRun(1000, 200, 80, 2)] };
+        await LabStore.SaveAsync(path, original);
+        var newer = new LabSession
+        {
+            Runs = [MakeRun(1000, 200, 80, 2), MakeRun(990, 160, 70, 2, ProfileKind.Undervolt)]
+        };
+        string temporaryPath = path + ".tmp";
+        await File.WriteAllTextAsync(
+            temporaryPath,
+            JsonSerializer.Serialize(newer, LabJsonContext.Default.LabSession));
+        File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(-2));
+        File.SetLastWriteTimeUtc(temporaryPath, DateTime.UtcNow);
+
+        LabSession recovered = await LabStore.LoadAsync(path);
+        Equal(2, recovered.Runs.Count);
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task PreserveCorruptSession()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GpuTuningLabTests", Guid.NewGuid().ToString("N"));
+    string path = Path.Combine(root, "session.json");
+    try
+    {
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(path, "{broken");
+        await File.WriteAllTextAsync(path + ".tmp", "null");
+        await File.WriteAllTextAsync(path + ".bak", """{"schemaVersion":99,"runs":[]}""");
+        bool failedClosed = false;
+        try
+        {
+            await LabStore.LoadAsync(path);
+        }
+        catch (InvalidDataException)
+        {
+            failedClosed = true;
+        }
+        True(failedClosed, "Existing unreadable history must not become a blank session.");
+        Equal("{broken", await File.ReadAllTextAsync(path));
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task RejectMalformedWorkloadManifest()
+{
+    string root = Path.Combine(Path.GetTempPath(), "gpu-lab-package-" + Guid.NewGuid().ToString("N"));
+    try
+    {
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(
+            Path.Combine(root, "manifest.json"),
+            """[{"path":null,"bytes":1,"sha256":null}]""");
+        WorkloadPackageValidation validation = await WorkloadPackageValidator.ValidateAsync(root);
+        True(!validation.Valid, "A malformed manifest must be rejected without throwing.");
+        True(validation.Errors.Any(static error =>
+                error.Contains("manifest", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("SHA-256", StringComparison.OrdinalIgnoreCase)),
+            string.Join(" | ", validation.Errors));
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task ReloadLatestCompatibleProfileResult()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GpuTuningLabTests", Guid.NewGuid().ToString("N"));
+    string path = Path.Combine(root, "session.json");
+    try
+    {
+        Guid batchId = Guid.NewGuid();
+        DateTimeOffset startedAt = DateTimeOffset.Now.AddMinutes(-15);
+        TestRun[] baselineRuns =
+        [
+            MakeRun(1000, 200, 80, 2) with { BatchId = batchId, StartedAt = startedAt },
+            MakeRun(1002, 200, 80, 2) with { BatchId = batchId, StartedAt = startedAt.AddMinutes(3) },
+            MakeRun(998, 200, 80, 2) with { BatchId = batchId, StartedAt = startedAt.AddMinutes(6) }
+        ];
+        TestRun candidate = MakeRun(985, 155, 70, 2, ProfileKind.Undervolt) with
+        {
+            StartedAt = startedAt.AddMinutes(10)
+        };
+        await LabStore.SaveAsync(
+            path,
+            new LabSession { Runs = baselineRuns.Append(candidate).ToArray() });
+
+        var service = new LocalGpuLabService(Policy());
+        GpuProfileMeasurementResult? restored =
+            await service.GetLatestProfileMeasurementResultAsync(
+                path,
+                null,
+                candidate.Identity,
+                "test-package-v1");
+        True(restored?.Comparison != null, "The latest compatible result must be restored.");
+        Equal(candidate.Id, restored!.Run.Id);
+
+        GpuProfileMeasurementResult? incompatible =
+            await service.GetLatestProfileMeasurementResultAsync(
+                path,
+                null,
+                candidate.Identity,
+                "test-package-v2");
+        True(incompatible == null, "A result from another workload package must not be restored.");
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task KeepLatestResultWhenAdviceIsCorrupt()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GpuTuningLabTests", Guid.NewGuid().ToString("N"));
+    string path = Path.Combine(root, "session.json");
+    string evidencePath = Path.Combine(root, "evidence.json");
+    try
+    {
+        Guid batchId = Guid.NewGuid();
+        DateTimeOffset startedAt = DateTimeOffset.Now.AddMinutes(-15);
+        TestRun[] baselineRuns =
+        [
+            MakeRun(1000, 200, 80, 2) with { BatchId = batchId, StartedAt = startedAt },
+            MakeRun(1002, 200, 80, 2) with { BatchId = batchId, StartedAt = startedAt.AddMinutes(3) },
+            MakeRun(998, 200, 80, 2) with { BatchId = batchId, StartedAt = startedAt.AddMinutes(6) }
+        ];
+        TestRun candidate = MakeRun(985, 155, 70, 2, ProfileKind.Undervolt) with
+        {
+            StartedAt = startedAt.AddMinutes(10)
+        };
+        await LabStore.SaveAsync(
+            path,
+            new LabSession { Runs = baselineRuns.Append(candidate).ToArray() });
+        await File.WriteAllTextAsync(evidencePath, "{ invalid JSON");
+
+        var service = new LocalGpuLabService(Policy());
+        GpuProfileMeasurementResult? restored =
+            await service.GetLatestProfileMeasurementResultAsync(
+                path,
+                evidencePath,
+                candidate.Identity,
+                "test-package-v1");
+
+        True(restored?.Comparison != null, "A broken advice catalog must not hide the saved result.");
+        Equal(candidate.Id, restored!.Run.Id);
+        True(!string.IsNullOrWhiteSpace(restored.NextSuggestionMessage),
+            "The optional advice failure should remain observable.");
+    }
+    finally
+    {
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+    }
+}
+
+static async Task LoadLegacyNullFingerprintSession()
+{
+    string root = Path.Combine(Path.GetTempPath(), "GpuTuningLabTests", Guid.NewGuid().ToString("N"));
+    string path = Path.Combine(root, "session.json");
+    try
+    {
+        Guid batchId = Guid.NewGuid();
+        TestRun[] legacyRuns =
+        [
+            MakeRun(1000, 200, 80, 2) with
+            {
+                BatchId = batchId,
+                WorkloadPackageFingerprint = null
+            },
+            MakeRun(1002, 200, 80, 2) with
+            {
+                BatchId = batchId,
+                WorkloadPackageFingerprint = null
+            },
+            MakeRun(998, 200, 80, 2) with
+            {
+                BatchId = batchId,
+                WorkloadPackageFingerprint = null
+            },
+            MakeRun(985, 155, 70, 2, ProfileKind.Undervolt) with
+            {
+                WorkloadPackageFingerprint = null
+            }
+        ];
+        await LabStore.SaveAsync(path, new LabSession { Runs = legacyRuns });
+
+        var service = new LocalGpuLabService(Policy());
+        GpuBaselineStatus status = await service.GetLatestBaselineStatusAsync(
+            path,
+            "test-package-v1");
+        True(status.Exists, "The legacy baseline must remain visible.");
+        True(status.Validation?.Valid == false, "The legacy baseline must be invalidated without crashing.");
+        True(status.Validation!.Reasons.Any(static reason =>
+                reason.Contains("predates workload package fingerprinting", StringComparison.OrdinalIgnoreCase)),
+            string.Join(" | ", status.Validation.Reasons));
+
+        GpuProfileMeasurementResult? restored =
+            await service.GetLatestProfileMeasurementResultAsync(
+                path,
+                null,
+                legacyRuns[0].Identity,
+                "test-package-v1");
+        True(restored == null, "A legacy profile without a package fingerprint must not be restored.");
     }
     finally
     {
@@ -1035,9 +1500,12 @@ static async Task BuildMeasuredNextProfile()
         BaselineRunId = baseline.Id,
         CandidateRunId = candidate.Id,
         PerformanceIndex = 100,
+        MinimumWorkloadPerformanceIndex = 100,
+        WeakestWorkloadName = "compute",
         PowerIndex = 78.1,
         EfficiencyIndex = 128,
         TemperatureDeltaC = -10,
+        ThermalComparisonReliable = true,
         BalancedScore = 113,
         CandidateVerdict = StabilityVerdict.Validated,
         MeetsPerformanceFloor = true
@@ -1053,6 +1521,70 @@ static async Task BuildMeasuredNextProfile()
     True(advice.Available && advice.Suggestion != null, "A measured efficient pass should yield a next step.");
     Equal(975, advice.Suggestion!.Profile.TargetVoltageMv);
     Equal(2700, advice.Suggestion.Profile.TargetClockMhz);
+}
+
+static async Task IsolateMemoryBeforeRaisingVoltage()
+{
+    string path = Path.GetFullPath(Path.Combine(
+        AppContext.BaseDirectory, "data", "gpu-tuning", "published_tuning_evidence.json"));
+    await using var stream = File.OpenRead(path);
+    PublishedTuningEvidence[] entries = await JsonSerializer.DeserializeAsync(
+        stream,
+        LabJsonContext.Default.PublishedTuningEvidenceArray) ?? [];
+    var identity = new GpuIdentity(
+        "NVIDIA GeForce RTX 4070 SUPER", "uuid", "bus", "dev", "sub", "driver", "vbios");
+    TestRun baseline = MakeRun(100, 160, 65, 4) with { Identity = identity };
+    TestRun candidate = MakeRun(82, 100, 51, 4, ProfileKind.Undervolt) with
+    {
+        Identity = identity,
+        Profile = new GpuTuningProfile
+        {
+            Name = "Memory offset mixed in",
+            Kind = ProfileKind.Undervolt,
+            TargetVoltageMv = 920,
+            TargetClockMhz = 2670,
+            MemoryOffsetMhz = 1000,
+            PowerLimitPercent = 100
+        }
+    };
+    candidate = candidate with
+    {
+        Workloads = candidate.Workloads.Select(item => item.Kind == WorkloadKind.Vram
+            ? item with { Score = 52 }
+            : item).ToArray()
+    };
+    var comparison = new ProfileComparison
+    {
+        BaselineRunId = baseline.Id,
+        CandidateRunId = candidate.Id,
+        PerformanceIndex = 76.7,
+        MinimumWorkloadPerformanceIndex = 52,
+        WeakestWorkloadName = "vram",
+        PowerIndex = 62.3,
+        EfficiencyIndex = 123.2,
+        TemperatureDeltaC = -16,
+        ThermalComparisonReliable = true,
+        BalancedScore = 0,
+        CandidateVerdict = StabilityVerdict.Validated,
+        MeetsPerformanceFloor = false
+    };
+
+    GpuAdviceStatus advice = GpuProfileAdvisor.BuildNext(
+        baseline,
+        candidate,
+        RunAnalyzer.Summarize(candidate, Policy()),
+        comparison,
+        Policy(),
+        entries);
+
+    True(advice.Available && advice.Suggestion != null, "A low-performance mixed profile must yield an isolating retry.");
+    Equal(920, advice.Suggestion!.Profile.TargetVoltageMv);
+    Equal(2670, advice.Suggestion.Profile.TargetClockMhz);
+    Equal(0, advice.Suggestion.Profile.MemoryOffsetMhz);
+    True(advice.Message.Contains("mémoire 0 MHz", StringComparison.OrdinalIgnoreCase),
+        "The retry message must state the exact memory reset.");
+    True(advice.Message.Contains("mémoire vidéo", StringComparison.OrdinalIgnoreCase),
+        "The retry message must identify the weakest workload.");
 }
 
 static async Task BlockSparseMixedEvidence()
@@ -1148,7 +1680,12 @@ static EvaluationPolicy Policy() => new()
 static TestRun MakeRun(double score, double power, double temp, int minutes, ProfileKind kind = ProfileKind.Stock)
 {
     var start = DateTimeOffset.Now;
-    int count = minutes * 120 + 1;
+    TimeSpan workloadDuration = TimeSpan.FromSeconds(minutes * 15);
+    WorkloadKind[] workloadKinds = Enum.GetValues<WorkloadKind>()
+        .Where(static workload => workload != WorkloadKind.Game)
+        .ToArray();
+    TimeSpan totalDuration = TimeSpan.FromTicks(workloadDuration.Ticks * workloadKinds.Length);
+    int count = (int)Math.Ceiling(totalDuration.TotalMilliseconds / 500) + 1;
     var samples = Enumerable.Range(0, count).Select(index => new GpuTelemetrySample
     {
         Timestamp = start.AddMilliseconds(index * 500),
@@ -1162,14 +1699,14 @@ static TestRun MakeRun(double score, double power, double temp, int minutes, Pro
         MaxMemoryClockMhz = 10501,
         GpuUtilizationPercent = 99
     }).ToArray();
-    var workloads = Enum.GetValues<WorkloadKind>().Where(kind => kind != WorkloadKind.Game).Select(workload => new WorkloadResult
+    var workloads = workloadKinds.Select(workload => new WorkloadResult
     {
         Name = workload.ToString(),
         Version = "1",
         Kind = workload,
         Score = score,
         ScoreUnit = "points",
-        Duration = TimeSpan.FromSeconds(minutes * 15)
+        Duration = workloadDuration
     }).ToArray();
     return new TestRun
     {
@@ -1181,15 +1718,16 @@ static TestRun MakeRun(double score, double power, double temp, int minutes, Pro
             Kind = kind,
             AppliedBy = kind == ProfileKind.Stock ? "manual-confirmed-stock" : "manual"
         },
+        WorkloadPackageFingerprint = "test-package-v1",
         Samples = samples,
         Workloads = workloads,
-        WorkloadWindows = workloads.Select(workload => new WorkloadTelemetryWindow
+        WorkloadWindows = workloads.Select((workload, index) => new WorkloadTelemetryWindow
         {
             Name = workload.Name,
             Kind = workload.Kind,
-            StartedAt = start,
-            EndedAt = start.Add(workload.Duration),
-            SampleCount = samples.Length
+            StartedAt = start.AddTicks(workloadDuration.Ticks * index),
+            EndedAt = start.AddTicks(workloadDuration.Ticks * (index + 1)),
+            SampleCount = (int)Math.Ceiling(workloadDuration.TotalMilliseconds / 500) + 1
         }).ToArray()
     };
 }

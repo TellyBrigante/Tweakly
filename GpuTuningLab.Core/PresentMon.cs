@@ -175,7 +175,8 @@ public sealed class PresentMonCapture
         }) info.ArgumentList.Add(argument);
 
         using var process = new Process { StartInfo = info };
-        process.Start();
+        if (!process.Start())
+            throw new InvalidOperationException("PresentMon could not be started.");
         Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
         Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

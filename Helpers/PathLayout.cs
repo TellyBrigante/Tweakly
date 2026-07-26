@@ -38,6 +38,8 @@ namespace Optimisation_Tool.Helpers
         public static string SettingsFile   => Path.Combine(Config, "tweakly-settings.json");
         public static string BenchmarksFile => Path.Combine(Config, "tweakly-benchmarks.json");
         public static string BenchRefFile   => Path.Combine(Config, "tweakly-bench-ref.json");
+        public static string FanProfilesFile => Path.Combine(Config, "tweakly-fans.json");
+        public static string FanWatchdogLog => Path.Combine(Config, "tweakly-fan-watchdog.log");
 
         // Fichiers fournis (data\<sous-dossier>\)
         public static string PawnIoSetup     => Path.Combine(DataDrv,   "PawnIO_setup.exe");
@@ -47,6 +49,7 @@ namespace Optimisation_Tool.Helpers
         public static string SessionsFile    => Path.Combine(Config,    "tweakly-sessions.json");
         public static string CpuReference    => Path.Combine(DataRefs,  "cpu_reference.json");
         public static string NvmeReference   => Path.Combine(DataRefs,  "nvme_reference.json");
+        public static string FanHeaderCatalog => Path.Combine(DataRefs, "fan_header_catalog.json");
         public static string GpuTuningData   => Path.Combine(Data,      "gpu-tuning");
         public static string GpuTuningTools  => Path.Combine(DataTools, "gpu-tuning");
         public static string GpuTuningSession => Path.Combine(Config,   "tweakly-gpu-tuning.json");

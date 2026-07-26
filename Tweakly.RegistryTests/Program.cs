@@ -1,9 +1,497 @@
 using Optimisation_Tool.Helpers;
 using Optimisation_Tool.Pages;
+using Optimisation_Tool.Controls;
 using Microsoft.Win32;
+using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using FanControl.Core;
+
+if (args.Contains("--fan-curve-render-smoke", StringComparer.OrdinalIgnoreCase))
+{
+    Exception? failure = null;
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            var app = new Optimisation_Tool.App();
+            app.InitializeComponent();
+            if (args.Contains("--light", StringComparer.OrdinalIgnoreCase))
+                ThemeManager.Apply(ThemeManager.Mode.Light);
+            double width = ArgumentDouble(args, "--width", 1180);
+            double height = ArgumentDouble(args, "--height", 900);
+            var page = new PageVentilation(null!) { Width = width, Height = height };
+            ((TextBlock)page.FindName("TxtInventoryStatus")).Text =
+                "2 canaux de carte mere pilotables avec retour de vitesse detectes.";
+            ((TextBlock)page.FindName("TxtMotherboard")).Text = "ASUS TUF GAMING B860-PLUS WIFI";
+            ((TextBlock)page.FindName("TxtController")).Text = "Nuvoton NCT6701D";
+            ((TextBlock)page.FindName("TxtChannelCount")).Text = "2";
+            var cpuFan = new FanChannelItem
+            {
+                Channel = new DetectedFanChannel
+                {
+                    Id = "cpu",
+                    DisplayName = "Ventilateur processeur (CPU_FAN)",
+                    HardwareName = "Nuvoton NCT6701D",
+                    Index = 1,
+                    Rpm = 548,
+                    ControlPercent = 31,
+                    MinimumControlPercent = 0,
+                    MaximumControlPercent = 100,
+                    SuggestedRole = FanRole.Cpu,
+                    DriveMode = FanDriveMode.Pwm,
+                    RequiresRoleConfirmation = false,
+                    RoleSource = "Identifie automatiquement"
+                }
+            };
+            cpuFan.InitializeTelemetry();
+            var caseFan = new FanChannelItem
+            {
+                Channel = new DetectedFanChannel
+                {
+                    Id = "case",
+                    DisplayName = "Ventilateurs boitier (CHA_FAN2)",
+                    HardwareName = "Nuvoton NCT6701D",
+                    Index = 2,
+                    Rpm = 682,
+                    ControlPercent = 33,
+                    MinimumControlPercent = 0,
+                    MaximumControlPercent = 100,
+                    SuggestedRole = FanRole.Chassis,
+                    DriveMode = FanDriveMode.Pwm,
+                    RequiresRoleConfirmation = false,
+                    RoleSource = "Identifie automatiquement"
+                }
+            };
+            caseFan.InitializeTelemetry();
+            ((ItemsControl)page.FindName("FanList")).ItemsSource = new[] { cpuFan, caseFan };
+            var curveSection = (StackPanel)page.FindName("CurveSection");
+            var curveList = (ItemsControl)page.FindName("CurveList");
+            curveList.ItemsSource = new[]
+            {
+                new FanCurveItem
+                {
+                    ChannelId = "cpu",
+                    Name = "Ventilateur processeur",
+                    SourceText = "Pilotee par la temperature CPU",
+                    CalibrationText = "Plancher mesure : 30 %  |  Maximum mesure : 1 780 tr/min",
+                    MinimumDuty = 30,
+                    Source = ThermalSource.Cpu,
+                    Points = new System.Collections.ObjectModel.ObservableCollection<FanCurvePoint>(
+                    [new(35, 30), new(55, 48), new(78, 72), new(87, 100)]),
+                    AutomaticPoints = [new(35, 30), new(55, 48), new(78, 72), new(87, 100)]
+                },
+                new FanCurveItem
+                {
+                    ChannelId = "case",
+                    Name = "Ventilateurs boitier / hub",
+                    SourceText = "Pilotee par la temperature la plus haute (CPU ou GPU)",
+                    CalibrationText = "Plancher mesure : 35 %  |  Maximum mesure : 1 420 tr/min",
+                    MinimumDuty = 35,
+                    Source = ThermalSource.Mixed,
+                    Points = new System.Collections.ObjectModel.ObservableCollection<FanCurvePoint>(
+                    [new(35, 35), new(55, 45), new(78, 68), new(87, 100)]),
+                    AutomaticPoints = [new(35, 35), new(55, 45), new(78, 68), new(87, 100)]
+                }
+            };
+            curveSection.Visibility = Visibility.Visible;
+            page.Measure(new Size(page.Width, double.PositiveInfinity));
+            page.Arrange(new Rect(0, 0, page.Width, Math.Max(page.Height, page.DesiredSize.Height)));
+            page.UpdateLayout();
+
+            if (args.Contains("--switch-theme-after-layout", StringComparer.OrdinalIgnoreCase))
+            {
+                ThemeManager.Apply(args.Contains("--light", StringComparer.OrdinalIgnoreCase)
+                    ? ThemeManager.Mode.Dark
+                    : ThemeManager.Mode.Light);
+                page.RefreshThemeVisuals();
+
+                Brush expectedLine = (Brush)app.FindResource("ThBlueLine");
+                FanCurveEditor[] editors = FindVisualChildren<FanCurveEditor>(page).ToArray();
+                if (editors.Length != 2)
+                    throw new InvalidOperationException($"Deux graphiques attendus, {editors.Length} trouve(s).");
+
+                var frame = new DispatcherFrame();
+                page.Dispatcher.BeginInvoke(
+                    DispatcherPriority.Render,
+                    new Action(() => frame.Continue = false));
+                Dispatcher.PushFrame(frame);
+                page.Measure(new Size(page.Width, double.PositiveInfinity));
+                page.Arrange(new Rect(0, 0, page.Width, Math.Max(page.Height, page.DesiredSize.Height)));
+                page.UpdateLayout();
+                if (editors.Any(editor => !BrushColorsEqual(editor.LineBrush, expectedLine)))
+                    throw new InvalidOperationException("Le graphique n'a pas applique le nouveau theme au cycle de rendu suivant.");
+            }
+
+            int renderWidth = (int)Math.Ceiling(page.ActualWidth);
+            int renderHeight = (int)Math.Ceiling(page.ActualHeight);
+            var bitmap = new RenderTargetBitmap(renderWidth, renderHeight, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(page);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            string fileName = args.Contains("--light", StringComparer.OrdinalIgnoreCase)
+                ? "_fan-curve-render-light.png"
+                : "_fan-curve-render.png";
+            string outputPath = ArgumentValue(args, "--output")
+                ?? Path.Combine(Path.GetTempPath(), fileName);
+            using FileStream stream = File.Create(outputPath);
+            encoder.Save(stream);
+            Console.WriteLine(outputPath);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join();
+    if (failure is not null)
+    {
+        Console.Error.WriteLine(failure);
+        return 1;
+    }
+    Console.WriteLine("Fan curve visual render: OK");
+    return 0;
+}
+
+if (args.Contains("--registry-page-render-smoke", StringComparer.OrdinalIgnoreCase))
+{
+    Exception? failure = null;
+    string? renderedPath = null;
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            var app = new Optimisation_Tool.App();
+            app.InitializeComponent();
+            ThemeManager.Apply(args.Contains("--light", StringComparer.OrdinalIgnoreCase)
+                ? ThemeManager.Mode.Light
+                : ThemeManager.Mode.Dark);
+
+            var page = new PageRegistryInspection();
+            double width = ArgumentDouble(args, "--width", 1000);
+            double height = ArgumentDouble(args, "--height", 760);
+            var root = new Border
+            {
+                Width = width,
+                Height = height,
+                Child = page
+            };
+            root.SetResourceReference(Border.BackgroundProperty, "ThBg");
+            root.Measure(new Size(root.Width, root.Height));
+            root.Arrange(new Rect(0, 0, root.Width, root.Height));
+            root.UpdateLayout();
+
+            var bitmap = new RenderTargetBitmap(
+                (int)root.Width,
+                (int)root.Height,
+                96,
+                96,
+                PixelFormats.Pbgra32);
+            bitmap.Render(root);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            string fileName = args.Contains("--light", StringComparer.OrdinalIgnoreCase)
+                ? "_registry-page-render-light.png"
+                : "_registry-page-render.png";
+            renderedPath = ArgumentValue(args, "--output")
+                ?? Path.Combine(Path.GetTempPath(), fileName);
+            using FileStream stream = File.Create(renderedPath);
+            encoder.Save(stream);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join();
+
+    if (failure is not null)
+    {
+        Console.Error.WriteLine(failure);
+        return 1;
+    }
+
+    Console.WriteLine(renderedPath);
+    Console.WriteLine("Registry page visual render: OK");
+    return 0;
+}
+
+if (args.Contains("--fan-page-xaml-smoke", StringComparer.OrdinalIgnoreCase))
+{
+    Exception? failure = null;
+    var thread = new Thread(() =>
+    {
+        try
+        {
+            var app = new Optimisation_Tool.App();
+            app.InitializeComponent();
+            _ = new PageVentilation(null!);
+        }
+        catch (Exception ex)
+        {
+            failure = ex;
+        }
+    });
+    thread.SetApartmentState(ApartmentState.STA);
+    thread.Start();
+    thread.Join();
+
+    if (failure is not null)
+    {
+        Console.Error.WriteLine(failure);
+        return 1;
+    }
+
+    Console.WriteLine("PageVentilation XAML: OK");
+    return 0;
+}
+
+if (args.Contains("--fan-profile-validation-tests", StringComparer.OrdinalIgnoreCase))
+{
+    var calibration = new FanCalibrationResult
+    {
+        IsValid = true,
+        FailureReason = "",
+        DriveMode = FanDriveMode.Pwm,
+        MinimumStableDutyPercent = 30,
+        RestartDutyPercent = 35,
+        MaximumObservedRpm = 1_500
+    };
+    var channel = new SavedFanChannel
+    {
+        Id = "board/fan/1",
+        DisplayName = "CPU_FAN",
+        Role = FanRole.Cpu,
+        DriveMode = FanDriveMode.Pwm,
+        Calibration = calibration,
+        Source = ThermalSource.Cpu,
+        IdleTemperatureC = 40,
+        ThermalTrials =
+        [
+            new ThermalTrial
+            {
+                Workload = WorkloadLevel.Heavy,
+                DutyPercent = 70,
+                MaximumTemperatureC = 72,
+                Stable = true,
+                ObservedRpm = 1_200
+            }
+        ],
+        AutomaticCurve = [new(40, 35), new(70, 70), new(80, 100)],
+        Curve = [new(40, 35), new(70, 70), new(80, 100)]
+    };
+    var valid = new FanProfileDocument
+    {
+        MotherboardName = "Test board",
+        AutomaticControlEnabled = true,
+        StartWithTweakly = true,
+        Channels = [channel]
+    };
+
+    if (!FanProfileStore.TryValidate(valid, out string validError))
+    {
+        Console.Error.WriteLine("Valid profile rejected: " + validError);
+        return 1;
+    }
+    if (FanProfileStore.TryValidate(
+            valid with { Channels = [channel with { Curve = [new(40, 70), new(60, 60), new(80, 100)] }] },
+            out _))
+    {
+        Console.Error.WriteLine("Non-monotonic profile accepted.");
+        return 1;
+    }
+    if (FanProfileStore.TryValidate(
+            valid with { Channels = [channel with { Curve = [new(40, 35), new(80, 90)] }] },
+            out _))
+    {
+        Console.Error.WriteLine("Profile without a 100 percent safety point accepted.");
+        return 1;
+    }
+    if (FanProfileStore.TryValidate(
+            valid with { Channels = [channel with { Calibration = null }] },
+            out _))
+    {
+        Console.Error.WriteLine("Automatic profile without calibration accepted.");
+        return 1;
+    }
+
+    Console.WriteLine("Fan profile validation tests: 4/4 OK");
+    return 0;
+}
+
+if (args.Contains("--fan-vendor-metadata-probe", StringComparer.OrdinalIgnoreCase))
+{
+    string board = ArgumentValue(args, "--board") ?? "";
+    IReadOnlyDictionary<int, FanChannelMetadata> metadata = FanVendorMetadataResolver.Read(board);
+    foreach ((int index, FanChannelMetadata channel) in metadata.OrderBy(item => item.Key))
+        Console.WriteLine($"{index}|{channel.DisplayName}|{channel.Role}|{channel.Source}");
+    return metadata.Count > 0 ? 0 : 2;
+}
+
+if (args.Contains("--fan-label-classifier-smoke", StringComparer.OrdinalIgnoreCase))
+{
+    (string Label, FanControl.Core.FanRole Expected)[] cases =
+    [
+        ("CPU Fan", FanControl.Core.FanRole.Cpu),
+        ("CPU_FAN", FanControl.Core.FanRole.Cpu),
+        ("CPU_OPT", FanControl.Core.FanRole.Cpu),
+        ("System Fan #2", FanControl.Core.FanRole.Chassis),
+        ("SYS_FAN3", FanControl.Core.FanRole.Chassis),
+        ("Chassis Fan #1", FanControl.Core.FanRole.Chassis),
+        ("CHA_FAN2", FanControl.Core.FanRole.Chassis),
+        ("AIO_PUMP", FanControl.Core.FanRole.Pump),
+        ("Pump Fan #1", FanControl.Core.FanRole.Pump),
+        ("Radiator Fan", FanControl.Core.FanRole.Radiator),
+        ("Fan #2", FanControl.Core.FanRole.Unknown),
+        ("Chipset Fan", FanControl.Core.FanRole.Unknown)
+    ];
+
+    foreach ((string label, FanControl.Core.FanRole expected) in cases)
+    {
+        FanControl.Core.FanRole actual = FanChannelLabelClassifier.InferRole(label);
+        if (actual != expected)
+        {
+            Console.Error.WriteLine($"{label}: expected {expected}, got {actual}");
+            return 1;
+        }
+    }
+
+    Console.WriteLine($"Fan label classifier: {cases.Length}/{cases.Length} OK");
+    return 0;
+}
+
+if (args.Contains("--fan-hardware-probe", StringComparer.OrdinalIgnoreCase))
+{
+    return FanHardwareProbe.Run();
+}
+
+if (args.Contains("--fan-inventory-probe", StringComparer.OrdinalIgnoreCase))
+{
+    FanHardwareInventoryResult inventory = FanHardwareInventory.Read();
+    var lines = new List<string>
+    {
+        $"Available={inventory.Available}",
+        $"Motherboard={inventory.MotherboardName}",
+        $"Controller={inventory.ControllerName}",
+        $"Channels={inventory.Channels.Count}",
+        $"Message={inventory.Message}"
+    };
+    lines.AddRange(inventory.Channels.Select(channel =>
+        $"{channel.Index}|{channel.DisplayName}|{channel.Rpm:0} RPM|{channel.ControlPercent:0.0}%|{channel.SuggestedRole}|confirm={channel.RequiresRoleConfirmation}"));
+    string report = string.Join(Environment.NewLine, lines);
+    string? reportPath = ArgumentValue(args, "--report");
+    if (!string.IsNullOrWhiteSpace(reportPath))
+        File.WriteAllText(reportPath, report, new System.Text.UTF8Encoding(false));
+    Console.WriteLine(report);
+    return inventory.Available ? 0 : 2;
+}
+
+if (args.Contains("--fan-restore-defaults-probe", StringComparer.OrdinalIgnoreCase))
+{
+    FanHardwareInventoryResult inventory = FanHardwareInventory.Read();
+    if (!inventory.Available || inventory.Channels.Count == 0)
+    {
+        Console.Error.WriteLine(inventory.Message);
+        return 1;
+    }
+
+    FanHardwareRestoreReport report = FanHardwareSession.RestoreControlsToDefault(
+        inventory.Channels.Select(static channel => channel.Id).ToArray());
+    Console.WriteLine(
+        $"Requested={report.RequestedControls} Matched={report.MatchedControls} Restored={report.RestoredControls}");
+    foreach (string error in report.Errors)
+        Console.Error.WriteLine(error);
+    return report.Success ? 0 : 1;
+}
+
+if (args.Contains("--registry-live-probe", StringComparer.OrdinalIgnoreCase))
+{
+    int build = Environment.OSVersion.Version.Build;
+    string edition = "Unknown";
+    using (RegistryKey? key = Registry.LocalMachine.OpenSubKey(
+               @"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+               writable: false))
+    {
+        if (int.TryParse(Convert.ToString(key?.GetValue("CurrentBuildNumber")), out int parsedBuild))
+            build = parsedBuild;
+        edition = Convert.ToString(key?.GetValue("EditionID"))?.Trim() ?? edition;
+    }
+
+    var inspector = new RegistryRepair.Core.RegistryContextInspector(
+        new RegistryRepair.Windows.WindowsRegistryBackend());
+    var progress = new List<RegistryRepair.Core.RegistryInspectionProgress>();
+    IReadOnlyList<RegistryRepair.Core.RegistryInspectionFinding> findings = inspector.Inspect(
+        new RegistryRepair.Core.WindowsIdentity(build, edition, Environment.Is64BitOperatingSystem),
+        progress.Add);
+    Console.WriteLine($"Build={build} Edition={edition} Stages={progress.Count} Findings={findings.Count}");
+    foreach (RegistryRepair.Core.RegistryInspectionFinding finding in findings)
+        Console.WriteLine($"{finding.Status}|{finding.Code}|{finding.Address.Hive}|{finding.Address.KeyPath}");
+    return progress.Count > 0 ? 0 : 1;
+}
+
+if (args.Contains("--monitor-timing-probe", StringComparer.OrdinalIgnoreCase))
+{
+    return await MonitoringTimingProbe.RunAsync();
+}
+
+if (args.Contains("--disk-activity-tests", StringComparer.OrdinalIgnoreCase))
+{
+    (long PreviousIdle, long PreviousQuery, long CurrentIdle, long CurrentQuery,
+        bool ExpectedSuccess, double ExpectedUsage)[] cases =
+    [
+        (1_000, 10_000, 1_900, 11_000, true, 10),
+        (1_000, 10_000, 1_500, 11_000, true, 50),
+        (1_000, 10_000, 1_000, 11_000, true, 100),
+        (1_000, 10_000, 2_500, 11_000, true, 0),
+        (1_000, 10_000, 900, 11_000, false, 0),
+        (1_000, 10_000, 1_100, 10_000, false, 0),
+    ];
+
+    foreach (var test in cases)
+    {
+        bool success = DiskActivitySampler.TryCalculateUsage(
+            test.PreviousIdle,
+            test.PreviousQuery,
+            test.CurrentIdle,
+            test.CurrentQuery,
+            out double usage);
+        if (success != test.ExpectedSuccess ||
+            success && Math.Abs(usage - test.ExpectedUsage) > 0.001)
+        {
+            Console.Error.WriteLine(
+                $"Disk activity: expected success={test.ExpectedSuccess}, usage={test.ExpectedUsage}; " +
+                $"got success={success}, usage={usage:0.###}.");
+            return 1;
+        }
+    }
+
+    Console.WriteLine($"Disk activity calculation: {cases.Length}/{cases.Length} OK");
+    return 0;
+}
+
+if (args.Contains("--disk-activity-probe", StringComparer.OrdinalIgnoreCase))
+{
+    int deviceNumber = int.TryParse(ArgumentValue(args, "--device"), out int parsedDevice)
+        ? parsedDevice
+        : 0;
+    bool first = DiskActivitySampler.TrySample(deviceNumber, out double firstUsage);
+    await Task.Delay(1_100);
+    bool second = DiskActivitySampler.TrySample(deviceNumber, out double secondUsage);
+    Console.WriteLine(
+        $"PhysicalDrive{deviceNumber}: first={first}/{firstUsage:0.0}% " +
+        $"second={second}/{secondUsage:0.0}%");
+    return second ? 0 : 1;
+}
 
 if (args.Contains("--optimization-roundtrip-audit", StringComparer.OrdinalIgnoreCase))
 {
@@ -133,6 +621,37 @@ if (args.Contains("--health-scan", StringComparer.OrdinalIgnoreCase))
     foreach (HealthItem item in items)
         Console.WriteLine($"{item.Category} | {item.Title} | {item.Status} | {item.Message}");
     return items.Count > 0 ? 0 : 1;
+}
+
+if (args.Contains("--cleanup-estimate-scan", StringComparer.OrdinalIgnoreCase))
+{
+    string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    string eventLogs = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+        "System32", "winevt", "Logs");
+    var targets = new (string Name, Func<CleanupEstimateResult> Measure)[]
+    {
+        ("Temp utilisateur", () => CleanupOperations.EstimateFolder(Path.GetTempPath())),
+        ("Temp Windows", () => CleanupOperations.EstimateFolder(@"C:\Windows\Temp")),
+        ("Prefetch", () => CleanupOperations.EstimateFolder(@"C:\Windows\Prefetch")),
+        ("Cache DirectX", () => CleanupOperations.EstimateFolder(Path.Combine(local, "D3DSCache"))),
+        ("Caches NVIDIA", () => CleanupEstimateResult.Combine(
+            CleanupOperations.EstimateFolder(Path.Combine(local, "NVIDIA", "DXCache")),
+            CleanupOperations.EstimateFolder(Path.Combine(roaming, "NVIDIA", "GLCache")))),
+        ("Journaux Windows", () => CleanupOperations.EstimateFolder(eventLogs, "*.evtx", recursive: false)),
+    };
+
+    foreach ((string name, Func<CleanupEstimateResult> measure) in targets)
+    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        CleanupEstimateResult result = measure();
+        timer.Stop();
+        Console.WriteLine($"{name} : {result.Bytes} octet(s) | {result.Files} fichier(s) | "
+            + $"disponible={result.Available} | {result.Skipped} ignoré(s) | {timer.ElapsedMilliseconds} ms");
+    }
+
+    return 0;
 }
 
 if (args.Contains("--system-context-scan", StringComparer.OrdinalIgnoreCase))
@@ -347,6 +866,15 @@ string? ArgumentValue(string[] values, string name)
         value.Equals(name, StringComparison.OrdinalIgnoreCase));
     return index >= 0 && index + 1 < values.Length ? values[index + 1] : null;
 }
+
+double ArgumentDouble(string[] values, string name, double fallback) =>
+    double.TryParse(
+        ArgumentValue(values, name),
+        System.Globalization.NumberStyles.Float,
+        System.Globalization.CultureInfo.InvariantCulture,
+        out double parsed)
+        ? parsed
+        : fallback;
 
 CheckDecoded("IPF Dynamic Tuning", "IPFUMDF", 17, "Intel Dynamic Tuning", LogSev.Warning,
     rawFull: "Error <pipe://dptf_participant> [ESIF_E_NOT_FOUND]");
@@ -728,3 +1256,20 @@ async Task ExpectThrowsAsync<TException>(string name, Func<Task> action) where T
         failures.Add($"{name}: exception {ex.GetType().Name}");
     }
 }
+
+IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+{
+    for (int index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+    {
+        DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+        if (child is T match)
+            yield return match;
+        foreach (T descendant in FindVisualChildren<T>(child))
+            yield return descendant;
+    }
+}
+
+bool BrushColorsEqual(Brush left, Brush right) =>
+    left is SolidColorBrush leftSolid &&
+    right is SolidColorBrush rightSolid &&
+    leftSolid.Color == rightSolid.Color;

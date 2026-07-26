@@ -201,7 +201,11 @@ namespace Optimisation_Tool.Helpers
             foreach (var kv in Roles)
             {
                 var hex = mode == Mode.Dark ? kv.Value.dark : kv.Value.light;
-                res[kv.Key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
+                var color = (Color)ColorConverter.ConvertFromString(hex);
+                if (res[kv.Key] is SolidColorBrush existing && !existing.IsFrozen)
+                    existing.Color = color;
+                else
+                    res[kv.Key] = new SolidColorBrush(color);
             }
             foreach (var kv in ColorRoles)
             {

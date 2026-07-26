@@ -60,6 +60,30 @@ namespace Optimisation_Tool
         {
             base.OnStartup(e);
 
+            // Mode interne sans interface : le processus fils surveille exclusivement
+            // le controle logiciel des ventilateurs. Il doit passer avant le mutex,
+            // le splash et toute initialisation de l'application principale.
+            try
+            {
+                if (Helpers.FanSafetyWatchdogClient.IsSmokeInvocation(e.Args))
+                {
+                    Shutdown(Helpers.FanSafetyWatchdogClient.RunSmokeTest());
+                    return;
+                }
+                if (Helpers.FanSafetyWatchdogClient.IsInvocation(e.Args))
+                {
+                    Shutdown(Helpers.FanSafetyWatchdogClient.RunWatchdog(e.Args));
+                    return;
+                }
+            }
+            catch
+            {
+                // Fail-closed pour ce mode interne : ne jamais ouvrir une deuxieme
+                // instance Tweakly si le watchdog est mal forme.
+                Shutdown(15);
+                return;
+            }
+
             // ── INSTANCE UNIQUE : la 2e instance NE FAIT RIEN d'autre que réveiller la 1re.
             // PLACÉ AVANT toute autre action (log, thème, splash…) pour ne pas écrire dans le
             // journal, allumer un splash ou voler le verrou de fichier de la 1re. Toléré
@@ -144,6 +168,7 @@ namespace Optimisation_Tool
         // attend l'expiration du handle avant de permettre à la prochaine instance de démarrer.
         protected override void OnExit(ExitEventArgs e)
         {
+            try { Helpers.FanRuntimeController.StopAndRestore(); } catch { }
             try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
             try { _singleInstanceMutex?.Dispose(); } catch { }
             _singleInstanceMutex = null;

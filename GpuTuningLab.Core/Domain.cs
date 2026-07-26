@@ -165,6 +165,7 @@ public sealed record TestRun
     public required DateTimeOffset StartedAt { get; init; }
     public required GpuIdentity Identity { get; init; }
     public required GpuTuningProfile Profile { get; init; }
+    public string? WorkloadPackageFingerprint { get; init; }
     public IReadOnlyList<GpuTelemetrySample> Samples { get; init; } = [];
     public IReadOnlyList<WorkloadResult> Workloads { get; init; } = [];
     public IReadOnlyList<WorkloadTelemetryWindow> WorkloadWindows { get; init; } = [];
@@ -186,6 +187,7 @@ public sealed record RunSummary
     public double? MaxPowerW { get; init; }
     public double? AverageCoreClockMhz { get; init; }
     public double? P05CoreClockMhz { get; init; }
+    public double? StartingTemperatureC { get; init; }
     public double EnergyWh { get; init; }
     public double PowerLimitTimePercent { get; init; }
     public double ThermalLimitTimePercent { get; init; }
@@ -197,9 +199,13 @@ public sealed record ProfileComparison
     public required Guid BaselineRunId { get; init; }
     public required Guid CandidateRunId { get; init; }
     public required double PerformanceIndex { get; init; }
+    public required double MinimumWorkloadPerformanceIndex { get; init; }
+    public required string WeakestWorkloadName { get; init; }
     public required double PowerIndex { get; init; }
     public required double EfficiencyIndex { get; init; }
-    public required double TemperatureDeltaC { get; init; }
+    public double? TemperatureDeltaC { get; init; }
+    public required bool ThermalComparisonReliable { get; init; }
+    public double? StartingTemperatureDeltaC { get; init; }
     public required double BalancedScore { get; init; }
     public required StabilityVerdict CandidateVerdict { get; init; }
     public required bool MeetsPerformanceFloor { get; init; }
@@ -227,16 +233,33 @@ public sealed record SafetyGateResult(
     bool Allowed,
     IReadOnlyList<string> BlockingReasons);
 
+public sealed record ProfileApplicationAssessment
+{
+    public required bool Verified { get; init; }
+    public IReadOnlyList<string> BlockingReasons { get; init; } = [];
+    public int? ObservedVoltageMv { get; init; }
+    public int? ObservedClockMhz { get; init; }
+    public int? ObservedMemoryOffsetMhz { get; init; }
+    public double? ObservedPowerLimitPercent { get; init; }
+}
+
 public sealed record EvaluationPolicy
 {
     public int SamplingIntervalMs { get; init; } = 500;
-    public double MinimumTelemetryCoveragePercent { get; init; } = 85;
+    public double MinimumTelemetryCoveragePercent { get; init; } = 95;
+    public double MinimumRequiredMetricCoveragePercent { get; init; } = 95;
     public double MinimumPerformanceRetentionPercent { get; init; } = 97;
+    public double MinimumIndividualWorkloadRetentionPercent { get; init; } = 90;
     public double MaximumBenchmarkVariancePercent { get; init; } = 2;
+    public double MaximumStartingTemperatureDeltaC { get; init; } = 3;
     public int MinimumBaselineWorkloadSeconds { get; init; } = 30;
     public int ShortValidationMinutes { get; init; } = 10;
     public int LongValidationMinutes { get; init; } = 60;
     public int VoltageStepMv { get; init; } = 25;
+    public int ProfileVoltageToleranceMv { get; init; } = 25;
+    public int ProfileClockToleranceMhz { get; init; } = 90;
+    public int ProfileMemoryOffsetToleranceMhz { get; init; } = 100;
+    public double ProfilePowerLimitTolerancePercent { get; init; } = 1.5;
     public double PerformanceWeight { get; init; } = 0.35;
     public double EfficiencyWeight { get; init; } = 0.45;
     public double ThermalWeight { get; init; } = 0.20;

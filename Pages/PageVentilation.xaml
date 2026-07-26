@@ -1,0 +1,581 @@
+<UserControl x:Class="Optimisation_Tool.Pages.PageVentilation"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Optimisation_Tool.Pages"
+             xmlns:controls="clr-namespace:Optimisation_Tool.Controls"
+             Loaded="UserControl_Loaded"
+             Unloaded="UserControl_Unloaded"
+             PreviewMouseDown="UserControl_PreviewMouseDown"
+             Background="{DynamicResource ThBg}">
+    <UserControl.Resources>
+        <Style x:Key="FanCard" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThPanel}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="10"/>
+        </Style>
+        <Style x:Key="FanMetric" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource ThInfoTint}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThInfoBorderTint}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="7"/>
+            <Setter Property="Padding" Value="10,6"/>
+        </Style>
+        <Style x:Key="FanLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextDim}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="FanValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,2,0,0"/>
+        </Style>
+        <Style x:Key="FanProgress" TargetType="ProgressBar">
+            <Setter Property="Height" Value="9"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Value" Value="0"/>
+            <Setter Property="Background" Value="{DynamicResource ThTrack}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThAccentIcon}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ProgressBar">
+                        <Grid ClipToBounds="True">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{DynamicResource ThBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="5"/>
+                            <Border x:Name="PART_Track" Background="Transparent" CornerRadius="5"/>
+                            <Decorator x:Name="PART_Indicator" HorizontalAlignment="Left">
+                                <Border Background="{TemplateBinding Foreground}" CornerRadius="5"/>
+                            </Decorator>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="FanStepButton" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThTextBody}"/>
+            <Setter Property="FontFamily" Value="{StaticResource AppFont}"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="StepBg" Background="{DynamicResource ThInfoTint}"
+                                BorderBrush="{DynamicResource ThInfoBorderTint}" BorderThickness="1"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="StepBg" Property="Background" Value="{DynamicResource ThHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="14,9,14,11">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Ventilation" Foreground="{DynamicResource ThTextTitle}"
+                               FontFamily="{StaticResource AppFont}" FontSize="23" FontWeight="SemiBold"/>
+                    <TextBlock Text="D&#233;tecte les ventilateurs carte m&#232;re, mesure leur plage r&#233;elle et pr&#233;pare une courbe adapt&#233;e au PC."
+                               Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                               FontSize="11.5" Margin="0,4,0,0"/>
+                </StackPanel>
+                <Border Grid.Column="1" Background="{DynamicResource ThWarnTint}"
+                        BorderBrush="{DynamicResource ThWarn}" BorderThickness="1"
+                        CornerRadius="8" Padding="12,6" VerticalAlignment="Top">
+                    <TextBlock Text="EXP&#201;RIMENTAL" Foreground="{DynamicResource ThWarn}"
+                               FontFamily="{StaticResource AppFont}" FontSize="10" FontWeight="Bold"/>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="1" Style="{StaticResource FanCard}" Margin="0,10,0,0" Padding="10,9"
+                    Background="{DynamicResource ThWarnTint}" BorderBrush="{DynamicResource ThWarnBorderTint}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="25"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="17"
+                               Foreground="{DynamicResource ThWarn}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1"
+                               Text="Calibration s&#233;curis&#233;e  &#183;  PWM/DC conserv&#233;  &#183;  Pompes exclues  &#183;  Retour BIOS automatique"
+                               Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                               FontSize="11.1" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Style="{StaticResource FanCard}" Margin="0,10,0,0" Padding="11">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="D&#233;tection mat&#233;rielle" Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="14" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="TxtInventoryStatus" Text="Lecture des ventilateurs..."
+                                       Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                                       FontSize="11.3" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnRefresh" Content="ACTUALISER"
+                                    Style="{StaticResource SecondaryBtnStyle}" Click="BtnRefresh_Click"/>
+                            <Button x:Name="BtnCalibrate" Content="CALIBRER LES VENTILATEURS"
+                                    Style="{StaticResource PrimaryBtnStyle}" Click="BtnCalibrate_Click"
+                                    IsEnabled="False" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Grid.Row="1" Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.5*"/><ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="1*"/><ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="0.7*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource FanMetric}">
+                            <StackPanel><TextBlock Text="CARTE M&#200;RE" Style="{StaticResource FanLabel}"/>
+                                <TextBlock x:Name="TxtMotherboard" Text="En cours..." Style="{StaticResource FanValue}"/></StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Style="{StaticResource FanMetric}">
+                            <StackPanel><TextBlock Text="CONTR&#212;LEUR" Style="{StaticResource FanLabel}"/>
+                                <TextBlock x:Name="TxtController" Text="En cours..." Style="{StaticResource FanValue}"/></StackPanel>
+                        </Border>
+                        <Border Grid.Column="4" Style="{StaticResource FanMetric}"
+                                ToolTip="Un hub compte pour un canal. Les prises sans retour de vitesse ne sont pas affich&#233;es.">
+                            <StackPanel><TextBlock Text="CANAUX PILOTABLES" Style="{StaticResource FanLabel}"/>
+                                <TextBlock x:Name="TxtChannelCount" Text="0" Style="{StaticResource FanValue}"/></StackPanel>
+                        </Border>
+                    </Grid>
+                    <Border x:Name="CalibrationCard" Grid.Row="3"
+                            Visibility="Collapsed" Margin="0,7,0,0" Padding="10,8"
+                            Background="{DynamicResource ThBg}"
+                            BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                            CornerRadius="7">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="22"/>
+                                <ColumnDefinition Width="250"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtCalibrationStage" Text="Pr&#233;paration de la calibration"
+                                           Foreground="{DynamicResource ThTextBody}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="12"
+                                           FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="TxtCalibrationDetails" Text="Le contr&#244;le BIOS sera restaur&#233; &#224; la fin."
+                                           Foreground="{DynamicResource ThTextSub}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                           TextWrapping="Wrap" Margin="0,3,0,0"/>
+                            </StackPanel>
+                            <Grid Grid.Column="2" VerticalAlignment="Center">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="PROGRESSION"
+                                           Foreground="{DynamicResource ThTextDim}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="9.8"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock x:Name="TxtCalibrationPercent" Text="0 %"
+                                           Foreground="{DynamicResource ThAccentIcon}"
+                                           FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                           FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                <ProgressBar x:Name="PbCalibration" Grid.Row="1"
+                                             Style="{StaticResource FanProgress}" Margin="0,5,0,0"/>
+                            </Grid>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="3" Margin="0,10,0,0">
+                <ItemsControl x:Name="FanList">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="2"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:FanChannelItem}">
+                            <Border Style="{StaticResource FanCard}" Margin="0,0,5,0" Padding="10,11">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="88"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="32" Height="32" CornerRadius="7"
+                                            Background="{DynamicResource ThInfoStrongTint}"
+                                            BorderBrush="{DynamicResource ThInfoBorderTint}" BorderThickness="1"
+                                            VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE9CA;" FontFamily="Segoe MDL2 Assets" FontSize="16"
+                                                   Foreground="{DynamicResource ThAccentIcon}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" Foreground="{DynamicResource ThTextBody}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="12.5" FontWeight="SemiBold"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding RoleText}"
+                                                   Foreground="{DynamicResource ThTextBody}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                                   Margin="0,3,0,0"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <StackPanel.ToolTip>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding TechnicalName}"/>
+                                                <TextBlock Text="{Binding IdentificationText}" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                        </StackPanel.ToolTip>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                        <TextBlock Text="{Binding RpmText}" Style="{StaticResource FanValue}"
+                                                   HorizontalAlignment="Right"/>
+                                        <TextBlock Text="{Binding ControlText}" Foreground="{DynamicResource ThAccentIcon}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="11"
+                                                   FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Border x:Name="NoFanCard" Style="{StaticResource FanCard}" Visibility="Collapsed">
+                    <TextBlock x:Name="TxtNoFan" Text="Aucun ventilateur compatible d&#233;tect&#233;."
+                               Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                               FontSize="11.5" TextWrapping="Wrap"/>
+                </Border>
+            </StackPanel>
+
+            <StackPanel x:Name="CurveSection" Grid.Row="4" Margin="0,12,0,0" Visibility="Collapsed">
+                <Border Margin="2,0,2,10" Style="{StaticResource FanCard}" Padding="10,8">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Courbes de ventilation"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="14.5"
+                                       FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtCurveStatus" Grid.Column="1"
+                                       Text="Courbes calcul&#233;es &#224; partir des mesures du PC."
+                                       Foreground="{DynamicResource ThTextSub}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="10.8"
+                                       Margin="16,0,2,0" MaxWidth="560"
+                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                       HorizontalAlignment="Right" TextAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                        </Grid>
+                        <Border Grid.Row="1" Height="1" Margin="0,7"
+                                Background="{DynamicResource ThBorder}"/>
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="1"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="1"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="1"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="4,0,12,0" VerticalAlignment="Center">
+                                <TextBlock Text="D&#201;MARRAGE" Style="{StaticResource FanLabel}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <CheckBox x:Name="ChkStartWithTweakly" Style="{StaticResource CleanSwitch}"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock Text="Avec Tweakly"
+                                               Foreground="{DynamicResource ThTextBody}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="10.8"
+                                               VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <Border Grid.Column="1" Width="1" Background="{DynamicResource ThBorder}"/>
+                            <StackPanel Grid.Column="2" Margin="12,0" VerticalAlignment="Center">
+                                <TextBlock Text="MODE DE CONTR&#212;LE" Style="{StaticResource FanLabel}"/>
+                                <Border Background="{DynamicResource ThBg}"
+                                        BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                                        CornerRadius="7" Padding="2" Margin="0,4,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="BtnAutoMode" Click="BtnAutoMode_Click"
+                                                Cursor="Hand" Height="27">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="Bg" CornerRadius="5" Background="Transparent">
+                                                        <TextBlock x:Name="Lbl" Text="AUTO TWEAKLY"
+                                                                   Foreground="{DynamicResource ThTextDim}"
+                                                                   FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                                                   FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                        <Button x:Name="BtnBiosMode" Grid.Column="1" Click="BtnBiosMode_Click"
+                                                Cursor="Hand" Height="27">
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border x:Name="Bg" CornerRadius="5" Background="Transparent">
+                                                        <TextBlock x:Name="Lbl" Text="R&#201;GLAGE BIOS"
+                                                                   Foreground="{DynamicResource ThTextDim}"
+                                                                   FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                                                   FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                            <Border Grid.Column="3" Width="1" Background="{DynamicResource ThBorder}"/>
+                            <ToggleButton x:Name="BtnResponseSettings" Grid.Column="4"
+                                          Cursor="Hand" Height="43" Margin="12,0"
+                                          Tag="2 &#176;C  |  +12 / -3 %/s">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bg" CornerRadius="7" Background="Transparent"
+                                                BorderBrush="{DynamicResource ThBorder}" BorderThickness="1">
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock Text="R&#201;ACTIVIT&#201;" Foreground="{DynamicResource ThTextDim}"
+                                                           FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                                           FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                                <TextBlock Text="{TemplateBinding Tag}"
+                                                           Foreground="{DynamicResource ThAccentIcon}"
+                                                           FontFamily="{StaticResource AppFont}" FontSize="9"
+                                                           HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ThHover}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Bg" Property="Background" Value="{DynamicResource ThInfoTint}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Border Grid.Column="5" Width="1" Background="{DynamicResource ThBorder}"/>
+                            <Button x:Name="BtnSaveProfile" Grid.Column="6" Click="BtnSaveProfile_Click"
+                                    Content="ENREGISTRER LE PROFIL"
+                                    Style="{StaticResource SecondaryBtnStyle}"
+                                    Height="43" Margin="12,0,4,0" Padding="8,0" FontSize="10.5"/>
+                            <Popup x:Name="ResponseSettingsPopup" Grid.Column="4"
+                               IsOpen="{Binding IsChecked, ElementName=BtnResponseSettings, Mode=TwoWay}"
+                               PlacementTarget="{Binding ElementName=BtnResponseSettings}"
+                               Placement="Bottom" HorizontalOffset="-105" VerticalOffset="5"
+                               StaysOpen="True" AllowsTransparency="True" PopupAnimation="Fade">
+                            <Border Width="350" Background="{DynamicResource ThPanel}"
+                                    BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
+                                    CornerRadius="8" Padding="13">
+                                <StackPanel>
+                                    <TextBlock Text="R&#233;activit&#233; de la ventilation"
+                                               Foreground="{DynamicResource ThTextBody}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="13.5"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Text="Ces limites s'appliquent au mode Auto Tweakly. L'urgence thermique reste imm&#233;diate."
+                                               Foreground="{DynamicResource ThTextSub}"
+                                               FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                               TextWrapping="Wrap" Margin="0,4,0,9"/>
+                                    <Grid Margin="0,0,0,7">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/><ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="62"/><ColumnDefinition Width="28"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Hyst&#233;r&#233;sis" Style="{StaticResource FanLabel}"/>
+                                            <TextBlock Text="&#201;vite les variations autour d'un seuil."
+                                                       Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                                                       FontSize="9.5"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="&#8722;" Style="{StaticResource FanStepButton}"
+                                                Tag="HysteresisDown" Click="ResponseAdjustment_Click"/>
+                                        <TextBlock x:Name="TxtHysteresisValue" Grid.Column="2" Text="2 &#176;C"
+                                                   Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
+                                                   FontSize="11.5" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Grid.Column="3" Content="+" Style="{StaticResource FanStepButton}"
+                                                Tag="HysteresisUp" Click="ResponseAdjustment_Click"/>
+                                    </Grid>
+                                    <Grid Margin="0,0,0,7">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/><ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="62"/><ColumnDefinition Width="28"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Mont&#233;e" Style="{StaticResource FanLabel}"/>
+                                            <TextBlock Text="Acc&#233;l&#233;ration maximale par seconde."
+                                                       Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                                                       FontSize="9.5"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="&#8722;" Style="{StaticResource FanStepButton}"
+                                                Tag="RampUpDown" Click="ResponseAdjustment_Click"/>
+                                        <TextBlock x:Name="TxtRampUpValue" Grid.Column="2" Text="12 %/s"
+                                                   Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
+                                                   FontSize="11.5" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Grid.Column="3" Content="+" Style="{StaticResource FanStepButton}"
+                                                Tag="RampUpUp" Click="ResponseAdjustment_Click"/>
+                                    </Grid>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/><ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="62"/><ColumnDefinition Width="28"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Descente" Style="{StaticResource FanLabel}"/>
+                                            <TextBlock Text="Retour progressif apr&#232;s la charge."
+                                                       Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                                                       FontSize="9.5"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="&#8722;" Style="{StaticResource FanStepButton}"
+                                                Tag="RampDownDown" Click="ResponseAdjustment_Click"/>
+                                        <TextBlock x:Name="TxtRampDownValue" Grid.Column="2" Text="3 %/s"
+                                                   Foreground="{DynamicResource ThTextBody}" FontFamily="{StaticResource AppFont}"
+                                                   FontSize="11.5" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                        <Button Grid.Column="3" Content="+" Style="{StaticResource FanStepButton}"
+                                                Tag="RampDownUp" Click="ResponseAdjustment_Click"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                            </Popup>
+                        </Grid>
+                    </Grid>
+                </Border>
+                <Border x:Name="SavedProfileCard" Style="{StaticResource FanCard}"
+                        Margin="4,0,4,11" Padding="10,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.1*"/>
+                            <ColumnDefinition Width="1.7*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="PROFIL" Style="{StaticResource FanLabel}" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtSavedProfileTitle" Text="Profil de ventilation"
+                                       Foreground="{DynamicResource ThTextBody}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="11.8"
+                                       FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock x:Name="TxtSavedProfileDate" Text=""
+                                       Foreground="{DynamicResource ThTextSub}"
+                                       FontFamily="{StaticResource AppFont}" FontSize="10.5"/>
+                        </StackPanel>
+                        <Button x:Name="BtnResetCurves" Grid.Column="2"
+                                Content="ANNULER LES MODIFICATIONS"
+                                Style="{StaticResource SecondaryBtnStyle}"
+                                Click="BtnResetCurves_Click" VerticalAlignment="Center"
+                                Visibility="Collapsed"/>
+                        <Button x:Name="BtnDeleteProfile" Grid.Column="4"
+                                Content="SUPPRIMER LE PROFIL"
+                                Style="{StaticResource SecondaryBtnStyle}"
+                                Click="BtnDeleteProfile_Click" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+                <ItemsControl x:Name="CurveList">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="2"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:FanCurveItem}">
+                            <Border Style="{StaticResource FanCard}" Margin="4,0,4,9" Padding="11,10">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="8"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" Foreground="{DynamicResource ThTextBody}"
+                                                       FontFamily="{StaticResource AppFont}" FontSize="13.5"
+                                                       FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding SourceText}" Foreground="{DynamicResource ThAccentIcon}"
+                                                       FontFamily="{StaticResource AppFont}" FontSize="10.5"
+                                                       FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding CalibrationText}"
+                                                   Foreground="{DynamicResource ThTextSub}"
+                                                   FontFamily="{StaticResource AppFont}" FontSize="10.2"
+                                                   TextAlignment="Right" TextWrapping="Wrap"
+                                                   MaxWidth="195" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    </Grid>
+                                    <controls:FanCurveEditor Grid.Row="2" Height="180"
+                                                             Curve="{Binding Points}"
+                                                             MinimumDuty="{Binding MinimumDuty}"
+                                                             CurrentTemperature="{Binding CurrentTemperature}"
+                                                             CurrentDuty="{Binding CurrentDuty}"
+                                                             CurveChanged="FanCurveEditor_CurveChanged"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <TextBlock x:Name="TxtActionStatus" Grid.Row="5"
+                       Text="D&#233;tection automatique des canaux en cours."
+                       Foreground="{DynamicResource ThTextSub}" FontFamily="{StaticResource AppFont}"
+                       FontSize="11.2" TextWrapping="Wrap" Margin="2,5,2,0"
+                       Visibility="Collapsed"/>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

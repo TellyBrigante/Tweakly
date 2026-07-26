@@ -2,6 +2,7 @@ using Microsoft.Win32;
 using Optimisation_Tool.Helpers;
 using Optimisation_Tool.Pages;
 using System.Diagnostics;
+using System.IO;
 using System.Management;
 using System.Net.NetworkInformation;
 using System.Reflection;

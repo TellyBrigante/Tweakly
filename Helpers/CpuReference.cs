@@ -151,7 +151,7 @@ namespace Optimisation_Tool.Helpers
         // le bug de la v1.3.0 : pivots calibres en Debug -> tout le monde a ~270).
         // Ce facteur est FIGE et identique pour tous les users ; la comparaison entre
         // CPUs reste 100% basee sur les ratios PassMark publics du JSON (exp_*).
-        // Harness : bench_spike\calib (660/5257/16.7 brut), ajuste ~ -7% pour le
+        // Harness : Research\bench_spike\calib (660/5257/16.7 brut), ajuste ~ -7% pour le
         // contexte in-app (overlay WPF + progress reporting pendant le bench reel).
         public const double BaseSingleMpxsPublic = 620.0;
         public const double BaseMultiMpxsPublic  = 4950.0;

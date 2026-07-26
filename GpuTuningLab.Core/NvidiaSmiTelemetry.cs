@@ -98,13 +98,7 @@ public sealed class NvidiaSmiTelemetrySource : IGpuTelemetrySource
         }
         finally
         {
-            if (!process.HasExited)
-            {
-                ProcessSupport.TryKillTree(process);
-            }
-
-            try { await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false); }
-            catch (InvalidOperationException) { }
+            await ProcessSupport.WaitForExitAfterStopAsync(process).ConfigureAwait(false);
         }
 
         string stderr = await process.StandardError.ReadToEndAsync(CancellationToken.None).ConfigureAwait(false);

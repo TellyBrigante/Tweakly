@@ -36,6 +36,7 @@ namespace Optimisation_Tool.Pages
             public Ellipse      Dot      = null!;            // pastille de légende
             public TextBlock    TempVal  = null!;
             public int          TempC;
+            public double       UsagePct;
             public string       Role     = "ThTextDim";
             public List<double> Hist     = new();
             public Polyline     Line     = null!;
@@ -125,12 +126,15 @@ namespace Optimisation_Tool.Pages
                 // Valeurs visibles rapides à 1 Hz. Les sondes plus lourdes restent espacées
                 // pour éviter de ralentir l'UI tout en gardant la page vivante.
                 if (tick > 0 && tick % 2 == 1) parts |= MonCollectParts.Processes | MonCollectParts.GpuWatts;
-                if (tick > 0 && tick % 4 == 2) parts |= MonCollectParts.Nvme;
+                if (tick > 0) parts |= MonCollectParts.Nvme;
 
                 var s = await SystemMonitor.CollectAsync(parts);
                 UpdateUI(s);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-page-refresh", "Monitoring : rafraîchissement de la page", ex);
+            }
             finally { _busy = false; }
         }
 
@@ -218,9 +222,11 @@ namespace Optimisation_Tool.Pages
             Push(_cpuHist, s.CpuUsage);
             Push(_gpuHist, s.GpuOk ? s.GpuUsage : 0);
             Push(_ramHist, s.RamPct);
+            foreach (var v in _nvme.Values) Push(v.Hist, v.UsagePct);
             DrawLine(CpuLine, null, _cpuHist);
             DrawLine(GpuLine, null, _gpuHist);
             DrawLine(RamLine, null, _ramHist);
+            foreach (var v in _nvme.Values) DrawLine(v.Line, null, v.Hist);
         }
 
         // ── Tuiles NVMe ─────────────────────────────────────────────────────────
@@ -242,21 +248,20 @@ namespace Optimisation_Tool.Pages
             NvmeGrid.Visibility      = Visibility.Visible;
 
             // Reconstruire seulement si la composition (les disques) a changé
-            bool sameSet = nvmes.Count == _nvme.Count && nvmes.All(n => _nvme.ContainsKey(n.Name));
+            bool sameSet = nvmes.Count == _nvme.Count && nvmes.All(n => _nvme.ContainsKey(NvmeKey(n)));
             if (!sameSet) RebuildNvme(nvmes);
 
             // Maj usage (gros chiffre + barre) + température (ligne) + courbe du graphe
             foreach (var n in nvmes)
             {
-                if (!_nvme.TryGetValue(n.Name, out var v)) continue;
+                if (!_nvme.TryGetValue(NvmeKey(n), out var v)) continue;
+                v.UsagePct = n.UsagePct;
                 v.UsageBig.Text = $"{n.UsagePct:F0}";
                 SetBar(v.UsageBar, n.UsagePct);
                 v.TempC = n.TempC;
-                v.TempVal.Text       = $"{n.TempC} °C";
+                v.TempVal.Text = n.TempC > 0 ? $"{n.TempC} °C" : "—";
                 ApplyNvmeTheme(v);
 
-                Push(v.Hist, n.UsagePct);
-                DrawLine(v.Line, null, v.Hist);
             }
         }
 
@@ -269,7 +274,10 @@ namespace Optimisation_Tool.Pages
             v.BarFill.Background  = BarGradient(sigCol);   // dégradé style barre de MAJ (v1.3.5)
             v.Line.Stroke         = sigCol;
             v.Dot.Fill            = sigCol;
-            v.TempVal.Foreground  = TempColor(v.TempC);
+            if (v.TempC > 0)
+                v.TempVal.Foreground = TempColor(v.TempC);
+            else
+                v.TempVal.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
         }
 
         private void RebuildNvme(List<NvmeInfo> nvmes)
@@ -305,10 +313,13 @@ namespace Optimisation_Tool.Pages
                 NvmeGrid.Children.Add(card);
 
                 AddNvmeLegend(n.Name, v);
-                _nvme[n.Name] = v;
+                _nvme[NvmeKey(n)] = v;
                 i++;
             }
         }
+
+        private static string NvmeKey(NvmeInfo info) =>
+            string.IsNullOrWhiteSpace(info.Id) ? "name:" + info.Name : "id:" + info.Id;
 
         // Tuile NVMe au même style que les tuiles CPU/GPU/RAM du haut.
         private Border BuildNvmeTile(NvmeInfo n, NvmeVisual v)
@@ -356,8 +367,13 @@ namespace Optimisation_Tool.Pages
             v.TempC = n.TempC;
             v.TempVal = new TextBlock
             {
-                Text = $"{n.TempC} °C", Style = (Style)FindResource("MRowVal"), Foreground = TempColor(n.TempC),
+                Text = n.TempC > 0 ? $"{n.TempC} °C" : "—",
+                Style = (Style)FindResource("MRowVal"),
             };
+            if (n.TempC > 0)
+                v.TempVal.Foreground = TempColor(n.TempC);
+            else
+                v.TempVal.SetResourceReference(TextBlock.ForegroundProperty, "ThTextDim");
             tempRow.Children.Add(v.TempVal);
             stack.Children.Add(tempRow);
 

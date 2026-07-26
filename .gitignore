@@ -25,6 +25,7 @@ tweakly-log.txt.old
 # Script d'installeur + dossier de packaging (pas nécessaire pour build / run)
 installer/
 release-stage/
+_watchdog_publish_test/
 
 # OS
 Thumbs.db

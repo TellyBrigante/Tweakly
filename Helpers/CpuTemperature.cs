@@ -36,6 +36,18 @@ namespace Optimisation_Tool.Helpers
             }
         }
         private static bool _enabled;
+        private static double? _externalReading;
+        private static DateTimeOffset _externalReadingAt;
+
+        internal static void PublishExternalReading(double? temperatureC)
+        {
+            if (temperatureC is not > 0 or >= 130) return;
+            lock (_lock)
+            {
+                _externalReading = temperatureC;
+                _externalReadingAt = DateTimeOffset.UtcNow;
+            }
+        }
 
         /// <summary>Ouvre LHM (idempotent). Renvoie true si un CPU exploitable est trouvé.</summary>
         private static bool Open()
@@ -79,6 +91,19 @@ namespace Optimisation_Tool.Helpers
             }
         }
 
+        /// <summary>
+        /// Ferme l'instance persistante avant qu'une opération exclusive ouvre le
+        /// contrôleur carte mère. Enabled reste inchangé : la prochaine mesure CPU
+        /// rouvrira proprement sa sonde après la libération du contrôleur.
+        /// </summary>
+        internal static void SuspendForExclusiveHardwareAccess()
+        {
+            lock (_lock)
+            {
+                CloseCore(resetFailure: true);
+            }
+        }
+
         private static void CloseCore(bool resetFailure)
         {
             try { _computer?.Close(); }
@@ -101,6 +126,13 @@ namespace Optimisation_Tool.Helpers
             if (!_enabled) return null;
             lock (_lock)
             {
+                // Une calibration peut conserver le contrôleur matériel plusieurs
+                // minutes. Le monitoring saute alors cet échantillon au lieu d'attendre.
+                if (!HardwareMonitorAccess.TryEnter(out IDisposable? hardwareLease))
+                    return DateTimeOffset.UtcNow - _externalReadingAt <= TimeSpan.FromSeconds(3)
+                        ? _externalReading
+                        : null;
+                using (hardwareLease)
                 try
                 {
                     if (_cpu == null && !Open()) return null;

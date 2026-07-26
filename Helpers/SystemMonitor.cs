@@ -56,7 +56,9 @@ namespace Optimisation_Tool.Helpers
 
     public sealed class NvmeInfo
     {
+        public string Id       = "";
         public string Name     = "";
+        public int    DeviceNumber = -1;
         public int    TempC;
         public double UsagePct;   // % d'activité disque
     }
@@ -96,6 +98,22 @@ namespace Optimisation_Tool.Helpers
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeFileTime
+        {
+            public uint Low;
+            public uint High;
+
+            public readonly ulong Value => ((ulong)High << 32) | Low;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetSystemTimes(
+            out NativeFileTime idleTime,
+            out NativeFileTime kernelTime,
+            out NativeFileTime userTime);
+
         // ── Collecte complète ────────────────────────────────────────────────
         private static readonly SemaphoreSlim _collectGate = new(1, 1);
 
@@ -103,7 +121,7 @@ namespace Optimisation_Tool.Helpers
         {
             // v1.3.5 (retour utilisateur : « les valeurs mettent longtemps à arriver ») :
             // les 5 sections tournent en PARALLÈLE. Au premier appel, chacune paie son
-            // démarrage à froid (WMI perf CPU, init LibreHardwareMonitor 1-3 s, spawn
+            // démarrage à froid (inventaire CPU, init LibreHardwareMonitor 1-3 s, spawn
             // nvidia-smi, namespace WMI stockage) — en série ça s'additionnait en
             // plusieurs secondes, en parallèle on ne paie que la plus lente.
             // Sans risque : chaque section écrit des champs DISTINCTS du snapshot et
@@ -238,7 +256,7 @@ namespace Optimisation_Tool.Helpers
 
         // Infos CPU statiques (lues une seule fois)
         private static string _cpuName = "";
-        private static int    _cpuCores, _cpuThreads;
+        private static int    _cpuCores, _cpuThreads, _cpuFallbackMHz;
 
         private static void EnsureCpuStatic()
         {
@@ -246,12 +264,13 @@ namespace Optimisation_Tool.Helpers
             try
             {
                 using var q = new ManagementObjectSearcher(
-                    "SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor");
+                    "SELECT Name, NumberOfCores, NumberOfLogicalProcessors, CurrentClockSpeed FROM Win32_Processor");
                 foreach (ManagementObject o in q.Get())
                 {
                     _cpuName    = (o["Name"]?.ToString() ?? "").Trim();
                     _cpuCores   = Convert.ToInt32(o["NumberOfCores"] ?? 0);
                     _cpuThreads = Convert.ToInt32(o["NumberOfLogicalProcessors"] ?? 0);
+                    _cpuFallbackMHz = Convert.ToInt32(o["CurrentClockSpeed"] ?? 0);
                     o.Dispose();
                     break;
                 }
@@ -269,49 +288,85 @@ namespace Optimisation_Tool.Helpers
             if (at > 0) _cpuName = _cpuName.Substring(0, at).Trim();
         }
 
-        // ManagementObjectSearcher RÉUTILISÉS (v1.4.3) : l'init WMI coûte plus que la requête
-        // elle-même. Avant on en créait 2 neufs à chaque tick CPU → ~30-80 ms de cadeau au CPU
-        // pour rien. Ces searchers sont appelés en série dans CollectCpu (qui tourne sur UNE
-        // section parallèle de Collect, jamais simultanément avec lui-même grâce au _busy de
-        // PageMonitoring/MiniMonitor) → safe sans lock.
-        private static readonly ManagementObjectSearcher _cpuUsageQuery = new(
-            "SELECT PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor WHERE Name='_Total'");
+        // GetSystemTimes fournit l'usage CPU en quelques microsecondes. Les anciens compteurs
+        // WMI formatés imposaient chacun ~266 ms d'attente, soit ~532 ms par rafraîchissement.
+        private static readonly object _cpuUsageLock = new();
+        private static ulong _cpuLastIdle, _cpuLastKernel, _cpuLastUser;
+        private static double _cpuUsageCache;
+
+        // La fréquence formatée capture correctement le turbo, mais sa requête WMI reste lente.
+        // Elle est donc rafraîchie hors du cycle principal et mise en cache pendant 2 s.
+        private static readonly object _cpuFrequencyLock = new();
         private static readonly ManagementObjectSearcher _cpuFreqQuery = new(
             "SELECT PercentProcessorPerformance, ProcessorFrequency FROM Win32_PerfFormattedData_Counters_ProcessorInformation WHERE Name LIKE '%_Total'");
+        private static Task? _cpuFrequencyRefreshTask;
+        private static DateTime _cpuFrequencyLastAttempt;
+        private static double _cpuFrequencyMhz;
+        private static int _cpuFrequencyBaseMhz;
 
-        private static void CollectCpu(MonSnapshot s)
+        private static double ReadCpuUsage()
         {
-            EnsureCpuStatic();
-            s.CpuName    = _cpuName;
-            s.CpuCores   = _cpuCores;
-            s.CpuThreads = _cpuThreads;
-
-            // Utilisation %
-            try
+            if (!GetSystemTimes(out var idle, out var kernel, out var user))
             {
-                using var coll = _cpuUsageQuery.Get();
-                foreach (ManagementObject o in coll)
+                AppLog.ErrorOnce("monitor-cpu-usage-native", "Monitoring : utilisation du CPU",
+                    new Win32Exception(Marshal.GetLastWin32Error()));
+                return _cpuUsageCache;
+            }
+
+            lock (_cpuUsageLock)
+            {
+                ulong idleNow = idle.Value;
+                ulong kernelNow = kernel.Value;
+                ulong userNow = user.Value;
+
+                if (_cpuLastKernel != 0 || _cpuLastUser != 0)
                 {
-                    s.CpuUsage = Convert.ToDouble(o["PercentProcessorTime"]);
-                    o.Dispose();
-                    break;
-                }
-            }
-            catch (Exception ex)
-            {
-                AppLog.ErrorOnce("monitor-cpu-usage", "Monitoring : utilisation du CPU", ex);
-            }
+                    ulong idleDelta = idleNow - _cpuLastIdle;
+                    ulong kernelDelta = kernelNow - _cpuLastKernel;
+                    ulong userDelta = userNow - _cpuLastUser;
+                    ulong totalDelta = kernelDelta + userDelta;
 
-            // Fréquence live = base × (% performance / 100) → capture le turbo
+                    if (totalDelta > 0)
+                    {
+                        double busyDelta = totalDelta > idleDelta ? totalDelta - idleDelta : 0;
+                        _cpuUsageCache = Math.Max(0, Math.Min(100, busyDelta * 100.0 / totalDelta));
+                    }
+                }
+
+                _cpuLastIdle = idleNow;
+                _cpuLastKernel = kernelNow;
+                _cpuLastUser = userNow;
+                return _cpuUsageCache;
+            }
+        }
+
+        private static void QueueCpuFrequencyRefresh()
+        {
+            lock (_cpuFrequencyLock)
+            {
+                var now = DateTime.UtcNow;
+                if ((now - _cpuFrequencyLastAttempt).TotalMilliseconds < 2000) return;
+                if (_cpuFrequencyRefreshTask is { IsCompleted: false }) return;
+
+                _cpuFrequencyLastAttempt = now;
+                _cpuFrequencyRefreshTask = Task.Run(RefreshCpuFrequency);
+            }
+        }
+
+        private static void RefreshCpuFrequency()
+        {
             try
             {
                 using var coll = _cpuFreqQuery.Get();
                 foreach (ManagementObject o in coll)
                 {
                     var baseMhz = Convert.ToDouble(o["ProcessorFrequency"]);
-                    var perf    = Convert.ToDouble(o["PercentProcessorPerformance"]);
-                    s.CpuBaseMHz = (int)baseMhz;
-                    s.CpuMHz     = perf > 0 ? baseMhz * perf / 100.0 : baseMhz;
+                    var perf = Convert.ToDouble(o["PercentProcessorPerformance"]);
+                    lock (_cpuFrequencyLock)
+                    {
+                        _cpuFrequencyBaseMhz = (int)baseMhz;
+                        _cpuFrequencyMhz = perf > 0 ? baseMhz * perf / 100.0 : baseMhz;
+                    }
                     o.Dispose();
                     break;
                 }
@@ -320,6 +375,32 @@ namespace Optimisation_Tool.Helpers
             {
                 AppLog.ErrorOnce("monitor-cpu-frequency", "Monitoring : fréquence du CPU", ex);
             }
+            finally
+            {
+                lock (_cpuFrequencyLock) _cpuFrequencyRefreshTask = null;
+            }
+        }
+
+        private static void ReadCpuFrequencyCache(out double currentMhz, out int baseMhz)
+        {
+            lock (_cpuFrequencyLock)
+            {
+                currentMhz = _cpuFrequencyMhz > 0 ? _cpuFrequencyMhz : _cpuFallbackMHz;
+                baseMhz = _cpuFrequencyBaseMhz > 0 ? _cpuFrequencyBaseMhz : _cpuFallbackMHz;
+            }
+        }
+
+        private static void CollectCpu(MonSnapshot s)
+        {
+            EnsureCpuStatic();
+            s.CpuName    = _cpuName;
+            s.CpuCores   = _cpuCores;
+            s.CpuThreads = _cpuThreads;
+
+            s.CpuUsage = ReadCpuUsage();
+
+            QueueCpuFrequencyRefresh();
+            ReadCpuFrequencyCache(out s.CpuMHz, out s.CpuBaseMHz);
 
             // Température CPU (opt-in) : null si désactivée / pilote PawnIO absent / non élevé.
             s.CpuTempC = CpuTemperature.Read();
@@ -392,23 +473,68 @@ namespace Optimisation_Tool.Helpers
         // ── Températures NVMe (namespace Storage WMI) ────────────────────────
         // BusType 17 = NVMe. La température (°C) vient de MSFT_StorageReliabilityCounter.
         // Nécessite l'élévation admin (l'app tourne en requireAdministrator).
-        // Cache 4 s : la température disque évolue lentement et la requête WMI est coûteuse.
-        private static DateTime        _nvmeCacheTime;
-        private static List<NvmeInfo>  _nvmeCache = new();
+        // La sonde Storage WMI peut parfois dépasser 1 s. Elle rafraîchit donc un cache en
+        // arrière-plan et ne bloque jamais le cycle CPU/GPU/RAM à 1 Hz.
+        private static readonly object _nvmeCacheLock = new();
+        private static DateTime _nvmeCacheTime;
+        private static List<NvmeInfo> _nvmeCache = new();
+        private static Task? _nvmeRefreshTask;
 
         private static void CollectNvme(MonSnapshot s)
         {
-            // Cache 3 s : WMI stockage est coûteux et la température NVMe évolue lentement.
-            // La page Monitoring ne demande déjà cette section qu'un tick sur 3.
-            if (_nvmeCacheTime != default &&
-                (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds < 3000)
+            lock (_nvmeCacheLock)
             {
-                s.Nvmes = _nvmeCache;
-                return;
+                bool stale = _nvmeCacheTime == default ||
+                    (DateTime.UtcNow - _nvmeCacheTime).TotalMilliseconds >= 3000;
+                if (stale && _nvmeRefreshTask is not { IsCompleted: false })
+                    _nvmeRefreshTask = Task.Run(RefreshNvmeCache);
+
+                s.Nvmes = CloneNvmes(_nvmeCache);
             }
 
+            foreach (NvmeInfo nvme in s.Nvmes)
+            {
+                if (DiskActivitySampler.TrySample(nvme.DeviceNumber, out double usage))
+                    nvme.UsagePct = usage;
+            }
+        }
+
+        private static List<NvmeInfo> CloneNvmes(IEnumerable<NvmeInfo> source)
+            => source.Select(n => new NvmeInfo
+            {
+                Id = n.Id,
+                Name = n.Name,
+                DeviceNumber = n.DeviceNumber,
+                TempC = n.TempC,
+                UsagePct = n.UsagePct,
+            }).ToList();
+
+        private static void RefreshNvmeCache()
+        {
+            try
+            {
+                RefreshNvmeCacheCore();
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("monitor-nvme-refresh", "Monitoring : rafraîchissement NVMe", ex);
+            }
+            finally
+            {
+                lock (_nvmeCacheLock) _nvmeRefreshTask = null;
+            }
+        }
+
+        private static void RefreshNvmeCacheCore()
+        {
+            List<NvmeInfo> previous;
+            lock (_nvmeCacheLock) previous = CloneNvmes(_nvmeCache);
+
             var list      = new List<NvmeInfo>();
-            var byDevice  = new Dictionary<int, NvmeInfo>();   // DeviceId → info (pour mapper l'usage)
+            var previousUsage = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in previous)
+                previousUsage[NvmeIdentity(item.Id, item.Name)] = item.UsagePct;
+            bool inventorySucceeded = false;
             try
             {
                 var scope = new ManagementScope(@"\\.\root\Microsoft\Windows\Storage");
@@ -426,6 +552,9 @@ namespace Optimisation_Tool.Helpers
                     {
                         var name = disk["FriendlyName"]?.ToString()?.Trim();
                         if (string.IsNullOrEmpty(name)) name = "NVMe";
+                        string deviceId = disk["DeviceId"]?.ToString()?.Trim() ?? "";
+                        string objectId = disk["ObjectId"]?.ToString()?.Trim() ?? "";
+                        string id = objectId.Length > 0 ? objectId : deviceId;
 
                         int temp = 0;
                         foreach (ManagementObject rc in disk.GetRelated("MSFT_StorageReliabilityCounter"))
@@ -436,13 +565,22 @@ namespace Optimisation_Tool.Helpers
                             break;
                         }
 
-                        if (temp > 0 && temp < 200)   // garde-fou contre les valeurs aberrantes
+                        if (temp is <= 0 or >= 200)
+                            temp = 0;
+
+                        var info = new NvmeInfo
                         {
-                            var info = new NvmeInfo { Name = name, TempC = temp };
-                            list.Add(info);
-                            if (int.TryParse(disk["DeviceId"]?.ToString(), out int devId))
-                                byDevice[devId] = info;
-                        }
+                            Id = id,
+                            Name = name,
+                            DeviceNumber = int.TryParse(deviceId, out int parsedDeviceNumber)
+                                ? parsedDeviceNumber
+                                : -1,
+                            TempC = temp,
+                            UsagePct = previousUsage.TryGetValue(
+                                NvmeIdentity(id, name),
+                                out var oldUsage) ? oldUsage : 0,
+                        };
+                        list.Add(info);
                     }
                     catch (Exception ex)
                     {
@@ -450,46 +588,31 @@ namespace Optimisation_Tool.Helpers
                     }
                     finally { disk.Dispose(); }
                 }
+                inventorySucceeded = true;
             }
             catch (Exception ex)
             {
                 AppLog.ErrorOnce("monitor-nvme-storage", "Monitoring : inventaire des disques NVMe", ex);
             }
 
-            // % d'activité disque via compteur de perf (root\CIMV2). Name = "<num> <lettres>".
-            // util% = 100 - PercentIdleTime (plus fiable que PercentDiskTime qui peut dépasser 100).
-            try
+            lock (_nvmeCacheLock)
             {
-                using var perf = new ManagementObjectSearcher(
-                    "SELECT Name, PercentIdleTime FROM Win32_PerfFormattedData_PerfDisk_PhysicalDisk");
-                foreach (ManagementObject o in perf.Get())
+                if (inventorySucceeded)
                 {
-                    try
-                    {
-                        var nm = o["Name"]?.ToString() ?? "";
-                        var numStr = nm.Split(' ')[0];
-                        if (int.TryParse(numStr, out int dn) && byDevice.TryGetValue(dn, out var info))
-                        {
-                            var idle = Convert.ToDouble(o["PercentIdleTime"]);
-                            info.UsagePct = Math.Max(0, Math.Min(100, 100 - idle));
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        AppLog.ErrorOnce("monitor-nvme-activity-item", "Monitoring : activité d'un disque", ex);
-                    }
-                    finally { o.Dispose(); }
+                    _nvmeCache = list;
+                    _nvmeCacheTime = DateTime.UtcNow;
                 }
-            }
-            catch (Exception ex)
-            {
-                AppLog.ErrorOnce("monitor-nvme-activity", "Monitoring : compteurs d'activité disque", ex);
-            }
+                else if (_nvmeCacheTime == default)
+                {
+                    // Évite une boucle de retry WMI à chaque seconde si la sonde est indisponible.
+                    _nvmeCacheTime = DateTime.UtcNow;
+                }
 
-            _nvmeCache     = list;
-            _nvmeCacheTime = DateTime.UtcNow;
-            s.Nvmes        = list;
+            }
         }
+
+        private static string NvmeIdentity(string id, string name) =>
+            string.IsNullOrWhiteSpace(id) ? "name:" + name : "id:" + id;
 
         // ── GPU : carte DÉDIÉE prioritaire (Nvidia via NvAPI = données riches), sinon
         //    AMD dédiée / IGP intégré via WMI (nom + VRAM registre) + compteurs « GPU Engine » (usage).

@@ -72,7 +72,8 @@ public sealed class ExternalWorkloadRunner : IWorkloadRunner
         using var process = new Process { StartInfo = info };
         DateTimeOffset startedAt = DateTimeOffset.Now;
         var started = Stopwatch.StartNew();
-        process.Start();
+        if (!process.Start())
+            throw new InvalidOperationException($"Unable to start workload '{definition.Name}'.");
         using var contaminationStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task<GpuContaminationResult>? contaminationTask = _contaminationMonitor?.ObserveAsync(
             process.Id,
@@ -93,8 +94,7 @@ public sealed class ExternalWorkloadRunner : IWorkloadRunner
         {
             cancelled = cancellationToken.IsCancellationRequested;
             timedOut = !cancelled;
-            ProcessSupport.TryKillTree(process);
-            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            await ProcessSupport.WaitForExitAfterStopAsync(process).ConfigureAwait(false);
         }
         started.Stop();
         DateTimeOffset endedAt = DateTimeOffset.Now;
@@ -215,17 +215,32 @@ public sealed class GpuTestOrchestrator
             telemetryStop.Token);
 
         WorkloadExecution execution;
+        TelemetryCapture? capture = null;
+        Exception? executionFailure = null;
         try
         {
             execution = await _workload.RunAsync(definition, cancellationToken).ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken).ConfigureAwait(false);
         }
+        catch (Exception ex)
+        {
+            executionFailure = ex;
+            throw;
+        }
         finally
         {
             await telemetryStop.CancelAsync().ConfigureAwait(false);
+            try
+            {
+                capture = await telemetryTask.ConfigureAwait(false);
+            }
+            catch when (executionFailure != null)
+            {
+                // Preserve the workload failure while still observing the telemetry task.
+            }
         }
 
-        TelemetryCapture capture = await telemetryTask.ConfigureAwait(false);
+        capture ??= await telemetryTask.ConfigureAwait(false);
         GpuTelemetrySample[] measuredSamples = capture.Samples
             .Where(sample => sample.Timestamp >= execution.StartedAt && sample.Timestamp <= execution.EndedAt)
             .ToArray();
@@ -234,12 +249,25 @@ public sealed class GpuTestOrchestrator
                 $"Only {measuredSamples.Length} telemetry sample(s) matched the workload execution window.");
         DateTimeOffset endedAt = DateTimeOffset.Now;
         string processName = Path.GetFileNameWithoutExtension(definition.ExecutablePath);
-        var stabilityEvents = (await _evidence.CollectAsync(
-            startedAt - TimeSpan.FromSeconds(2),
-            endedAt + TimeSpan.FromSeconds(2),
-            processName,
-            capture.Identity,
-            cancellationToken).ConfigureAwait(false)).ToList();
+        var stabilityEvents = new List<StabilityEvent>();
+        try
+        {
+            stabilityEvents.AddRange(await _evidence.CollectAsync(
+                startedAt - TimeSpan.FromSeconds(2),
+                endedAt + TimeSpan.FromSeconds(2),
+                processName,
+                capture.Identity,
+                cancellationToken).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            stabilityEvents.Add(new StabilityEvent
+            {
+                Timestamp = endedAt,
+                Kind = StabilityEventKind.TelemetryGap,
+                Evidence = "Windows stability evidence collection failed: " + ex.Message
+            });
+        }
         if (execution.TimedOut)
         {
             stabilityEvents.Add(new StabilityEvent
@@ -296,8 +324,8 @@ public sealed class GpuTestOrchestrator
         }
 
         GpuIdentity identity = runs[0].Identity;
-        if (runs.Any(run => !SameGpu(identity, run.Identity)))
-            throw new InvalidOperationException("GPU identity changed during the workload suite.");
+        if (runs.Any(run => !GpuIdentityCompatibility.SameMeasurementEnvironment(identity, run.Identity)))
+            throw new InvalidOperationException("GPU identity, VBIOS or driver changed during the workload suite.");
 
         return new TestRun
         {
@@ -321,9 +349,4 @@ public sealed class GpuTestOrchestrator
         };
     }
 
-    private static bool SameGpu(GpuIdentity left, GpuIdentity right)
-        => left.Uuid.Equals(right.Uuid, StringComparison.OrdinalIgnoreCase)
-           && left.DeviceId.Equals(right.DeviceId, StringComparison.OrdinalIgnoreCase)
-           && left.SubsystemId.Equals(right.SubsystemId, StringComparison.OrdinalIgnoreCase)
-           && left.VbiosVersion.Equals(right.VbiosVersion, StringComparison.OrdinalIgnoreCase);
 }

@@ -73,7 +73,10 @@ namespace Optimisation_Tool.Helpers
                     try
                     {
                         process.Kill(entireProcessTree: true);
-                        process.WaitForExit(1000);
+                        if (!process.WaitForExit(5000))
+                        {
+                            killError = " Arrêt forcé impossible : le processus ne s'est pas arrêté sous 5 s.";
+                        }
                     }
                     catch (Exception ex)
                     {

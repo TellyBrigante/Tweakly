@@ -4,20 +4,53 @@ public static class BaselineValidator
 {
     public static BaselineValidationResult Validate(
         IReadOnlyList<TestRun> runs,
-        EvaluationPolicy policy)
+        EvaluationPolicy policy,
+        string? expectedPackageFingerprint = null)
     {
         var reasons = new List<string>();
-        if (runs.Count < 3) reasons.Add($"{runs.Count} stock runs; 3 required.");
+        if (runs.Count != 3) reasons.Add($"{runs.Count} stock runs; exactly 3 required.");
         if (runs.Any(static run => run.Profile.Kind != ProfileKind.Stock))
             reasons.Add("Every baseline run must use the Stock profile kind.");
-        if (runs.Any(static run => !run.Profile.AppliedBy.Equals("manual-confirmed-stock", StringComparison.OrdinalIgnoreCase)))
+        if (runs.Any(static run => !string.Equals(
+                run.Profile.AppliedBy,
+                "manual-confirmed-stock",
+                StringComparison.OrdinalIgnoreCase)))
             reasons.Add("Every baseline run needs an explicit manual stock-reset confirmation.");
-        if (runs.Any(run => run.Workloads.Any(workload =>
-                workload.Duration.TotalSeconds < policy.MinimumBaselineWorkloadSeconds)))
-            reasons.Add($"Every baseline workload must run for at least {policy.MinimumBaselineWorkloadSeconds} s.");
-        foreach (WorkloadResult workload in runs.SelectMany(static run => run.Workloads)
-                     .Where(static workload => !workload.Completed))
-            reasons.Add($"{workload.Name} did not complete: {workload.FailureReason}");
+        if (runs.Any(static run => string.IsNullOrWhiteSpace(run.WorkloadPackageFingerprint)))
+            reasons.Add("The stock baseline predates workload package fingerprinting and must be measured again.");
+        if (runs.Select(static run => run.WorkloadPackageFingerprint ?? "")
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Skip(1).Any())
+            reasons.Add("The stock runs were measured with different workload packages.");
+        if (!string.IsNullOrWhiteSpace(expectedPackageFingerprint)
+            && runs.Any(run => !string.Equals(
+                run.WorkloadPackageFingerprint,
+                expectedPackageFingerprint,
+                StringComparison.OrdinalIgnoreCase)))
+            reasons.Add("The stock baseline was measured with a different workload package.");
+        WorkloadKind[] expectedKinds = policy.RequiredValidationWorkloads
+            .Append(WorkloadKind.Compute)
+            .Distinct()
+            .Order()
+            .ToArray();
+        foreach (TestRun run in runs)
+        {
+            WorkloadKind[] actualKinds = run.Workloads.Select(static workload => workload.Kind)
+                .Order()
+                .ToArray();
+            if (!actualKinds.SequenceEqual(expectedKinds))
+                reasons.Add("Every stock run must contain compute, graphics, ray tracing, VRAM and transient exactly once.");
+            if (run.Workloads.Any(workload =>
+                    workload.Duration.TotalSeconds < policy.MinimumBaselineWorkloadSeconds))
+                reasons.Add($"Every baseline workload must run for at least {policy.MinimumBaselineWorkloadSeconds} s.");
+            foreach (WorkloadResult workload in run.Workloads.Where(static workload =>
+                         !workload.Completed || !double.IsFinite(workload.Score) || workload.Score <= 0))
+                reasons.Add($"{workload.Name} did not produce a complete positive finite score: {workload.FailureReason}");
+            if (run.WorkloadWindows.Count != run.Workloads.Count
+                || run.WorkloadWindows.Any(static window =>
+                    window.EndedAt <= window.StartedAt || window.SampleCount < 2))
+                reasons.Add("Every stock workload needs one valid telemetry window.");
+        }
         foreach (TestRun run in runs)
         {
             StockStateAssessment stock = StockStateVerifier.Assess(run.Samples);
@@ -27,8 +60,8 @@ public static class BaselineValidator
         if (runs.Count > 0)
         {
             GpuIdentity first = runs[0].Identity;
-            if (runs.Any(run => !SameHardware(first, run.Identity)))
-                reasons.Add("GPU identity, subsystem or VBIOS changed between stock runs.");
+            if (runs.Any(run => !GpuIdentityCompatibility.SameMeasurementEnvironment(first, run.Identity)))
+                reasons.Add("GPU identity, subsystem, VBIOS or driver changed between stock runs.");
         }
 
         var summaries = runs.Select(run => RunAnalyzer.Summarize(run, policy)).ToArray();
@@ -40,12 +73,6 @@ public static class BaselineValidator
 
         return new BaselineValidationResult(reasons.Count == 0, cv, reasons);
     }
-
-    private static bool SameHardware(GpuIdentity left, GpuIdentity right)
-        => left.Uuid.Equals(right.Uuid, StringComparison.OrdinalIgnoreCase)
-           && left.DeviceId.Equals(right.DeviceId, StringComparison.OrdinalIgnoreCase)
-           && left.SubsystemId.Equals(right.SubsystemId, StringComparison.OrdinalIgnoreCase)
-           && left.VbiosVersion.Equals(right.VbiosVersion, StringComparison.OrdinalIgnoreCase);
 
     private static double MaximumPerWorkloadVariation(IReadOnlyList<TestRun> runs, List<string> reasons)
     {
@@ -90,6 +117,7 @@ public static class BaselineConsolidator
                 "Stock baseline is not valid: " + string.Join(" | ", validation.Reasons));
 
         TestRun first = runs[0];
+        TestRun representative = RepresentativeRun(runs);
         WorkloadResult[] workloads = first.Workloads.Select(reference =>
         {
             WorkloadResult[] matching = runs
@@ -108,7 +136,7 @@ public static class BaselineConsolidator
         {
             BatchId = first.BatchId,
             StartedAt = runs.Min(static run => run.StartedAt),
-            Identity = first.Identity,
+            Identity = representative.Identity,
             Profile = new GpuTuningProfile
             {
                 Name = "Consolidated stock baseline",
@@ -116,11 +144,12 @@ public static class BaselineConsolidator
                 AppliedBy = "manual-confirmed-stock",
                 VerificationEvidence = first.Profile.VerificationEvidence
             },
-            Samples = RebaseSamples(runs, policy.SamplingIntervalMs),
+            WorkloadPackageFingerprint = first.WorkloadPackageFingerprint,
+            Samples = representative.Samples,
             Workloads = workloads,
-            WorkloadWindows = RebaseWindows(runs, policy.SamplingIntervalMs),
+            WorkloadWindows = representative.WorkloadWindows,
             StabilityEvents = runs.SelectMany(static run => run.StabilityEvents).Distinct().ToArray(),
-            Notes = $"Consolidated from {runs.Count} stock runs."
+            Notes = $"Scores consolidated from {runs.Count} stock runs; telemetry from representative run {representative.Id}."
         };
     }
 
@@ -136,47 +165,14 @@ public static class BaselineConsolidator
         return Math.Sqrt(variance) / mean * 100;
     }
 
-    private static IReadOnlyList<GpuTelemetrySample> RebaseSamples(
-        IReadOnlyList<TestRun> runs,
-        int intervalMs)
+    private static TestRun RepresentativeRun(IReadOnlyList<TestRun> runs)
     {
-        var result = new List<GpuTelemetrySample>();
-        DateTimeOffset cursor = runs.Min(static run => run.StartedAt);
-        foreach (TestRun run in runs.OrderBy(static run => run.StartedAt))
-        {
-            GpuTelemetrySample[] samples = run.Samples.OrderBy(static sample => sample.Timestamp).ToArray();
-            if (samples.Length == 0) continue;
-            DateTimeOffset sourceStart = samples[0].Timestamp;
-            result.AddRange(samples.Select(sample => sample with
-            {
-                Timestamp = cursor + (sample.Timestamp - sourceStart)
-            }));
-            cursor = result[^1].Timestamp.AddMilliseconds(intervalMs);
-        }
-        return result;
-    }
-
-    private static IReadOnlyList<WorkloadTelemetryWindow> RebaseWindows(
-        IReadOnlyList<TestRun> runs,
-        int intervalMs)
-    {
-        var result = new List<WorkloadTelemetryWindow>();
-        DateTimeOffset cursor = runs.Min(static run => run.StartedAt);
-        foreach (TestRun run in runs.OrderBy(static run => run.StartedAt))
-        {
-            WorkloadTelemetryWindow[] windows = run.WorkloadWindows
-                .OrderBy(static window => window.StartedAt)
-                .ToArray();
-            if (windows.Length == 0) continue;
-            DateTimeOffset sourceStart = windows[0].StartedAt;
-            result.AddRange(windows.Select(window => window with
-            {
-                StartedAt = cursor + (window.StartedAt - sourceStart),
-                EndedAt = cursor + (window.EndedAt - sourceStart)
-            }));
-            cursor = result[^1].EndedAt.AddMilliseconds(intervalMs);
-        }
-        return result;
+        Dictionary<string, double> averageScores = runs
+            .SelectMany(static run => run.Workloads)
+            .GroupBy(Key)
+            .ToDictionary(static group => group.Key, static group => group.Average(item => item.Score));
+        return runs.MinBy(run => run.Workloads.Average(workload =>
+            Math.Abs(workload.Score / averageScores[Key(workload)] - 1)))!;
     }
 }
 
@@ -218,12 +214,13 @@ public static class ProfileRanker
     private static bool Dominates(ProfileComparison left, ProfileComparison right)
     {
         if (left.CandidateVerdict is StabilityVerdict.Rejected or StabilityVerdict.InvalidTelemetry) return false;
+        bool thermalComparable = left.TemperatureDeltaC.HasValue && right.TemperatureDeltaC.HasValue;
         bool noWorse = left.PerformanceIndex >= right.PerformanceIndex
                        && left.EfficiencyIndex >= right.EfficiencyIndex
-                       && left.TemperatureDeltaC <= right.TemperatureDeltaC;
+                       && (!thermalComparable || left.TemperatureDeltaC <= right.TemperatureDeltaC);
         bool better = left.PerformanceIndex > right.PerformanceIndex
                       || left.EfficiencyIndex > right.EfficiencyIndex
-                      || left.TemperatureDeltaC < right.TemperatureDeltaC;
+                      || (thermalComparable && left.TemperatureDeltaC < right.TemperatureDeltaC);
         return noWorse && better;
     }
 }

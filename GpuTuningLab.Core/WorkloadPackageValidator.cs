@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace GpuTuningLab.Core;
@@ -7,7 +8,10 @@ public sealed record WorkloadPackageValidation(
     bool Valid,
     string D3D11WorkloadPath,
     string RayTracingWorkloadPath,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors)
+{
+    public string Fingerprint { get; init; } = "";
+}
 
 public static class WorkloadPackageValidator
 {
@@ -36,13 +40,18 @@ public static class WorkloadPackageValidator
             return new(false, d3d11, dxr, ["Workload manifest is missing."]);
 
         WorkloadManifestEntry[] entries;
+        string fingerprint;
         try
         {
-            await using var stream = File.OpenRead(manifestPath);
-            entries = await JsonSerializer.DeserializeAsync<WorkloadManifestEntry[]>(
-                stream,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                cancellationToken).ConfigureAwait(false) ?? [];
+            byte[] manifestBytes = await File.ReadAllBytesAsync(manifestPath, cancellationToken)
+                .ConfigureAwait(false);
+            fingerprint = Convert.ToHexString(SHA256.HashData(manifestBytes));
+            string json = Encoding.UTF8.GetString(manifestBytes);
+            if (json.Length > 0 && json[0] == '\uFEFF')
+                json = json[1..];
+            entries = JsonSerializer.Deserialize<WorkloadManifestEntry[]>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? [];
         }
         catch (Exception ex) when (ex is JsonException or IOException)
         {
@@ -50,13 +59,28 @@ public static class WorkloadPackageValidator
         }
 
         var manifestFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (WorkloadManifestEntry entry in entries)
+        foreach (WorkloadManifestEntry? entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (entry == null)
+            {
+                errors.Add("Workload manifest contains a null entry.");
+                continue;
+            }
             string relative = Normalize(entry.Path);
             if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative) || relative.Split('/').Contains(".."))
             {
                 errors.Add($"Unsafe manifest path: {entry.Path}");
+                continue;
+            }
+            if (entry.Bytes <= 0)
+            {
+                errors.Add($"Invalid workload size in manifest: {relative}");
+                continue;
+            }
+            if (!IsSha256(entry.Sha256))
+            {
+                errors.Add($"Invalid SHA-256 in manifest: {relative}");
                 continue;
             }
             if (!manifestFiles.Add(relative))
@@ -65,7 +89,16 @@ public static class WorkloadPackageValidator
                 continue;
             }
 
-            string fullPath = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
+            string fullPath;
+            try
+            {
+                fullPath = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                errors.Add($"Invalid manifest path {relative}: {ex.Message}");
+                continue;
+            }
             if (!IsInside(root, fullPath))
             {
                 errors.Add($"Manifest path leaves the workload directory: {relative}");
@@ -103,10 +136,20 @@ public static class WorkloadPackageValidator
             }
         }
 
-        return new(errors.Count == 0, d3d11, dxr, errors.Distinct().ToArray());
+        return new(errors.Count == 0, d3d11, dxr, errors.Distinct().ToArray())
+        {
+            Fingerprint = fingerprint
+        };
     }
 
-    private static string Normalize(string path) => path.Replace('\\', '/').Trim();
+    private static string Normalize(string? path) => (path ?? "").Replace('\\', '/').Trim();
+
+    private static bool IsSha256(string? value)
+        => value is { Length: 64 }
+           && value.All(static character =>
+               character is >= '0' and <= '9'
+               or >= 'a' and <= 'f'
+               or >= 'A' and <= 'F');
 
     private static bool IsInside(string root, string path)
     {
@@ -115,5 +158,5 @@ public static class WorkloadPackageValidator
         return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed record WorkloadManifestEntry(string Path, long Bytes, string Sha256);
+    private sealed record WorkloadManifestEntry(string? Path, long Bytes, string? Sha256);
 }

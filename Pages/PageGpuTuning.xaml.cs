@@ -13,11 +13,12 @@ namespace Optimisation_Tool.Pages
 {
     public partial class PageGpuTuning : UserControl
     {
-        private readonly LocalGpuLabService _service = new(LoadPolicy());
+        private readonly EvaluationPolicy _policy;
+        private readonly LocalGpuLabService _service;
+        private readonly string _policyLoadError;
         private CancellationTokenSource? _runCancellation;
         private bool _loaded;
         private bool _readyForBaseline;
-        private bool _readyForProfile;
         private bool _baselineValid;
         private bool _runningProfile;
         private bool _actionPending;
@@ -25,6 +26,8 @@ namespace Optimisation_Tool.Pages
 
         public PageGpuTuning()
         {
+            (_policy, _policyLoadError) = LoadPolicy();
+            _service = new LocalGpuLabService(_policy);
             InitializeComponent();
             Application.Current.Exit += (_, _) => _runCancellation?.Cancel();
         }
@@ -41,19 +44,40 @@ namespace Optimisation_Tool.Pages
         private async Task RefreshAsync()
         {
             if (!TryBeginAction()) return;
+            _readyForBaseline = false;
+            _baselineValid = false;
+            _profileSuggestion = null;
+            AdviceCard.Visibility = Visibility.Collapsed;
             TxtProtocolState.Text = "Vérification du GPU et des outils de test…";
+            ProfileResult.Visibility = Visibility.Collapsed;
             try
             {
+                if (_policyLoadError.Length > 0)
+                {
+                    _readyForBaseline = false;
+                    _baselineValid = false;
+                    TxtProtocolState.Text =
+                        "Mesures bloquées : les règles d'évaluation GPU ne sont pas valides. " +
+                        _policyLoadError;
+                    TxtProtocolState.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+                    UpdateActionAvailability();
+                    return;
+                }
+
                 GpuLabReadiness readiness = await _service.InspectAsync(PathLayout.GpuTuningTools);
                 RenderReadiness(readiness);
-                GpuBaselineStatus baseline = await _service.GetLatestBaselineStatusAsync(PathLayout.GpuTuningSession);
+                GpuBaselineStatus baseline = await _service.GetLatestBaselineStatusAsync(
+                    PathLayout.GpuTuningSession,
+                    readiness.Package.Fingerprint,
+                    readiness.Identity);
                 RenderBaseline(baseline);
                 try
                 {
                     GpuAdviceStatus advice = await _service.GetInitialProfileAdviceAsync(
                         PathLayout.GpuTuningSession,
                         PathLayout.GpuTuningEvidence,
-                        readiness.Identity);
+                        readiness.Identity,
+                        readiness.Package.Fingerprint);
                     RenderAdvice(advice);
                 }
                 catch (Exception ex)
@@ -61,6 +85,25 @@ namespace Optimisation_Tool.Pages
                     AdviceCard.Visibility = Visibility.Collapsed;
                     _profileSuggestion = null;
                     AppLog.Error("Optimisation GPU : calcul du point de départ", ex);
+                }
+
+                if (_baselineValid)
+                {
+                    try
+                    {
+                        GpuProfileMeasurementResult? latest =
+                            await _service.GetLatestProfileMeasurementResultAsync(
+                                PathLayout.GpuTuningSession,
+                                PathLayout.GpuTuningEvidence,
+                                readiness.Identity,
+                                readiness.Package.Fingerprint);
+                        if (latest != null)
+                            RenderProfileResult(latest);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Error("Optimisation GPU : rechargement du dernier resultat", ex);
+                    }
                 }
             }
             catch (Exception ex)
@@ -84,8 +127,9 @@ namespace Optimisation_Tool.Pages
             if (status.Suggestion is not GpuProfileSuggestion suggestion) return;
 
             GpuTuningProfile profile = suggestion.Profile;
+            TxtAdviceTitle.Text = "Point de départ calculé";
             TxtAdviceConfidence.Text = $"Confiance {suggestion.Confidence.ToLowerInvariant()}";
-            TxtAdviceValues.Text = $"{profile.TargetVoltageMv:0} mV · {profile.TargetClockMhz:0} MHz · mémoire à stock · Power Limit {profile.PowerLimitPercent:0} %";
+            TxtAdviceValues.Text = SuggestionValues(profile);
             TxtAdviceDetail.Text = status.Message +
                 $" Base publique : {suggestion.IndependentUnits} carte(s), {suggestion.IndependentSources} source(s), " +
                 $"{suggestion.SupportingPoints} mesure(s) retenue(s), {suggestion.ExcludedFailurePoints} échec(s) écarté(s). " +
@@ -113,7 +157,6 @@ namespace Optimisation_Tool.Pages
             TxtPower.Text = Watts(readiness.LatestSample?.EnforcedPowerLimitW);
             TxtMemory.Text = Megahertz(readiness.LatestSample?.MemoryClockMhz);
             _readyForBaseline = readiness.ReadyForBaseline;
-            _readyForProfile = readiness.ReadyForProfile;
 
             if (readiness.ReadyForBaseline)
             {
@@ -150,9 +193,12 @@ namespace Optimisation_Tool.Pages
             string date = status.StartedAt?.LocalDateTime.ToString("dd/MM/yyyy HH:mm", CultureInfo.CurrentCulture) ?? "date inconnue";
             bool valid = status.Validation?.Valid == true;
             _baselineValid = valid;
+            string invalidReason = status.Validation?.Reasons
+                .Select(ToFrenchReason)
+                .FirstOrDefault() ?? "La mesure stock doit être refaite.";
             TxtBaselineStatus.Text = valid
                 ? $"Référence valide du {date} · 3 passages terminés · variation maximale {status.Validation!.ScoreCoefficientOfVariationPercent:0.00} %."
-                : $"Mesure du {date} incomplète ou refusée · {status.CompletedSuites}/3 passage(s) enregistré(s).";
+                : $"Référence du {date} inutilisable. {invalidReason}";
             TxtBaselineBadge.Text = valid ? "Valide" : "À refaire";
             TxtBaselineBadge.SetResourceReference(TextBlock.ForegroundProperty, valid ? "ThOk" : "ThWarn");
             TxtProfileState.Text = valid
@@ -164,6 +210,11 @@ namespace Optimisation_Tool.Pages
         private async void BtnStart_Click(object sender, RoutedEventArgs e)
         {
             if (!TryBeginAction()) return;
+            if (!EnsurePolicyAvailable(TxtRunState))
+            {
+                EndAction();
+                return;
+            }
             GpuLabReadiness readiness;
             try
             {
@@ -249,6 +300,11 @@ namespace Optimisation_Tool.Pages
         private async void BtnProfileStart_Click(object sender, RoutedEventArgs e)
         {
             if (!TryBeginAction()) return;
+            if (!EnsurePolicyAvailable(TxtProfileState))
+            {
+                EndAction();
+                return;
+            }
             if (ChkStartupDisabled.IsChecked != true)
             {
                 TxtProfileState.Text = "Désactive d'abord l'application automatique du profil au démarrage de Windows, puis confirme la ligne ci-dessus.";
@@ -260,10 +316,10 @@ namespace Optimisation_Tool.Pages
             if (name.Length is < 2 or > 60
                 || !TryInt(TxtProfileVoltage.Text, out int voltage) || voltage is < 600 or > 1200
                 || !TryInt(TxtProfileClock.Text, out int clock) || clock is < 300 or > 4000
-                || !TryInt(TxtProfileMemory.Text, out int memory) || memory is < -5000 or > 5000
+                || !TryInt(TxtProfileMemory.Text, out int memory) || memory is < -4000 or > 4000
                 || !TryDouble(TxtProfilePower.Text, out double power) || power is < 20 or > 150)
             {
-                TxtProfileState.Text = "Vérifie les valeurs : tension 600–1 200 mV, fréquence 300–4 000 MHz, mémoire -5 000 à +5 000 MHz et Power Limit 20–150 %.";
+                TxtProfileState.Text = "Vérifie les valeurs : tension 600–1 200 mV, fréquence 300–4 000 MHz, mémoire -4 000 à +4 000 MHz et Power Limit 20–150 %.";
                 TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
                 EndAction();
                 return;
@@ -283,8 +339,21 @@ namespace Optimisation_Tool.Pages
                 return;
             }
             RenderReadiness(readiness);
-            if (!readiness.ReadyForProfile || !_baselineValid)
+            if (!_baselineValid)
             {
+                TxtProfileState.Text = "La référence stock doit être valide avant de mesurer un profil.";
+                TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
+                EndAction();
+                return;
+            }
+            if (!readiness.ReadyForProfile)
+            {
+                TxtProfileState.Text = readiness.ProfileBlockingReasons.Count == 0
+                    ? "La mesure ne peut pas démarrer actuellement. Actualise puis réessaie."
+                    : "Mesure impossible actuellement : " + string.Join(
+                        " · ",
+                        readiness.ProfileBlockingReasons.Select(ToFrenchReason));
+                TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
                 EndAction();
                 return;
             }
@@ -377,37 +446,78 @@ namespace Optimisation_Tool.Pages
 
         private void RenderProfileResult(GpuProfileMeasurementResult result)
         {
-            if (result.Comparison is not ProfileComparison comparison)
+            WorkloadResult? incomplete = result.Run.Workloads
+                .FirstOrDefault(static workload => !workload.Completed);
+            if (incomplete != null)
             {
-                string failure = result.Run.Workloads
-                    .FirstOrDefault(static workload => !workload.Completed)?.FailureReason ?? "";
-                TxtProfileState.Text = string.IsNullOrWhiteSpace(failure)
+                ProfileResult.Visibility = Visibility.Collapsed;
+                TxtProfileState.Text = string.IsNullOrWhiteSpace(incomplete.FailureReason)
                     ? "La mesure s'est arrêtée avant la fin de la suite. Aucun résultat incomplet n'est comparé au stock."
-                    : "Mesure arrêtée : " + ToFrenchReason(failure);
+                    : "Mesure arrêtée : " + ToFrenchReason(incomplete.FailureReason);
                 TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
                 AppLog.Write("Optimisation GPU : profil incomplet — " +
-                             (string.IsNullOrWhiteSpace(failure) ? "cause non fournie" : failure));
+                             (string.IsNullOrWhiteSpace(incomplete.FailureReason)
+                                 ? "cause non fournie"
+                                 : incomplete.FailureReason));
+                return;
+            }
+
+            if (!result.Application.Verified)
+            {
+                ProfileResult.Visibility = Visibility.Collapsed;
+                TxtProfileState.Text =
+                    "Profil non vérifié : " +
+                    string.Join(" ", result.Application.BlockingReasons.Select(ToFrenchReason));
+                TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+                AppLog.Write(
+                    "Optimisation GPU : profil déclaré différent des valeurs mesurées — " +
+                    string.Join(" | ", result.Application.BlockingReasons));
+                return;
+            }
+
+            if (result.Comparison is not ProfileComparison comparison)
+            {
+                ProfileResult.Visibility = Visibility.Collapsed;
+                TxtProfileState.Text = result.Summary.Reasons.Count > 0
+                    ? "Mesure non exploitable : " +
+                      string.Join(" ", result.Summary.Reasons.Select(ToFrenchReason))
+                    : "Mesure non exploitable : aucune comparaison fiable n'a pu être calculée.";
+                TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+                AppLog.Write("Optimisation GPU : comparaison refusée — " +
+                             string.Join(" | ", result.Summary.Reasons));
                 return;
             }
 
             PbProfile.Value = 100;
             TxtProfileProgress.Text = "100 %";
+            TxtProfileName.Text = result.Run.Profile.Name;
+            TxtProfileVoltage.Text = result.Run.Profile.TargetVoltageMv?.ToString(CultureInfo.InvariantCulture) ?? "";
+            TxtProfileClock.Text = result.Run.Profile.TargetClockMhz?.ToString(CultureInfo.InvariantCulture) ?? "";
+            TxtProfileMemory.Text = result.Run.Profile.MemoryOffsetMhz?.ToString(CultureInfo.InvariantCulture) ?? "0";
+            TxtProfilePower.Text = result.Run.Profile.PowerLimitPercent?.ToString("0", CultureInfo.InvariantCulture) ?? "100";
             TxtResultPerformance.Text = $"{comparison.PerformanceIndex:0.0} %";
             TxtResultPower.Text = $"{comparison.PowerIndex - 100:+0.0;-0.0;0.0} %";
             TxtResultEfficiency.Text = $"{comparison.EfficiencyIndex - 100:+0.0;-0.0;0.0} %";
-            TxtResultTemperature.Text = $"{comparison.TemperatureDeltaC:+0.0;-0.0;0.0} °C";
+            TxtResultTemperature.Text = comparison.TemperatureDeltaC.HasValue
+                ? $"{comparison.TemperatureDeltaC:+0.0;-0.0;0.0} °C"
+                : "Non comparable";
             TxtResultPerformance.SetResourceReference(TextBlock.ForegroundProperty,
                 comparison.MeetsPerformanceFloor ? "ThOk" : "ThCrit");
             TxtResultPower.SetResourceReference(TextBlock.ForegroundProperty,
                 comparison.PowerIndex <= 100 ? "ThOk" : "ThWarn");
             TxtResultEfficiency.SetResourceReference(TextBlock.ForegroundProperty,
                 comparison.EfficiencyIndex >= 100 ? "ThOk" : "ThWarn");
-            TxtResultTemperature.SetResourceReference(TextBlock.ForegroundProperty,
-                comparison.TemperatureDeltaC <= 0 ? "ThOk" : "ThWarn");
+            TxtResultTemperature.SetResourceReference(
+                TextBlock.ForegroundProperty,
+                comparison.TemperatureDeltaC.HasValue
+                    ? comparison.TemperatureDeltaC <= 0 ? "ThOk" : "ThWarn"
+                    : "ThTextMuted");
             ProfileResult.Visibility = Visibility.Visible;
-            TxtProfileState.Text = RecommendationText(result.Recommendation);
+            TxtProfileState.Text = result.NextSuggestion is not null && !string.IsNullOrWhiteSpace(result.NextSuggestionMessage)
+                ? result.NextSuggestionMessage
+                : MeasuredConclusion(comparison, result.Recommendation);
             TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty,
-                result.Summary.Verdict == StabilityVerdict.Rejected ? "ThCrit" : "ThTextBody");
+                comparison.MeetsPerformanceFloor ? "ThTextBody" : "ThCrit");
             if (result.NextSuggestion is GpuProfileSuggestion next)
                 RenderSuggestion(next, result.NextSuggestionMessage);
         }
@@ -416,9 +526,34 @@ namespace Optimisation_Tool.Pages
         {
             _profileSuggestion = suggestion;
             AdviceCard.Visibility = Visibility.Visible;
+            TxtAdviceTitle.Text = "Prochain essai calculé";
             TxtAdviceConfidence.Text = $"Confiance {suggestion.Confidence.ToLowerInvariant()}";
-            TxtAdviceValues.Text = $"{suggestion.Profile.TargetVoltageMv:0} mV · {suggestion.Profile.TargetClockMhz:0} MHz · mémoire {suggestion.Profile.MemoryOffsetMhz:+0;-0;0} MHz · Power Limit {suggestion.Profile.PowerLimitPercent:0} %";
+            TxtAdviceValues.Text = SuggestionValues(suggestion.Profile);
             TxtAdviceDetail.Text = message;
+        }
+
+        private static string SuggestionValues(GpuTuningProfile profile)
+            => $"{profile.TargetVoltageMv:0} mV · {profile.TargetClockMhz:0} MHz · mémoire {profile.MemoryOffsetMhz ?? 0:+0;-0;0} MHz · Power Limit {profile.PowerLimitPercent ?? 100:0} %";
+
+        private string MeasuredConclusion(ProfileComparison comparison, Recommendation recommendation)
+        {
+            if (!comparison.MeetsPerformanceFloor)
+                return
+                    $"Profil à écarter : moyenne {comparison.PerformanceIndex:0.0} % du stock, " +
+                    $"{WorkloadLabel(comparison.WeakestWorkloadName)} {comparison.MinimumWorkloadPerformanceIndex:0.0} %. " +
+                    $"Minimums requis : {_policy.MinimumPerformanceRetentionPercent:0.0} % en moyenne et " +
+                    $"{_policy.MinimumIndividualWorkloadRetentionPercent:0.0} % par test.";
+            return RecommendationText(recommendation);
+        }
+
+        private bool EnsurePolicyAvailable(TextBlock target)
+        {
+            if (_policyLoadError.Length == 0)
+                return true;
+
+            target.Text = "Mesure bloquée : règles d'évaluation GPU invalides. " + _policyLoadError;
+            target.SetResourceReference(TextBlock.ForegroundProperty, "ThCrit");
+            return false;
         }
 
         private void BtnCancel_Click(object sender, RoutedEventArgs e)
@@ -445,14 +580,38 @@ namespace Optimisation_Tool.Pages
             TxtProfileClock.IsEnabled = !running;
             TxtProfileMemory.IsEnabled = !running;
             TxtProfilePower.IsEnabled = !running;
-            if (!running) UpdateActionAvailability();
+            if (!running)
+                UpdateActionAvailability();
+            else
+                UpdateProfileButtonHint();
         }
 
         private void UpdateActionAvailability()
         {
             bool idle = _runCancellation == null && !_actionPending;
             BtnStart.IsEnabled = idle && _readyForBaseline;
-            BtnProfileStart.IsEnabled = idle && _readyForProfile && _baselineValid;
+            // La charge GPU est transitoire : elle est contrôlée à nouveau au clic.
+            // Un relevé ancien ne doit pas condamner le bouton jusqu'au prochain chargement de page.
+            BtnProfileStart.IsEnabled = idle && _baselineValid;
+            UpdateProfileButtonHint();
+        }
+
+        private void UpdateProfileButtonHint()
+        {
+            if (BtnProfileStart.IsEnabled)
+            {
+                TxtProfileButtonHint.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            TxtProfileButtonHint.Text = _runningProfile
+                ? "Mesure en cours"
+                : _runCancellation != null
+                    ? "Mesure de référence en cours"
+                    : _actionPending
+                        ? "Vérification en cours"
+                        : "Référence stock requise";
+            TxtProfileButtonHint.Visibility = Visibility.Visible;
         }
 
         private bool TryBeginAction()
@@ -462,6 +621,7 @@ namespace Optimisation_Tool.Pages
             BtnRefresh.IsEnabled = false;
             BtnStart.IsEnabled = false;
             BtnProfileStart.IsEnabled = false;
+            UpdateProfileButtonHint();
             return true;
         }
 
@@ -504,6 +664,9 @@ namespace Optimisation_Tool.Pages
                     .Replace("decode", "décodage", StringComparison.OrdinalIgnoreCase)
                     .Replace("observations", "relevés", StringComparison.OrdinalIgnoreCase)
                     .Replace("consecutive", "consécutifs", StringComparison.OrdinalIgnoreCase);
+            if (reason.Contains("different workload package", StringComparison.OrdinalIgnoreCase)
+                || reason.Contains("predates workload package fingerprinting", StringComparison.OrdinalIgnoreCase))
+                return "Les outils de test ont changé depuis cette mesure. Refais la référence stock avant toute comparaison.";
             if (reason.Contains("stock baseline", StringComparison.OrdinalIgnoreCase))
                 return "La référence stock n'est pas encore valide.";
             if (reason.Contains("different GPU, VBIOS, or driver", StringComparison.OrdinalIgnoreCase))
@@ -518,6 +681,19 @@ namespace Optimisation_Tool.Pages
                 return "La limite de puissance ne correspond pas à la valeur d'origine du GPU.";
             if (reason.Contains("memory clock", StringComparison.OrdinalIgnoreCase))
                 return "La fréquence mémoire dépasse la valeur d'origine détectée.";
+            if (reason.Contains("loaded voltage", StringComparison.OrdinalIgnoreCase))
+                return "La tension réellement observée sous charge ne correspond pas à la tension saisie.";
+            if (reason.Contains("loaded GPU clock", StringComparison.OrdinalIgnoreCase))
+                return "La fréquence réellement observée sous charge ne correspond pas à la fréquence saisie.";
+            if (reason.Contains("observed memory offset", StringComparison.OrdinalIgnoreCase))
+                return "Le décalage mémoire réellement observé ne correspond pas à la valeur saisie.";
+            if (reason.Contains("observed Power Limit", StringComparison.OrdinalIgnoreCase)
+                || reason.Contains("power-limit telemetry", StringComparison.OrdinalIgnoreCase))
+                return "Le Power Limit réellement observé ne correspond pas à la valeur saisie.";
+            if (reason.Contains("telemetry coverage", StringComparison.OrdinalIgnoreCase))
+                return "La télémétrie est incomplète. Le résultat n'est pas comparé au stock.";
+            if (reason.Contains("stability evidence", StringComparison.OrdinalIgnoreCase))
+                return "Les journaux de stabilité Windows n'ont pas pu être vérifiés. Le résultat est refusé.";
             return reason;
         }
 
@@ -540,16 +716,18 @@ namespace Optimisation_Tool.Pages
             => double.TryParse(value.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out result)
                || double.TryParse(value.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out result);
 
-        private static EvaluationPolicy LoadPolicy()
+        private static (EvaluationPolicy Policy, string Error) LoadPolicy()
         {
             try
             {
-                return EvaluationPolicyStore.Load(PathLayout.GpuTuningPolicy);
+                return (EvaluationPolicyStore.Load(PathLayout.GpuTuningPolicy), "");
             }
             catch (Exception ex)
             {
                 AppLog.Error("Optimisation GPU : politique d'évaluation", ex);
-                return new EvaluationPolicy { SamplingIntervalMs = 500 };
+                return (
+                    new EvaluationPolicy { SamplingIntervalMs = 500 },
+                    ex.GetBaseException().Message);
             }
         }
     }

@@ -38,6 +38,7 @@ public sealed record GpuBaselineStatus(
 public sealed record GpuProfileMeasurementResult(
     TestRun Run,
     RunSummary Summary,
+    ProfileApplicationAssessment Application,
     ProfileComparison? Comparison,
     Recommendation Recommendation,
     string SessionPath,
@@ -248,7 +249,11 @@ public sealed class LocalGpuLabService
                 definitions,
                 cancellationToken,
                 suiteProgress).ConfigureAwait(false);
-            run = run with { BatchId = batchId };
+            run = run with
+            {
+                BatchId = batchId,
+                WorkloadPackageFingerprint = readiness.Package.Fingerprint
+            };
             batchRuns.Add(run);
             allRuns.Add(run);
             await LabStore.SaveAsync(
@@ -258,29 +263,62 @@ public sealed class LocalGpuLabService
             if (run.Workloads.Any(static workload => !workload.Completed)) break;
         }
 
-        BaselineValidationResult validation = BaselineValidator.Validate(batchRuns, _policy);
+        BaselineValidationResult validation = BaselineValidator.Validate(
+            batchRuns,
+            _policy,
+            readiness.Package.Fingerprint);
         return new GpuBaselineExecutionResult(batchId, batchRuns, validation, sessionPath);
     }
 
     public async Task<GpuBaselineStatus> GetLatestBaselineStatusAsync(
         string sessionPath,
+        string? currentPackageFingerprint = null,
+        GpuIdentity? currentIdentity = null,
         CancellationToken cancellationToken = default)
     {
         LabSession session = await LabStore.LoadAsync(sessionPath, cancellationToken).ConfigureAwait(false);
-        TestRun[] runs = BaselineRunSelector.LatestValidOrLatest(session, _policy);
+        TestRun[] runs = BaselineRunSelector.LatestValidOrLatest(
+            session,
+            _policy,
+            currentPackageFingerprint);
         if (runs.Length == 0) return new(false, null, null, 0, null);
-        return new(true, runs[0].BatchId, runs[0].StartedAt, runs.Length, BaselineValidator.Validate(runs, _policy));
+        BaselineValidationResult validation = BaselineValidator.Validate(
+            runs,
+            _policy,
+            currentPackageFingerprint);
+        if (validation.Valid
+            && currentIdentity != null
+            && !GpuIdentityCompatibility.SameMeasurementEnvironment(runs[0].Identity, currentIdentity))
+        {
+            validation = new BaselineValidationResult(
+                false,
+                validation.ScoreCoefficientOfVariationPercent,
+                ["The stock baseline was measured with a different GPU, VBIOS, or driver."]);
+        }
+        return new(
+            true,
+            runs[0].BatchId,
+            runs[0].StartedAt,
+            runs.Length,
+            validation);
     }
 
     public async Task<GpuAdviceStatus> GetInitialProfileAdviceAsync(
         string sessionPath,
         string evidencePath,
         GpuIdentity? currentIdentity = null,
+        string? currentPackageFingerprint = null,
         CancellationToken cancellationToken = default)
     {
         LabSession session = await LabStore.LoadAsync(sessionPath, cancellationToken).ConfigureAwait(false);
-        TestRun[] baselineRuns = BaselineRunSelector.LatestValidOrLatest(session, _policy);
-        BaselineValidationResult validation = BaselineValidator.Validate(baselineRuns, _policy);
+        TestRun[] baselineRuns = BaselineRunSelector.LatestValidOrLatest(
+            session,
+            _policy,
+            currentPackageFingerprint);
+        BaselineValidationResult validation = BaselineValidator.Validate(
+            baselineRuns,
+            _policy,
+            currentPackageFingerprint);
         if (!validation.Valid || baselineRuns.Length == 0)
             return new(false, "La mesure stock doit être valide avant de calculer un profil.", null);
 
@@ -310,16 +348,29 @@ public sealed class LocalGpuLabService
             throw new ArgumentOutOfRangeException(nameof(profile), "Target voltage must be between 600 mV and 1 200 mV.");
         if (profile.TargetClockMhz is not (>= 300 and <= 4_000))
             throw new ArgumentOutOfRangeException(nameof(profile), "Target clock must be between 300 MHz and 4 000 MHz.");
+        if (profile.MemoryOffsetMhz is < -4_000 or > 4_000)
+            throw new ArgumentOutOfRangeException(nameof(profile), "Memory offset must be between -4 000 MHz and +4 000 MHz.");
+        if (profile.PowerLimitPercent is not (>= 20 and <= 150))
+            throw new ArgumentOutOfRangeException(nameof(profile), "Power Limit must be between 20 % and 150 %.");
+        if (string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length is < 2 or > 60)
+            throw new ArgumentException("Profile name must contain between 2 and 60 characters.", nameof(profile));
         if (workloadSeconds < _policy.MinimumBaselineWorkloadSeconds || workloadSeconds > 120)
             throw new ArgumentOutOfRangeException(nameof(workloadSeconds));
 
         GpuLabReadiness readiness = await InspectAsync(workloadPackageRoot, cancellationToken).ConfigureAwait(false);
         if (!readiness.ReadyForProfile)
             throw new InvalidOperationException(string.Join(" | ", readiness.ProfileBlockingReasons));
+        ValidatePowerLimitAgainstHardware(profile, readiness.LatestSample);
 
         LabSession session = await LabStore.LoadAsync(sessionPath, cancellationToken).ConfigureAwait(false);
-        TestRun[] baselineRuns = BaselineRunSelector.LatestValidOrLatest(session, _policy);
-        BaselineValidationResult baselineValidation = BaselineValidator.Validate(baselineRuns, _policy);
+        TestRun[] baselineRuns = BaselineRunSelector.LatestValidOrLatest(
+            session,
+            _policy,
+            readiness.Package.Fingerprint);
+        BaselineValidationResult baselineValidation = BaselineValidator.Validate(
+            baselineRuns,
+            _policy,
+            readiness.Package.Fingerprint);
         if (!baselineValidation.Valid)
             throw new InvalidOperationException("A valid stock baseline is required: " + string.Join(" | ", baselineValidation.Reasons));
         TestRun baseline = BaselineConsolidator.Consolidate(baselineRuns, _policy);
@@ -351,43 +402,157 @@ public sealed class LocalGpuLabService
             definitions,
             cancellationToken,
             suiteProgress).ConfigureAwait(false);
-        run = run with { BatchId = Guid.NewGuid() };
+        run = run with
+        {
+            BatchId = Guid.NewGuid(),
+            WorkloadPackageFingerprint = readiness.Package.Fingerprint
+        };
         await LabStore.SaveAsync(
             sessionPath,
             session with { Runs = session.Runs.Append(run).ToArray() },
             cancellationToken).ConfigureAwait(false);
 
-        RunSummary summary = RunAnalyzer.Summarize(run, _policy);
-        ProfileComparison? comparison = run.Workloads.All(static workload => workload.Completed)
-            ? ProfileEvaluator.Compare(baseline, run, _policy)
-            : null;
-        Recommendation recommendation = RecommendationEngine.Recommend(
+        return await BuildProfileMeasurementResultAsync(
             baseline,
             run,
+            sessionPath,
+            evidencePath,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<GpuProfileMeasurementResult?> GetLatestProfileMeasurementResultAsync(
+        string sessionPath,
+        string? evidencePath,
+        GpuIdentity? currentIdentity,
+        string currentPackageFingerprint,
+        CancellationToken cancellationToken = default)
+    {
+        if (currentIdentity == null || string.IsNullOrWhiteSpace(currentPackageFingerprint))
+            return null;
+
+        LabSession session = await LabStore.LoadAsync(sessionPath, cancellationToken).ConfigureAwait(false);
+        TestRun[] baselineRuns = BaselineRunSelector.LatestValidOrLatest(
+            session,
             _policy,
-            trustedSearchEnvelopeAvailable: false);
-        GpuAdviceStatus? nextAdvice = null;
-        if (!string.IsNullOrWhiteSpace(evidencePath) && File.Exists(evidencePath))
-        {
-            PublishedTuningEvidence[] evidence = await GpuEvidenceStore.LoadPublishedAsync(
-                evidencePath,
-                cancellationToken).ConfigureAwait(false);
-            nextAdvice = GpuProfileAdvisor.BuildNext(
+            currentPackageFingerprint);
+        BaselineValidationResult validation = BaselineValidator.Validate(
+            baselineRuns,
+            _policy,
+            currentPackageFingerprint);
+        if (!validation.Valid || baselineRuns.Length == 0)
+            return null;
+
+        TestRun baseline = BaselineConsolidator.Consolidate(baselineRuns, _policy);
+        if (!GpuIdentityCompatibility.SameMeasurementEnvironment(baseline.Identity, currentIdentity))
+            return null;
+
+        TestRun? latest = session.Runs
+            .Where(static run => run.Profile.Kind != ProfileKind.Stock)
+            .Where(run => string.Equals(
+                run.WorkloadPackageFingerprint,
+                currentPackageFingerprint,
+                StringComparison.OrdinalIgnoreCase))
+            .Where(run => GpuIdentityCompatibility.SameMeasurementEnvironment(run.Identity, currentIdentity))
+            .Where(static run => run.Workloads.Count > 0
+                                 && run.Workloads.All(static workload => workload.Completed))
+            .OrderByDescending(static run => run.StartedAt)
+            .FirstOrDefault();
+        if (latest == null)
+            return null;
+
+        return await BuildProfileMeasurementResultAsync(
+            baseline,
+            latest,
+            sessionPath,
+            evidencePath,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<GpuProfileMeasurementResult> BuildProfileMeasurementResultAsync(
+        TestRun baseline,
+        TestRun run,
+        string sessionPath,
+        string? evidencePath,
+        CancellationToken cancellationToken)
+    {
+        RunSummary summary = RunAnalyzer.Summarize(run, _policy);
+        ProfileApplicationAssessment application = ProfileApplicationVerifier.Assess(
+            baseline,
+            run,
+            _policy);
+        bool runUsable = run.Workloads.All(static workload => workload.Completed)
+                         && summary.Verdict is not (
+                             StabilityVerdict.Rejected or StabilityVerdict.InvalidTelemetry)
+                         && application.Verified;
+        ProfileComparison? comparison = runUsable
+            ? ProfileEvaluator.Compare(baseline, run, _policy)
+            : null;
+        Recommendation recommendation = application.Verified
+            ? RecommendationEngine.Recommend(
                 baseline,
                 run,
-                summary,
-                comparison,
                 _policy,
-                evidence);
+                trustedSearchEnvelopeAvailable: false)
+            : new Recommendation(
+                RecommendationKind.RepeatRun,
+                "The declared profile was not observed under load: " +
+                string.Join(" | ", application.BlockingReasons),
+                100);
+        GpuAdviceStatus? nextAdvice = null;
+        string nextAdviceFailure = "";
+        if (comparison != null
+            && !string.IsNullOrWhiteSpace(evidencePath)
+            && File.Exists(evidencePath))
+        {
+            try
+            {
+                PublishedTuningEvidence[] evidence = await GpuEvidenceStore.LoadPublishedAsync(
+                    evidencePath,
+                    cancellationToken).ConfigureAwait(false);
+                nextAdvice = GpuProfileAdvisor.BuildNext(
+                    baseline,
+                    run,
+                    summary,
+                    comparison,
+                    _policy,
+                    evidence);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                nextAdviceFailure =
+                    "The measurement remains available, but the next profile could not be calculated: " +
+                    ex.GetBaseException().Message;
+            }
         }
         return new GpuProfileMeasurementResult(
             run,
             summary,
+            application,
             comparison,
             recommendation,
             sessionPath,
             nextAdvice?.Suggestion,
-            nextAdvice?.Message ?? "");
+            nextAdvice?.Message ?? nextAdviceFailure);
+    }
+
+    private static void ValidatePowerLimitAgainstHardware(
+        GpuTuningProfile profile,
+        GpuTelemetrySample? capability)
+    {
+        if (profile.PowerLimitPercent is not double percent || capability == null)
+            return;
+        if (capability.DefaultPowerLimitW is not double defaultW
+            || capability.MinPowerLimitW is not double minimumW
+            || capability.MaxPowerLimitW is not double maximumW
+            || defaultW <= 0)
+            return;
+        double requestedW = defaultW * percent / 100.0;
+        const double toleranceW = 0.5;
+        if (requestedW < minimumW - toleranceW || requestedW > maximumW + toleranceW)
+            throw new ArgumentOutOfRangeException(
+                nameof(profile),
+                $"Power Limit {percent:0.0} % requests {requestedW:0.0} W; " +
+                $"this GPU allows {minimumW:0.0} W to {maximumW:0.0} W.");
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
@@ -398,7 +563,10 @@ public sealed class LocalGpuLabService
 
 public static class BaselineRunSelector
 {
-    public static TestRun[] LatestValidOrLatest(LabSession session, EvaluationPolicy policy)
+    public static TestRun[] LatestValidOrLatest(
+        LabSession session,
+        EvaluationPolicy policy,
+        string? expectedPackageFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(policy);
@@ -408,7 +576,8 @@ public static class BaselineRunSelector
             .OrderByDescending(static group => group.Max(run => run.StartedAt))
             .Select(static group => group.OrderBy(run => run.StartedAt).ToArray())
             .ToArray();
-        return groups.FirstOrDefault(group => BaselineValidator.Validate(group, policy).Valid)
+        return groups.FirstOrDefault(group =>
+                   BaselineValidator.Validate(group, policy, expectedPackageFingerprint).Valid)
                ?? groups.FirstOrDefault()
                ?? [];
     }

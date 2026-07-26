@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "boards": [
+    {
+      "manufacturer": "ASUS",
+      "models": [
+        "TUF GAMING B860-PLUS WIFI"
+      ],
+      "channels": [
+        { "index": 0, "header": "CHA_FAN1", "role": "Chassis" },
+        { "index": 1, "header": "CPU_FAN", "role": "Cpu" },
+        { "index": 2, "header": "CHA_FAN2", "role": "Chassis" },
+        { "index": 3, "header": "CHA_FAN3", "role": "Chassis" },
+        { "index": 4, "header": "CHA_FAN4", "role": "Chassis" },
+        { "index": 5, "header": "AIO_PUMP", "role": "Pump" }
+      ]
+    }
+  ]
+}

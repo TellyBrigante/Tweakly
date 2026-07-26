@@ -8,6 +8,22 @@ using Microsoft.Win32;
 
 namespace Optimisation_Tool.Helpers
 {
+    internal sealed class CleanupEstimateResult
+    {
+        public long Bytes { get; init; }
+        public int Files { get; init; }
+        public int Skipped { get; init; }
+        public bool Available { get; init; } = true;
+
+        public static CleanupEstimateResult Combine(params CleanupEstimateResult[] results) => new()
+        {
+            Bytes = results.Sum(result => result.Bytes),
+            Files = results.Sum(result => result.Files),
+            Skipped = results.Sum(result => result.Skipped),
+            Available = results.All(result => result.Available),
+        };
+    }
+
     internal sealed class CleanupOperationResult
     {
         public long Freed { get; init; }
@@ -62,6 +78,53 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     internal static class CleanupOperations
     {
+        public static CleanupEstimateResult EstimateFolder(string path, string searchPattern = "*", bool recursive = true)
+        {
+            if (!Directory.Exists(path))
+                return new CleanupEstimateResult();
+
+            try
+            {
+                using IEnumerator<string> accessProbe = Directory
+                    .EnumerateFileSystemEntries(path, "*", SearchOption.TopDirectoryOnly)
+                    .GetEnumerator();
+                _ = accessProbe.MoveNext();
+            }
+            catch
+            {
+                return new CleanupEstimateResult { Available = false, Skipped = 1 };
+            }
+
+            long bytes = 0;
+            int files = 0;
+            int skipped = 0;
+            var options = CreateEnumerationOptions(recursive);
+
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(path, searchPattern, options))
+                {
+                    try
+                    {
+                        var info = new FileInfo(file);
+                        if (!info.Exists) continue;
+                        bytes += info.Length;
+                        files++;
+                    }
+                    catch
+                    {
+                        skipped++;
+                    }
+                }
+            }
+            catch
+            {
+                skipped++;
+            }
+
+            return new CleanupEstimateResult { Bytes = bytes, Files = files, Skipped = skipped };
+        }
+
         public static CleanupOperationResult CleanFolder(string path)
         {
             if (!Directory.Exists(path))
@@ -70,11 +133,7 @@ namespace Optimisation_Tool.Helpers
             long freed = 0;
             int ops = 0;
             int skipped = 0;
-            var options = new EnumerationOptions
-            {
-                RecurseSubdirectories = true,
-                IgnoreInaccessible = true,
-            };
+            var options = CreateEnumerationOptions(recursive: true);
 
             List<string> files;
             try
@@ -111,11 +170,16 @@ namespace Optimisation_Tool.Helpers
 
             try
             {
-                foreach (string directory in Directory.EnumerateDirectories(path).ToList())
+                // Les fichiers système, cachés et les points de jonction sont volontairement
+                // exclus plus haut. Ne jamais contourner cette protection avec une suppression
+                // récursive du dossier parent : seuls les dossiers réellement vides sont retirés.
+                foreach (string directory in Directory
+                             .EnumerateDirectories(path, "*", options)
+                             .OrderByDescending(static directory => directory.Length))
                 {
                     try
                     {
-                        Directory.Delete(directory, recursive: true);
+                        Directory.Delete(directory, recursive: false);
                         ops++;
                     }
                     catch
@@ -249,11 +313,12 @@ namespace Optimisation_Tool.Helpers
             CleanupOperationResult registry = CleanOrphanUninstallEntries();
             CleanupOperationResult? shortcuts = null;
             Exception? threadError = null;
+            var cancellation = new CancellationTokenSource();
             var thread = new Thread(() =>
             {
                 try
                 {
-                    shortcuts = CleanBrokenShortcuts();
+                    shortcuts = CleanBrokenShortcuts(cancellation.Token);
                 }
                 catch (Exception ex)
                 {
@@ -269,15 +334,17 @@ namespace Optimisation_Tool.Helpers
 
             if (!thread.Join(20_000))
             {
+                cancellation.Cancel();
+                _ = thread.Join(2_000);
                 AppLog.WriteOnce("cleanup-shortcuts-timeout", "Nettoyage : l'analyse des raccourcis a dépassé 20 000 ms.");
                 shortcuts = new CleanupOperationResult
                 {
-                    Errors = 1,
-                    Summary = "Analyse des raccourcis interrompue",
+                    Skipped = 1,
+                    Summary = "Analyse des raccourcis arrêtée",
                     Details = { "Analyse des raccourcis : délai de 20 000 ms dépassé" },
                 };
             }
-            else if (threadError != null)
+            else if (threadError is not null)
             {
                 AppLog.ErrorOnce("cleanup-shortcuts-thread", "Nettoyage : analyse des raccourcis échouée", threadError);
                 shortcuts = new CleanupOperationResult
@@ -330,20 +397,12 @@ namespace Optimisation_Tool.Helpers
                     {
                         try
                         {
-                            string? displayName;
-                            string? installLocation;
                             using (RegistryKey? key = root.OpenSubKey(subKeyName))
                             {
                                 if (key == null) continue;
-                                displayName = key.GetValue("DisplayName") as string;
-                                installLocation = key.GetValue("InstallLocation") as string;
+                                if (!IsProvablyOrphanedUninstallEntry(key))
+                                    continue;
                             }
-
-                            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(installLocation)) continue;
-                            installLocation = installLocation.Trim().Trim('"').TrimEnd('\\');
-                            if (installLocation.Length < 4 || !installLocation.Contains(":\\", StringComparison.Ordinal)) continue;
-                            string? drive = Path.GetPathRoot(installLocation);
-                            if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive) || Directory.Exists(installLocation)) continue;
 
                             root.DeleteSubKeyTree(subKeyName, throwOnMissingSubKey: false);
                             removed++;
@@ -373,7 +432,105 @@ namespace Optimisation_Tool.Helpers
             };
         }
 
-        private static CleanupOperationResult CleanBrokenShortcuts()
+        internal static bool IsProvablyOrphanedUninstallEntry(RegistryKey key)
+        {
+            ArgumentNullException.ThrowIfNull(key);
+
+            string? displayName = key.GetValue("DisplayName") as string;
+            string? installLocation = key.GetValue("InstallLocation") as string;
+            string? uninstallString = key.GetValue("UninstallString") as string;
+            if (string.IsNullOrWhiteSpace(displayName)
+                || string.IsNullOrWhiteSpace(installLocation)
+                || string.IsNullOrWhiteSpace(uninstallString))
+                return false;
+
+            if (ReadDword(key, "WindowsInstaller") == 1
+                || ReadDword(key, "SystemComponent") == 1
+                || ReadDword(key, "NoRemove") == 1
+                || !string.IsNullOrWhiteSpace(key.GetValue("ParentKeyName") as string)
+                || !string.IsNullOrWhiteSpace(key.GetValue("ReleaseType") as string))
+                return false;
+
+            string normalizedLocation = NormalizeAbsolutePath(installLocation, requireExecutable: false);
+            if (normalizedLocation.Length == 0
+                || !DriveExists(normalizedLocation)
+                || Directory.Exists(normalizedLocation))
+                return false;
+
+            string executable = ExtractExecutablePath(uninstallString);
+            if (executable.Length == 0
+                || !DriveExists(executable)
+                || File.Exists(executable))
+                return false;
+
+            string displayIcon = NormalizeAbsolutePath(
+                (key.GetValue("DisplayIcon") as string ?? "").Split(',')[0],
+                requireExecutable: true);
+            if (displayIcon.Length > 0 && File.Exists(displayIcon))
+                return false;
+
+            return true;
+        }
+
+        private static int ReadDword(RegistryKey key, string name)
+            => key.GetValue(name) is int value ? value : 0;
+
+        private static bool DriveExists(string path)
+        {
+            string? root = Path.GetPathRoot(path);
+            return !string.IsNullOrWhiteSpace(root) && Directory.Exists(root);
+        }
+
+        private static string ExtractExecutablePath(string command)
+        {
+            string expanded = Environment.ExpandEnvironmentVariables(command).Trim();
+            if (expanded.Length == 0)
+                return "";
+
+            string candidate;
+            if (expanded[0] == '"')
+            {
+                int closingQuote = expanded.IndexOf('"', 1);
+                if (closingQuote <= 1)
+                    return "";
+                candidate = expanded[1..closingQuote];
+            }
+            else
+            {
+                int executableEnd = expanded.IndexOf(
+                    ".exe",
+                    StringComparison.OrdinalIgnoreCase);
+                if (executableEnd < 0)
+                    return "";
+                candidate = expanded[..(executableEnd + 4)];
+            }
+
+            return NormalizeAbsolutePath(candidate, requireExecutable: true);
+        }
+
+        private static string NormalizeAbsolutePath(string value, bool requireExecutable)
+        {
+            string candidate = Environment.ExpandEnvironmentVariables(value)
+                .Trim()
+                .Trim('"')
+                .TrimEnd('\\');
+            if (!Path.IsPathFullyQualified(candidate))
+                return "";
+            if (requireExecutable
+                && !candidate.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                return "";
+
+            try
+            {
+                return Path.GetFullPath(candidate);
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        private static CleanupOperationResult CleanBrokenShortcuts(CancellationToken cancellationToken)
         {
             int removed = 0;
             int skipped = 0;
@@ -398,6 +555,7 @@ namespace Optimisation_Tool.Helpers
                 var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
                 foreach (string directory in directories)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     if (!Directory.Exists(directory)) continue;
 
                     List<string> shortcuts;
@@ -413,6 +571,7 @@ namespace Optimisation_Tool.Helpers
 
                     foreach (string shortcutPath in shortcuts)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         object? shortcut = null;
                         try
                         {
@@ -432,6 +591,7 @@ namespace Optimisation_Tool.Helpers
                             string? drive = Path.GetPathRoot(target);
                             if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive) || File.Exists(target)) continue;
 
+                            cancellationToken.ThrowIfCancellationRequested();
                             File.Delete(shortcutPath);
                             removed++;
                         }
@@ -465,6 +625,14 @@ namespace Optimisation_Tool.Helpers
             if (value != null && Marshal.IsComObject(value))
                 Marshal.FinalReleaseComObject(value);
         }
+
+        private static EnumerationOptions CreateEnumerationOptions(bool recursive) => new()
+        {
+            RecurseSubdirectories = recursive,
+            IgnoreInaccessible = true,
+            ReturnSpecialDirectories = false,
+            AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
+        };
 
     }
 }

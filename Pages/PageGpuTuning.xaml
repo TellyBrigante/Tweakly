@@ -237,7 +237,7 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Point de départ calculé" Foreground="{DynamicResource ThTextTitle}"
+                            <TextBlock x:Name="TxtAdviceTitle" Text="Point de départ calculé" Foreground="{DynamicResource ThTextTitle}"
                                        FontFamily="{StaticResource AppFont}" FontSize="15" FontWeight="SemiBold"/>
                             <TextBlock x:Name="TxtAdviceConfidence" Text="—" Margin="9,0,0,0"
                                        Foreground="{DynamicResource ThTextNav}" Background="{DynamicResource ThPill}"
@@ -330,6 +330,10 @@
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                         <Button x:Name="BtnProfileStart" Content="MESURER CE PROFIL"
                                 Style="{StaticResource PrimaryBtnStyle}" Click="BtnProfileStart_Click"/>
+                        <TextBlock x:Name="TxtProfileButtonHint" Margin="10,0,0,0"
+                                   VerticalAlignment="Center" Visibility="Collapsed"
+                                   Foreground="{DynamicResource ThWarn}" FontFamily="{StaticResource AppFont}"
+                                   FontSize="10.5" FontWeight="SemiBold"/>
                         <Button x:Name="BtnProfileCancel" Content="ANNULER" Margin="8,0,0,0"
                                 Style="{StaticResource SecondaryBtnStyle}" Click="BtnCancel_Click"
                                 Visibility="Collapsed"/>
@@ -347,7 +351,7 @@
                         </Grid.ColumnDefinitions>
                         <Border Grid.Column="0" Background="{DynamicResource ThPill}" CornerRadius="6" Padding="11,9">
                             <StackPanel>
-                                <TextBlock Text="PERFORMANCE" Style="{StaticResource GpuLabel}"/>
+                                <TextBlock Text="PERFORMANCE VS STOCK" Style="{StaticResource GpuLabel}"/>
                                 <TextBlock x:Name="TxtResultPerformance" Text="— %" Style="{StaticResource GpuValue}" Margin="0,3,0,0"/>
                             </StackPanel>
                         </Border>

@@ -120,7 +120,8 @@ public sealed class MemtestVulkanWorkloadRunner : IWorkloadRunner
         var output = new StringBuilder();
         DateTimeOffset startedAt = DateTimeOffset.Now;
         var timer = Stopwatch.StartNew();
-        process.Start();
+        if (!process.Start())
+            throw new InvalidOperationException("memtest_vulkan could not be started.");
         using var contaminationStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         Task<GpuContaminationResult>? contaminationTask = _contaminationMonitor?.ObserveAsync(
             process.Id,

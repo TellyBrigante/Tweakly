@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -13,6 +14,10 @@ namespace Optimisation_Tool.Pages
     {
         private readonly MainWindow _main;
         private bool _isRunning;
+        private int _estimateGeneration;
+        private readonly Dictionary<string, CleanupEstimateResult> _estimates = new();
+        private readonly SemaphoreSlim _estimateLock = new(1, 1);
+        private DateTime _estimatesUpdatedAt = DateTime.MinValue;
 
         private sealed class StepUi
         {
@@ -34,9 +39,10 @@ namespace Optimisation_Tool.Pages
             InitializeComponent();
         }
 
-        private void UserControl_Loaded(object sender, RoutedEventArgs e)
+        private async void UserControl_Loaded(object sender, RoutedEventArgs e)
         {
             UpdateSelectionVisuals();
+            await RefreshEstimatesAsync();
         }
 
         private void Row_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -151,6 +157,7 @@ namespace Optimisation_Tool.Pages
             _isRunning = false;
             BtnLancer.IsEnabled = true;
             UpdateSelectionVisuals(keepFinished: true);
+            await RefreshEstimatesAsync(force: true);
         }
 
         private StepUi[] GetStepUis() =>
@@ -168,7 +175,6 @@ namespace Optimisation_Tool.Pages
         private List<StepPlan> BuildSelectedSteps()
         {
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            string roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var uis = GetStepUis().ToDictionary(x => x.Check);
             var steps = new List<StepPlan>();
 
@@ -210,8 +216,9 @@ namespace Optimisation_Tool.Pages
                     Ui = uis[ChkNvCache],
                     RunningText = "Nettoyage...",
                     Work = () => CleanupOperationResult.Combine(
-                        CleanupOperations.CleanFolder(Path.Combine(local, "NVIDIA", "DXCache")),
-                        CleanupOperations.CleanFolder(Path.Combine(roaming, "NVIDIA", "GLCache")))
+                        NvidiaCachePaths(local)
+                            .Select(CleanupOperations.CleanFolder)
+                            .ToArray())
                 });
 
             if (ChkTrimSSD.IsChecked == true)
@@ -258,9 +265,119 @@ namespace Optimisation_Tool.Pages
             ui.Progress.IsIndeterminate = false;
             ui.Progress.Value = 0;
             ui.Progress.SetResourceReference(Control.ForegroundProperty, "ThAccentIcon");
-            ui.Status.Text = ui.Check.IsChecked == true ? "Prêt" : "Désactivé";
-            ui.Status.SetResourceReference(ForegroundProperty,
-                ui.Check.IsChecked == true ? "ThTextSub" : "ThTextDim");
+            ui.Status.Text = GetIdleStatus(ui);
+            bool secondary = ui.Check.Name is nameof(ChkTrimSSD) or nameof(ChkResidues)
+                || (_estimates.TryGetValue(ui.Check.Name, out CleanupEstimateResult? estimate)
+                    && !estimate.Available);
+            ui.Status.SetResourceReference(ForegroundProperty, secondary ? "ThTextDim" : "ThTextSub");
+        }
+
+        private async Task RefreshEstimatesAsync(bool force = false)
+        {
+            if (_isRunning) return;
+
+            await _estimateLock.WaitAsync();
+            try
+            {
+                if (_isRunning) return;
+                if (!force
+                    && _estimates.Count > 0
+                    && DateTime.UtcNow - _estimatesUpdatedAt < TimeSpan.FromMinutes(1))
+                {
+                    UpdateSelectionVisuals();
+                    return;
+                }
+
+                int generation = Interlocked.Increment(ref _estimateGeneration);
+                foreach (StepUi ui in GetStepUis())
+                {
+                    if (ui.Check.Name == nameof(ChkTrimSSD))
+                    {
+                        ui.Status.Text = "Optimisation, aucun fichier supprimé";
+                        ui.Status.SetResourceReference(ForegroundProperty, "ThTextDim");
+                        continue;
+                    }
+
+                    if (ui.Check.Name == nameof(ChkResidues))
+                    {
+                        ui.Status.Text = "Registre et raccourcis, taille négligeable";
+                        ui.Status.SetResourceReference(ForegroundProperty, "ThTextDim");
+                        continue;
+                    }
+
+                    ui.Status.Text = "Calcul en cours...";
+                    ui.Status.SetResourceReference(ForegroundProperty, "ThTextDim");
+                }
+
+                string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string eventLogs = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "System32", "winevt", "Logs");
+
+                var work = new (StepUi Ui, Func<CleanupEstimateResult> Measure)[]
+                {
+                    (GetStepUi(ChkTemp), () => CleanupOperations.EstimateFolder(Path.GetTempPath())),
+                    (GetStepUi(ChkSystemTemp), () => CleanupOperations.EstimateFolder(@"C:\Windows\Temp")),
+                    (GetStepUi(ChkPrefetch), () => CleanupOperations.EstimateFolder(@"C:\Windows\Prefetch")),
+                    (GetStepUi(ChkDXCache), () => CleanupOperations.EstimateFolder(Path.Combine(local, "D3DSCache"))),
+                    (GetStepUi(ChkNvCache), () => CleanupEstimateResult.Combine(
+                        NvidiaCachePaths(local)
+                            .Select(static path => CleanupOperations.EstimateFolder(path))
+                            .ToArray())),
+                    (GetStepUi(ChkEventLogs), () => CleanupOperations.EstimateFolder(eventLogs, "*.evtx", recursive: false)),
+                };
+
+                foreach ((StepUi ui, Func<CleanupEstimateResult> measure) in work)
+                {
+                    CleanupEstimateResult estimate = await Task.Run(measure);
+                    if (generation != _estimateGeneration || _isRunning) return;
+
+                    _estimates[ui.Check.Name] = estimate;
+                    ui.Status.Text = FormatEstimate(estimate);
+                    ui.Status.SetResourceReference(ForegroundProperty, "ThTextSub");
+                }
+
+                _estimatesUpdatedAt = DateTime.UtcNow;
+            }
+            finally
+            {
+                _estimateLock.Release();
+            }
+        }
+
+        private StepUi GetStepUi(CheckBox check) =>
+            GetStepUis().First(ui => ReferenceEquals(ui.Check, check));
+
+        private static string[] NvidiaCachePaths(string localApplicationData) =>
+        [
+            Path.Combine(localApplicationData, "NVIDIA", "DXCache"),
+            Path.Combine(localApplicationData, "NVIDIA", "GLCache"),
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "NVIDIA Corporation",
+                "NV_Cache"),
+        ];
+
+        private string GetIdleStatus(StepUi ui)
+        {
+            if (ui.Check.Name == nameof(ChkTrimSSD))
+                return "Optimisation, aucun fichier supprimé";
+            if (ui.Check.Name == nameof(ChkResidues))
+                return "Registre et raccourcis, taille négligeable";
+            return _estimates.TryGetValue(ui.Check.Name, out CleanupEstimateResult? estimate)
+                ? FormatEstimate(estimate)
+                : "Calcul en cours...";
+        }
+
+        private static string FormatEstimate(CleanupEstimateResult estimate)
+        {
+            if (!estimate.Available)
+                return "Analyse indisponible";
+
+            string size = FormatBytes(estimate.Bytes);
+            return estimate.Skipped > 0
+                ? $"Jusqu'à {size} récupérables"
+                : $"{size} récupérables";
         }
 
         private static void SetStepRunning(StepUi ui, string text)

@@ -444,10 +444,11 @@ namespace Optimisation_Tool.Helpers
                 StandardErrorEncoding = ConsoleEncoding,
             };
             using var process = new Process { StartInfo = psi };
-            process.Start();
+            if (!process.Start())
+                return new CommandResult(-1, "", "Le processus n'a pas pu démarrer.");
 
-            Task<string> stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            Task<string> stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+            Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+            Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(timeout);
 
@@ -455,13 +456,60 @@ namespace Optimisation_Tool.Helpers
             {
                 await process.WaitForExitAsync(timeoutCts.Token);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
-                return new CommandResult(-1, await stdout, await stderr + "\nDélai dépassé.");
+                string stopError = await StopProcessBoundedAsync(process);
+                if (cancellationToken.IsCancellationRequested)
+                    throw new OperationCanceledException(cancellationToken);
+
+                string output = await ReadCompletedOrEmptyAsync(stdout);
+                string error = await ReadCompletedOrEmptyAsync(stderr);
+                string suffix = string.IsNullOrWhiteSpace(stopError)
+                    ? "Délai dépassé."
+                    : $"Délai dépassé. {stopError}";
+                return new CommandResult(-1, output,
+                    string.IsNullOrWhiteSpace(error)
+                        ? suffix
+                        : error.Trim() + Environment.NewLine + suffix);
             }
 
             return new CommandResult(process.ExitCode, await stdout, await stderr);
+        }
+
+        private static async Task<string> StopProcessBoundedAsync(Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
+            catch (Exception ex)
+            {
+                return "Arrêt forcé impossible : " + ex.Message;
+            }
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+                return "";
+            }
+            catch (OperationCanceledException)
+            {
+                return "Le processus ne s'est pas arrêté sous 5 s.";
+            }
+            catch (InvalidOperationException)
+            {
+                return "";
+            }
+        }
+
+        private static async Task<string> ReadCompletedOrEmptyAsync(Task<string> readTask)
+        {
+            Task completed = await Task.WhenAny(readTask, Task.Delay(TimeSpan.FromSeconds(2)));
+            return completed == readTask && readTask.IsCompletedSuccessfully
+                ? readTask.Result
+                : "";
         }
 
         private static IncidentRepairResult Blocked(string message)

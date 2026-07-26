@@ -45,8 +45,10 @@ namespace Optimisation_Tool
             "EventLog",
             "GameSession",
             "CPU",
+            "Fans",
             "Nvidia",
             "GpuTuning",
+            "Registry",
         };
 
         // Settings persistants
@@ -69,6 +71,7 @@ namespace Optimisation_Tool
                 ["Nvidia"]    = new Lazy<UserControl>(() => new PageNvidia(this)),
                 ["GpuTuning"] = new Lazy<UserControl>(() => new PageGpuTuning()),
                 ["CPU"]       = new Lazy<UserControl>(() => new PageCPU(this)),
+                ["Fans"]      = new Lazy<UserControl>(() => new PageVentilation(this)),
                 ["Windows"]   = new Lazy<UserControl>(() => new PageWindows(this)),
                 ["Battery"]   = new Lazy<UserControl>(() => new PageBatteryCalibration(this)),
                 ["Reseau"]    = new Lazy<UserControl>(() => new PageReseau(this)),
@@ -76,6 +79,7 @@ namespace Optimisation_Tool
                 ["Apps"]      = new Lazy<UserControl>(() => new PageApps(this)),
                 ["Fresh"]     = new Lazy<UserControl>(() => new PageFresh(this)),
                 ["WinRepair"] = new Lazy<UserControl>(() => new PageWindowsRepair(this)),
+                ["Registry"]  = new Lazy<UserControl>(() => new PageRegistryInspection()),
                 ["Info"]      = new Lazy<UserControl>(() => new PageSpecs(this)),
                 ["Monitoring"]= new Lazy<UserControl>(() => new PageMonitoring(this)),
                 ["ReseauMon"] = new Lazy<UserControl>(() => new PageReseauMonitoring(this)),
@@ -93,9 +97,9 @@ namespace Optimisation_Tool
                 new NavGroup { Header = BtnNavMonitorGroup, Panel = MonitorGroupPanel, Label = "Surveiller",
                                Tags = new HashSet<string> { "Monitoring", "ReseauMon", "GameSession" } },
                 new NavGroup { Header = BtnNavOptimizeGroup, Panel = OptimizeGroupPanel, Label = "Optimiser",
-                               Tags = new HashSet<string> { "Windows", "Battery", "CPU", "Nvidia", "GpuTuning", "Reseau", "Privacy" } },
-                new NavGroup { Header = BtnNavRepairGroup, Panel = RepairGroupPanel, Label = "Réparer",
-                               Tags = new HashSet<string> { "WinRepair", "Nettoyage", "Apps" } },
+                               Tags = new HashSet<string> { "Windows", "Battery", "CPU", "Fans", "Nvidia", "GpuTuning", "Reseau", "Privacy" } },
+                new NavGroup { Header = BtnNavRepairGroup, Panel = RepairGroupPanel, Label = "Maintenance",
+                               Tags = new HashSet<string> { "WinRepair", "Nettoyage", "Registry", "Apps" } },
                 new NavGroup { Header = BtnNavPrepareGroup, Panel = PrepareGroupPanel, Label = "Réinstaller",
                                Tags = new HashSet<string> { "Fresh" } },
             };
@@ -120,6 +124,18 @@ namespace Optimisation_Tool
                 ApplyTheme(mode, persist: false);
                 ApplyNavigationMode(Settings.NavigationMode, persist: false);
                 try { FitToWorkArea(); } catch { }
+
+                // Fail-open : le profil de ventilation demarre seulement apres le premier
+                // affichage. Toute erreur conserve le controle BIOS et ne bloque jamais Tweakly.
+                try
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { _ = Helpers.FanRuntimeController.TryStartSavedProfileAsync(); }
+                        catch { Helpers.FanRuntimeController.StopAndRestore(); }
+                    }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                }
+                catch { Helpers.FanRuntimeController.StopAndRestore(); }
                 // Version affichée = source unique (PageReglages.AppVersion)
                 TxtVersion.Text = "v" + Pages.PageReglages.AppVersion;
 
@@ -446,7 +462,9 @@ namespace Optimisation_Tool
                 string.Equals(tag, "Nettoyage", StringComparison.Ordinal) ||
                 string.Equals(tag, "Windows",   StringComparison.Ordinal) ||
                 string.Equals(tag, "CPU",       StringComparison.Ordinal) ||
+                string.Equals(tag, "Fans",      StringComparison.Ordinal) ||
                 string.Equals(tag, "GpuTuning", StringComparison.Ordinal) ||
+                string.Equals(tag, "Registry",  StringComparison.Ordinal) ||
                 string.Equals(tag, "Reseau",    StringComparison.Ordinal) ||
                 string.Equals(tag, "Privacy",   StringComparison.Ordinal);
             ActivityLogPanel.Visibility = hideBottomLog ? Visibility.Collapsed : Visibility.Visible;
@@ -531,6 +549,9 @@ namespace Optimisation_Tool
 
             if (MainContent.Content is PageSpecs specs)
                 specs.RefreshThemeVisuals();
+
+            if (MainContent.Content is PageVentilation ventilation)
+                ventilation.RefreshThemeVisuals();
 
             _mini?.RefreshThemeVisuals();
         }
@@ -958,6 +979,7 @@ namespace Optimisation_Tool
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
             ShuttingDown = true;
+            try { Helpers.FanRuntimeController.StopAndRestore(); } catch { }
             try
             {
                 if (_pages.TryGetValue("Battery", out var batteryPage)
@@ -969,6 +991,11 @@ namespace Optimisation_Tool
                     && repairPage.IsValueCreated
                     && repairPage.Value is PageWindowsRepair repair)
                     repair.CancelForAppShutdown();
+
+                if (_pages.TryGetValue("Fans", out var fanPage)
+                    && fanPage.IsValueCreated
+                    && fanPage.Value is PageVentilation ventilation)
+                    ventilation.PrepareForAppShutdown();
             }
             catch { }
             // Retire la tray icon AVANT la fermeture (sinon elle reste affichée comme

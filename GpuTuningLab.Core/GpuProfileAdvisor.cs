@@ -155,14 +155,53 @@ public static class GpuProfileAdvisor
 
         int currentVoltage = candidate.Profile.TargetVoltageMv.Value;
         int currentClock = candidate.Profile.TargetClockMhz.Value;
+        int currentMemory = candidate.Profile.MemoryOffsetMhz ?? 0;
         int nextVoltage = currentVoltage;
         int nextClock = currentClock;
+        int nextMemory = currentMemory;
+        int? stockVoltage = AverageLoadedVoltageMv(baseline);
         string summaryText;
 
         if (!comparison.MeetsPerformanceFloor)
         {
-            nextVoltage = Math.Min(1_200, currentVoltage + policy.VoltageStepMv);
-            summaryText = $"La performance conserve {comparison.PerformanceIndex:0.0} % du stock. Le prochain essai remonte la tension de {policy.VoltageStepMv} mV sans changer le clock.";
+            bool aggregateFailed =
+                comparison.PerformanceIndex < policy.MinimumPerformanceRetentionPercent;
+            string weakestWorkload = DescribeWeakestWorkload(baseline, candidate).Trim();
+            string measuredFailure = aggregateFailed
+                ? $"Performance moyenne {comparison.PerformanceIndex:0.0} % du stock : " +
+                  $"{policy.MinimumPerformanceRetentionPercent - comparison.PerformanceIndex:0.0} point(s) " +
+                  $"sous le minimum de {policy.MinimumPerformanceRetentionPercent:0.0} %. {weakestWorkload}"
+                : $"{weakestWorkload} Le minimum par test est de " +
+                  $"{policy.MinimumIndividualWorkloadRetentionPercent:0.0} %.";
+            if (currentMemory != 0)
+            {
+                nextMemory = 0;
+                summaryText =
+                    measuredFailure + " " +
+                    $"La mémoire est à {currentMemory:+0;-0;0} MHz : on ne modifie pas la tension tant que cette variable n'est pas isolée. " +
+                    $"Prochain essai : {currentVoltage} mV, {currentClock} MHz, mémoire 0 MHz, Power Limit {candidate.Profile.PowerLimitPercent ?? 100} %. " +
+                    "Une seule valeur change.";
+            }
+            else
+            {
+                int maximumVoltage = stockVoltage ?? 1_200;
+                nextVoltage = Math.Min(maximumVoltage, currentVoltage + policy.VoltageStepMv);
+                if (nextVoltage == currentVoltage)
+                {
+                    nextClock = Math.Max(300, currentClock - 30);
+                    summaryText =
+                        measuredFailure + " " +
+                        $"La mémoire est à stock et la tension a déjà atteint la tension stock mesurée " +
+                        $"({maximumVoltage} mV). Prochain essai : {currentVoltage} mV, {nextClock} MHz, " +
+                        $"mémoire 0 MHz, Power Limit {candidate.Profile.PowerLimitPercent ?? 100} %.";
+                }
+                else
+                {
+                    summaryText =
+                        measuredFailure + " " +
+                        $"La mémoire est déjà à stock. Prochain essai : {nextVoltage} mV, {currentClock} MHz, mémoire 0 MHz, Power Limit {candidate.Profile.PowerLimitPercent ?? 100} %.";
+                }
+            }
         }
         else if (summary.ThermalLimitTimePercent > 0 || summary.PowerLimitTimePercent > 20)
         {
@@ -171,6 +210,7 @@ public static class GpuProfileAdvisor
         }
         else if (comparison.PerformanceIndex >= 99
                  && comparison.EfficiencyIndex >= 103
+                 && comparison.TemperatureDeltaC.HasValue
                  && comparison.TemperatureDeltaC <= 0)
         {
             int publicFloor = usable.Min(static item => item.Tuned.VoltageMv!.Value);
@@ -190,18 +230,22 @@ public static class GpuProfileAdvisor
             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
         var profile = new GpuTuningProfile
         {
-            Name = $"Essai {nextVoltage} mV",
+            Name = nextMemory == 0 && currentMemory != 0
+                ? "Validation mémoire stock"
+                : $"Essai {nextVoltage} mV",
             Kind = ProfileKind.Undervolt,
             TargetVoltageMv = nextVoltage,
             TargetClockMhz = nextClock,
-            MemoryOffsetMhz = candidate.Profile.MemoryOffsetMhz ?? 0,
+            MemoryOffsetMhz = nextMemory,
             PowerLimitPercent = candidate.Profile.PowerLimitPercent ?? 100,
             AppliedBy = "manual-measured-iteration",
             VerificationEvidence =
             [
                 $"Measured performance retention: {comparison.PerformanceIndex:0.0}%.",
                 $"Measured efficiency index: {comparison.EfficiencyIndex:0.0}%.",
-                $"Measured temperature delta: {comparison.TemperatureDeltaC:+0.0;-0.0;0.0} C."
+                comparison.TemperatureDeltaC.HasValue
+                    ? $"Measured temperature delta: {comparison.TemperatureDeltaC:+0.0;-0.0;0.0} C."
+                    : "Temperature delta was not comparable because starting temperatures differed."
             ]
         };
         return new(true, summaryText, new GpuProfileSuggestion
@@ -220,6 +264,42 @@ public static class GpuProfileAdvisor
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
         });
     }
+
+    private static string DescribeWeakestWorkload(TestRun baseline, TestRun candidate)
+    {
+        Dictionary<string, double> baselineScores = baseline.Workloads
+            .Where(static item => item.Completed && item.Score > 0)
+            .GroupBy(WorkloadKey)
+            .ToDictionary(static group => group.Key, static group => group.Average(static item => item.Score));
+        var weakest = candidate.Workloads
+            .Where(item => item.Completed && item.Score > 0 && baselineScores.ContainsKey(WorkloadKey(item)))
+            .Select(item => new
+            {
+                Item = item,
+                Retention = item.Score / baselineScores[WorkloadKey(item)] * 100
+            })
+            .OrderBy(static item => item.Retention)
+            .FirstOrDefault();
+        return weakest == null
+            ? ""
+            : $" Test le plus bas : {FrenchWorkloadName(weakest.Item.Name)} à {weakest.Retention:0.0} % du stock.";
+    }
+
+    private static string WorkloadKey(WorkloadResult item)
+        => $"{item.Kind}|{item.Name}|{item.Version}|{item.ScoreUnit}";
+
+    private static string FrenchWorkloadName(string name)
+        => name.Contains("vram", StringComparison.OrdinalIgnoreCase)
+            ? "mémoire vidéo"
+            : name.Contains("ray tracing", StringComparison.OrdinalIgnoreCase)
+                ? "ray tracing"
+                : name.Contains("graphics", StringComparison.OrdinalIgnoreCase)
+                    ? "rendu graphique"
+                    : name.Contains("compute", StringComparison.OrdinalIgnoreCase)
+                        ? "calcul"
+                        : name.Contains("transient", StringComparison.OrdinalIgnoreCase)
+                            ? "transitions de charge"
+                            : name;
 
     private static int? AverageLoadedVoltageMv(TestRun run)
     {

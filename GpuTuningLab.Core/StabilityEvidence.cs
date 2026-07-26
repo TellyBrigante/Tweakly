@@ -59,7 +59,8 @@ public sealed class WevtutilEvidenceCollector : IStabilityEvidenceCollector
         info.ArgumentList.Add("/rd:false");
 
         using var process = new Process { StartInfo = info };
-        process.Start();
+        if (!process.Start())
+            throw new InvalidOperationException("wevtutil could not be started.");
         Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

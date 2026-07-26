@@ -44,7 +44,8 @@ public static class GpuWorkloadPreflight
         info.ArgumentList.Add("-s");
         info.ArgumentList.Add("um");
         using var process = new Process { StartInfo = info };
-        process.Start();
+        if (!process.Start())
+            throw new InvalidOperationException("nvidia-smi could not be started.");
         Task<string> stdout = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
         Task<string> stderr = process.StandardError.ReadToEndAsync(CancellationToken.None);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -85,9 +86,15 @@ public static class GpuWorkloadPreflight
         => processes
             .Where(item => item.ProcessId != hostProcessId)
             .Where(item => allowedProcessIds == null || !allowedProcessIds.Contains(item.ProcessId))
+            // DWM est le compositeur obligatoire du bureau Windows. Sa charge peut refléter
+            // le workload en cours et ne constitue pas une application concurrente.
+            .Where(item => !IsWindowsCompositor(item))
             .Where(IsContaminating)
             .OrderByDescending(Peak)
             .ToArray();
+
+    public static bool IsWindowsCompositor(ActiveGpuProcess process)
+        => string.Equals(process.Name, "dwm.exe", StringComparison.OrdinalIgnoreCase);
 
     public static IReadOnlyList<ActiveGpuProcess> Parse(string output)
     {
@@ -301,6 +308,9 @@ public static class GpuContaminationPolicy
         int totalObservations,
         int maximumConsecutiveObservations)
     {
+        if (GpuWorkloadPreflight.IsWindowsCompositor(process))
+            return false;
+
         double computeOrMemoryPeak = Math.Max(process.ComputePercent ?? 0, process.MemoryPercent ?? 0);
         bool videoEngineActive = process.EncoderPercent > 0 || process.DecoderPercent > 0;
         if (WindowsDesktopProcesses.Contains(process.Name))
