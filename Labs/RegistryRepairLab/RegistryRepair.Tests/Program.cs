@@ -17,14 +17,19 @@ var tests = new (string Name, Func<Task> Run)[]
     ("ACL mutation rolls back", AclMutationRollsBack),
     ("abrupt termination is recovered", AbruptTerminationIsRecovered),
     ("undo restores original value", UndoRestoresOriginal),
+    ("undo failure restores correction", UndoFailureRestoresCorrection),
+    ("abrupt termination during undo is recovered", AbruptUndoIsRecovered),
     ("undo refuses later user change", UndoRefusesLaterChange),
+    ("undo refuses later sibling change", UndoRefusesLaterSiblingChange),
     ("non-Microsoft source is read-only", NonMicrosoftSourceIsReadOnly),
     ("unsupported build is skipped", UnsupportedBuildIsSkipped),
     ("missing key is read-only", MissingKeyIsReadOnly),
     ("absent original value is removed by undo", UndoRestoresAbsence),
     ("rollback failure is explicit", RollbackFailureIsExplicit),
+    ("unresolved rollback blocks later repair", UnresolvedRollbackBlocksLaterRepair),
     ("file journal persists atomically", FileJournalPersistsAtomically),
     ("corrupted journal is rejected", CorruptedJournalIsRejected),
+    ("journal opened with another key is rejected", WrongJournalKeyIsRejected),
     ("truncated journal is rejected", TruncatedJournalIsRejected),
     ("same address repairs are serialized", SameAddressRepairsAreSerialized),
     ("abrupt termination during rollback is recovered", AbruptRollbackIsRecovered),
@@ -39,12 +44,14 @@ var tests = new (string Name, Func<Task> Run)[]
     ("weak catalog key is rejected", WeakCatalogKeyIsRejected),
     ("standard registry context is silent", StandardRegistryContextIsSilent),
     ("malformed startup value is detected", MalformedStartupValueIsDetected),
+    ("oversized startup command is a certain anomaly", OversizedStartupCommandIsCertain),
     ("active AppInit configuration is reviewed", ActiveAppInitIsReviewed),
     ("IFEO debugger is reviewed", IfeoDebuggerIsReviewed),
     ("custom Winlogon configuration is reviewed", CustomWinlogonIsReviewed),
     ("malformed service start is detected", MalformedServiceStartIsDetected),
     ("standard service configuration is silent", StandardServiceConfigurationIsSilent),
-    ("missing file association ProgID is reviewed", MissingAssociationProgIdIsReviewed),
+    ("missing file association ProgID is informational", MissingAssociationProgIdIsReviewed),
+    ("valid OpenWith ProgID resolves a legacy association", OpenWithProgIdResolvesAssociation),
     ("user file association overrides machine default", UserAssociationOverridesMachine),
     ("unreadable file association ProgID is not reported missing", UnreadableAssociationIsNotMissing),
 };
@@ -245,6 +252,46 @@ static async Task UndoRestoresOriginal()
     True(original.ContentEquals(backend.Get(Address())));
 }
 
+static async Task UndoFailureRestoresCorrection()
+{
+    var backend = new InMemoryRegistryBackend();
+    backend.Seed(Address(), Existing(RawRegistryValue.DWord(2)));
+    var journal = new InMemoryJournal();
+    var engine = new RegistryRepairEngine(backend, journal);
+    RegistryRepairResult repair = await engine.RepairAsync(ScanOne(engine, TrustedRule()));
+
+    backend.FailNextRestore = true;
+    RegistryUndoResult failedUndo = await engine.UndoAsync(repair.Transaction.Id);
+    False(failedUndo.Success);
+    Equal(RegistryTransactionState.Committed, failedUndo.Transaction.State);
+    True(backend.Get(Address()).Value?.ContentEquals(RawRegistryValue.DWord(1)) == true);
+
+    RegistryUndoResult retry = await engine.UndoAsync(repair.Transaction.Id);
+    True(retry.Success);
+    True(backend.Get(Address()).Value?.ContentEquals(RawRegistryValue.DWord(2)) == true);
+}
+
+static async Task AbruptUndoIsRecovered()
+{
+    var backend = new InMemoryRegistryBackend();
+    RegistrySnapshot original = Existing(RawRegistryValue.DWord(2));
+    backend.Seed(Address(), original);
+    var journal = new InMemoryJournal();
+    var engine = new RegistryRepairEngine(backend, journal);
+    RegistryRepairResult repair = await engine.RepairAsync(ScanOne(engine, TrustedRule()));
+
+    backend.TerminateNextRestore = true;
+    await Throws<SimulatedProcessTerminationException>(
+        () => engine.UndoAsync(repair.Transaction.Id));
+    Equal(1, (await journal.GetIncompleteAsync(CancellationToken.None)).Count);
+
+    IReadOnlyList<RegistryRepairTransaction> recovered =
+        await engine.RecoverIncompleteAsync();
+    Equal(1, recovered.Count);
+    Equal(RegistryTransactionState.Undone, recovered[0].State);
+    True(original.ContentEquals(backend.Get(Address())));
+}
+
 static async Task UndoRefusesLaterChange()
 {
     var backend = new InMemoryRegistryBackend();
@@ -255,6 +302,22 @@ static async Task UndoRefusesLaterChange()
     backend.SetValue(Address(), RawRegistryValue.DWord(3));
     await Throws<RegistryRepairException>(() => engine.UndoAsync(repair.Transaction.Id));
     True(backend.Get(Address()).Value?.ContentEquals(RawRegistryValue.DWord(3)) == true);
+}
+
+static async Task UndoRefusesLaterSiblingChange()
+{
+    var backend = new InMemoryRegistryBackend();
+    backend.Seed(Address(), Existing(RawRegistryValue.DWord(2)));
+    RegistryAddress sibling = Address() with { ValueName = "Sibling" };
+    backend.Seed(sibling, Existing(RawRegistryValue.String("before")));
+    var journal = new InMemoryJournal();
+    var engine = new RegistryRepairEngine(backend, journal);
+    RegistryRepairResult repair = await engine.RepairAsync(ScanOne(engine, TrustedRule()));
+
+    backend.SetValue(sibling, RawRegistryValue.String("after"));
+    await Throws<RegistryRepairException>(() => engine.UndoAsync(repair.Transaction.Id));
+    True(backend.Get(Address()).Value?.ContentEquals(RawRegistryValue.DWord(1)) == true);
+    True(backend.Get(sibling).Value?.ContentEquals(RawRegistryValue.String("after")) == true);
 }
 
 static async Task NonMicrosoftSourceIsReadOnly()
@@ -317,6 +380,24 @@ static async Task RollbackFailureIsExplicit()
     Equal(RegistryTransactionState.RollbackFailed, result.Transaction.State);
 }
 
+static async Task UnresolvedRollbackBlocksLaterRepair()
+{
+    var backend = new InMemoryRegistryBackend
+    {
+        CorruptNextWrite = true,
+        FailNextRestore = true,
+    };
+    backend.Seed(Address(), Existing(RawRegistryValue.DWord(2)));
+    var journal = new InMemoryJournal();
+    var engine = new RegistryRepairEngine(backend, journal);
+
+    RegistryRepairResult failed = await engine.RepairAsync(ScanOne(engine, TrustedRule()));
+    Equal(RegistryTransactionState.RollbackFailed, failed.Transaction.State);
+
+    await Throws<RegistryRepairException>(
+        () => engine.RepairAsync(ScanOne(engine, TrustedRule())));
+}
+
 static async Task FileJournalPersistsAtomically()
 {
     string directory = Path.Combine(Path.GetTempPath(), "TweaklyRegistryRepairLab", Guid.NewGuid().ToString("N"));
@@ -336,7 +417,7 @@ static async Task FileJournalPersistsAtomically()
             "Durability test.",
             null);
 
-        using var journal = new FileRegistryRepairJournal(directory);
+        using var journal = new FileRegistryRepairJournal(directory, JournalAuthenticationKey());
         await journal.SaveAsync(transaction, CancellationToken.None);
         RegistryRepairTransaction? loaded = await journal.GetAsync(
             transaction.Id,
@@ -349,6 +430,22 @@ static async Task FileJournalPersistsAtomically()
             transaction.WithState(RegistryTransactionState.Committed),
             CancellationToken.None);
         Equal(0, (await journal.GetIncompleteAsync(CancellationToken.None)).Count);
+
+        await journal.SaveAsync(
+            transaction.WithState(RegistryTransactionState.UndoPrepared),
+            CancellationToken.None);
+        Equal(1, (await journal.GetIncompleteAsync(CancellationToken.None)).Count);
+
+        await journal.SaveAsync(
+            transaction.WithState(RegistryTransactionState.Undone),
+            CancellationToken.None);
+        Equal(0, (await journal.GetIncompleteAsync(CancellationToken.None)).Count);
+        Equal(0, (await journal.GetBlockingAsync(CancellationToken.None)).Count);
+
+        await journal.SaveAsync(
+            transaction.WithState(RegistryTransactionState.RollbackFailed),
+            CancellationToken.None);
+        Equal(1, (await journal.GetBlockingAsync(CancellationToken.None)).Count);
         Equal(0, Directory.EnumerateFiles(directory, "*.tmp").Count());
     }
     finally
@@ -363,7 +460,7 @@ static async Task CorruptedJournalIsRejected()
     try
     {
         RegistryRepairTransaction transaction = TestTransaction();
-        using var journal = new FileRegistryRepairJournal(directory);
+        using var journal = new FileRegistryRepairJournal(directory, JournalAuthenticationKey());
         await journal.SaveAsync(transaction, CancellationToken.None);
         string path = Path.Combine(directory, transaction.Id.ToString("N") + ".json");
         byte[] bytes = await File.ReadAllBytesAsync(path);
@@ -384,12 +481,32 @@ static async Task TruncatedJournalIsRejected()
     try
     {
         RegistryRepairTransaction transaction = TestTransaction();
-        using var journal = new FileRegistryRepairJournal(directory);
+        using var journal = new FileRegistryRepairJournal(directory, JournalAuthenticationKey());
         await journal.SaveAsync(transaction, CancellationToken.None);
         string path = Path.Combine(directory, transaction.Id.ToString("N") + ".json");
         await File.WriteAllTextAsync(path, "{\"SchemaVersion\":1,");
         await Throws<RegistryRepairException>(
             () => journal.GetAsync(transaction.Id, CancellationToken.None));
+    }
+    finally
+    {
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
+static async Task WrongJournalKeyIsRejected()
+{
+    string directory = TemporaryDirectory();
+    try
+    {
+        RegistryRepairTransaction transaction = TestTransaction();
+        using (var writer = new FileRegistryRepairJournal(directory, JournalAuthenticationKey()))
+            await writer.SaveAsync(transaction, CancellationToken.None);
+
+        byte[] otherKey = Enumerable.Range(101, 32).Select(static value => (byte)value).ToArray();
+        using var reader = new FileRegistryRepairJournal(directory, otherKey);
+        await Throws<RegistryRepairException>(
+            () => reader.GetAsync(transaction.Id, CancellationToken.None));
     }
     finally
     {
@@ -568,6 +685,24 @@ static async Task MalformedStartupValueIsDetected()
     RegistryInspectionFinding finding = Single(
         new RegistryContextInspector(backend).Inspect(Windows()));
     Equal("STARTUP_VALUE_MALFORMED", finding.Code);
+    Equal(RegistryInspectionAssessment.CertainAnomaly, finding.Assessment);
+    False(finding.AutomaticCorrectionAvailable);
+    await Task.CompletedTask;
+}
+
+static async Task OversizedStartupCommandIsCertain()
+{
+    var backend = new InMemoryRegistryBackend();
+    backend.Seed(new RegistryAddress(
+        RegistryHiveId.CurrentUser,
+        RegistryViewId.Registry64,
+        @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
+        "TooLong"), Existing(RawRegistryValue.String(new string('a', 261))));
+
+    RegistryInspectionFinding finding = new RegistryContextInspector(backend)
+        .Inspect(Windows())
+        .Single(item => item.Code == "STARTUP_COMMAND_TOO_LONG");
+    Equal(RegistryInspectionAssessment.CertainAnomaly, finding.Assessment);
     False(finding.AutomaticCorrectionAvailable);
     await Task.CompletedTask;
 }
@@ -602,6 +737,7 @@ static async Task IfeoDebuggerIsReviewed()
     RegistryInspectionFinding finding = findings.Single(item =>
         item.Code == "IFEO_DEBUGGER_CONFIGURED");
     Equal(RegistryInspectionStatus.Review, finding.Status);
+    Equal(RegistryInspectionAssessment.Unusual, finding.Assessment);
     False(finding.AutomaticCorrectionAvailable);
     await Task.CompletedTask;
 }
@@ -632,6 +768,7 @@ static async Task MalformedServiceStartIsDetected()
         .Inspect(Windows())
         .Single(item => item.Code == "SERVICE_START_MALFORMED");
     Equal(RegistryInspectionStatus.Malformed, finding.Status);
+    Equal(RegistryInspectionAssessment.CertainAnomaly, finding.Assessment);
     False(finding.AutomaticCorrectionAvailable);
     await Task.CompletedTask;
 }
@@ -662,8 +799,26 @@ static async Task MissingAssociationProgIdIsReviewed()
     RegistryInspectionFinding finding = new RegistryContextInspector(backend)
         .Inspect(Windows())
         .Single(item => item.Code == "FILE_ASSOCIATION_PROGID_MISSING");
-    Equal(RegistryInspectionStatus.Review, finding.Status);
+    Equal(RegistryInspectionStatus.Informational, finding.Status);
+    Equal(RegistryInspectionAssessment.Information, finding.Assessment);
     False(finding.AutomaticCorrectionAvailable);
+    await Task.CompletedTask;
+}
+
+static async Task OpenWithProgIdResolvesAssociation()
+{
+    var backend = new InMemoryRegistryBackend();
+    RegistryAddress extension = AssociationAddress(RegistryHiveId.LocalMachine, ".tweakly-test");
+    backend.Seed(extension, Existing(RawRegistryValue.String("Tweakly.Legacy.1")));
+    backend.Seed(
+        AssociationAddress(RegistryHiveId.LocalMachine, @".tweakly-test\OpenWithProgids")
+            with { ValueName = "Tweakly.AppX.1" },
+        Existing(new RawRegistryValue(RegistryValueType.None, [])));
+    backend.Seed(
+        AssociationAddress(RegistryHiveId.LocalMachine, "Tweakly.AppX.1"),
+        Existing(RawRegistryValue.String("Tweakly application")));
+
+    Equal(0, new RegistryContextInspector(backend).Inspect(Windows()).Count);
     await Task.CompletedTask;
 }
 
@@ -799,6 +954,8 @@ static void True(bool condition)
     if (!condition)
         throw new InvalidOperationException("Expected true.");
 }
+
+static byte[] JournalAuthenticationKey() => Enumerable.Range(1, 32).Select(static value => (byte)value).ToArray();
 
 static void False(bool condition) => True(!condition);
 

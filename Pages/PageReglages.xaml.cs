@@ -20,7 +20,7 @@ namespace Optimisation_Tool.Pages
         private bool _loading = false;
 
         // Source unique de la version + dépôt GitHub
-        public const string AppVersion = "1.5.2";
+        public const string AppVersion = "1.5.3";
         private const string RepoOwner = "TellyBrigante";
         private const string RepoName  = "Tweakly";
         private static readonly string RepoUrl = $"https://github.com/{RepoOwner}/{RepoName}";
@@ -518,14 +518,12 @@ namespace Optimisation_Tool.Pages
         private async void BtnRestoreWindowsDefaults_Click(object sender, RoutedEventArgs e)
         {
             var confirm = MessageBox.Show(
-                "Tweakly va restaurer les réglages CPU, Windows, réseau et confidentialité qui possèdent une valeur Windows standard.\n\n" +
-                "Les réglages propres au matériel restent inchangés et seront indiqués comme ignorés.\n\n" +
-                "NVIDIA n'est pas inclus. Certains changements peuvent demander un redémarrage.\n\n" +
-                "Continuer ?",
-                "Restaurer les réglages Windows",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes) return;
+                "La restauration globale est verrouillée tant que Tweakly ne possède pas un instantané exact de chaque réglage.\n\n" +
+                "Aucune valeur Windows, réseau, service ou préférence personnalisée ne sera remplacée par une valeur générique.",
+                "Protection des réglages Windows",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            if (confirm != MessageBoxResult.OK) return;
 
             BtnRestoreWindowsDefaults.IsEnabled = false;
             TxtRestoreDefaultsStatus.Text = "Restauration en cours...";
@@ -542,8 +540,9 @@ namespace Optimisation_Tool.Pages
                 var suffix = report.NeedsRestart ? " Redémarrage conseillé." : "";
                 if (report.ErrorCount == 0)
                 {
-                    TxtRestoreDefaultsStatus.Text =
-                        $"Terminé : {report.OkCount} OK, {report.SkippedCount} ignoré(s).{suffix}";
+                    TxtRestoreDefaultsStatus.Text = report.OkCount == 0
+                        ? report.Steps.FirstOrDefault()?.Detail ?? "Aucune modification effectuée."
+                        : $"Terminé : {report.OkCount} OK, {report.SkippedCount} ignoré(s).{suffix}";
                 }
                 else
                 {

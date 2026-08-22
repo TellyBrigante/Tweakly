@@ -36,12 +36,11 @@ public static class WindowsDefaultsRestorer
     public static RestoreDefaultsReport RestoreAll(Action<string>? log = null)
     {
         var report = new RestoreDefaultsReport();
-
-        RestoreCpu(report);
-        RestoreWindows(report);
-        RestoreNetwork(report);
-        RestorePrivacy(report);
-        RestoreAppsTouchedByTweakly(report);
+        report.Steps.Add(new RestoreStepResult(
+            "Sécurité",
+            "Restauration globale",
+            RestoreStepState.Skipped,
+            "Aucune modification : Tweakly ne possède pas un instantané complet et vérifiable de l'état précédent pour chaque réglage."));
 
         foreach (var step in report.Steps)
         {

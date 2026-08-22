@@ -95,7 +95,7 @@ namespace Optimisation_Tool.Pages
             {
                 double gained = await Task.Run(MemoryCleaner.FreeMemory);
 
-                await TickAsync();   // rafraîchit la tuile tout de suite → le % descend visiblement
+                await TickAsync();
 
                 BtnFreeRam.Content = gained >= 0.1 ? $"✓ {gained:F1} Go" : "✓ Fait";
                 _main.Log(gained >= 0.1

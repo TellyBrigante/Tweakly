@@ -82,11 +82,6 @@ public sealed class FanHardwareSession : IDisposable
     {
         IDisposable hardwareLease = HardwareMonitorAccess.Enter();
         CpuTemperature.SuspendForExclusiveHardwareAccess();
-        if (!SetDllDirectory(PathLayout.DataDrv))
-        {
-            hardwareLease.Dispose();
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "PawnIO directory is unavailable.");
-        }
 
         var computer = new Computer
         {
@@ -97,6 +92,9 @@ public sealed class FanHardwareSession : IDisposable
         };
         try
         {
+            using IDisposable pawnIoLease = BundledFileTrust.OpenVerifiedLease(PathLayout.PawnIoLib);
+            if (!SetDllDirectory(PathLayout.DataDrv))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "PawnIO directory is unavailable.");
             computer.Open();
             return new FanHardwareSession(computer, hardwareLease);
         }
@@ -317,6 +315,7 @@ public sealed class FanHardwareSession : IDisposable
 
         try
         {
+            using IDisposable pawnIoLease = BundledFileTrust.OpenVerifiedLease(PathLayout.PawnIoLib);
             if (!SetDllDirectory(PathLayout.DataDrv))
                 return new(requested.Length, 0, 0, ["Le dossier PawnIO est indisponible."]);
 

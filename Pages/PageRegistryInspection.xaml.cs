@@ -81,9 +81,9 @@ public partial class PageRegistryInspection : UserControl
 
     private void RenderResults(IReadOnlyList<RegistryInspectionFinding> findings)
     {
-        int malformed = findings.Count(item => item.Status == RegistryInspectionStatus.Malformed);
-        int review = findings.Count(item => item.Status == RegistryInspectionStatus.Review);
-        int unreadable = findings.Count(item => item.Status == RegistryInspectionStatus.Unreadable);
+        int malformed = findings.Count(item => item.Assessment == RegistryInspectionAssessment.CertainAnomaly);
+        int review = findings.Count(item => item.Assessment == RegistryInspectionAssessment.Unusual);
+        int unreadable = findings.Count(item => item.Assessment == RegistryInspectionAssessment.Information);
         TxtTotal.Text = findings.Count.ToString();
         TxtMalformed.Text = malformed.ToString();
         TxtReview.Text = review.ToString();
@@ -133,7 +133,7 @@ public partial class PageRegistryInspection : UserControl
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        Border status = BuildStatusPill(finding.Status);
+        Border status = BuildStatusPill(finding.Assessment);
         header.Children.Add(status);
 
         var title = new TextBlock
@@ -220,28 +220,28 @@ public partial class PageRegistryInspection : UserControl
         return card;
     }
 
-    private Border BuildStatusPill(RegistryInspectionStatus status)
+    private Border BuildStatusPill(RegistryInspectionAssessment assessment)
     {
         string text;
         string foreground;
         string background;
         string border;
-        switch (status)
+        switch (assessment)
         {
-            case RegistryInspectionStatus.Malformed:
-                text = "DONNÉE INVALIDE";
+            case RegistryInspectionAssessment.CertainAnomaly:
+                text = "ANOMALIE CERTAINE";
                 foreground = "ThCrit";
                 background = "ThCritTint";
                 border = "ThCritBorderTint";
                 break;
-            case RegistryInspectionStatus.Review:
-                text = "À VÉRIFIER";
+            case RegistryInspectionAssessment.Unusual:
+                text = "INHABITUEL";
                 foreground = "ThWarn";
                 background = "ThWarnTint";
                 border = "ThWarnBorderTint";
                 break;
             default:
-                text = "NON LU";
+                text = "INFORMATION";
                 foreground = "ThTextBody";
                 background = "ThPill";
                 border = "ThBorder";
@@ -337,6 +337,7 @@ public partial class PageRegistryInspection : UserControl
     {
         "STARTUP_VALUE_MALFORMED" => "Entrée de démarrage illisible",
         "STARTUP_COMMAND_EMPTY" => "Commande de démarrage vide",
+        "STARTUP_COMMAND_TOO_LONG" => "Commande de démarrage trop longue",
         "STARTUP_KEY_UNREADABLE" => "Zone de démarrage inaccessible",
         "APPINIT_LOAD_FLAG_MALFORMED" => "Activation AppInit invalide",
         "APPINIT_DLL_LIST_MALFORMED" => "Liste AppInit illisible",
@@ -356,7 +357,7 @@ public partial class PageRegistryInspection : UserControl
         "SERVICE_IMAGE_PATH_MALFORMED" => "Chemin de service illisible",
         "SERVICE_CONTROL_SET_UNREADABLE" or "SERVICE_ROOT_UNREADABLE" or "SERVICE_KEY_UNREADABLE" => "Configuration de service inaccessible",
         "FILE_ASSOCIATION_VALUE_MALFORMED" => "Association de fichier illisible",
-        "FILE_ASSOCIATION_PROGID_MISSING" => "Programme associé introuvable",
+        "FILE_ASSOCIATION_PROGID_MISSING" => "Association historique non résolue",
         "FILE_ASSOCIATION_PROGID_UNREADABLE" => "Programme associé non vérifiable",
         "FILE_ASSOCIATION_ROOT_UNREADABLE" or "FILE_ASSOCIATION_KEY_UNREADABLE" => "Associations de fichiers inaccessibles",
         _ => code,
@@ -365,6 +366,8 @@ public partial class PageRegistryInspection : UserControl
     private static string EvidenceText(string evidence) => evidence
         .Replace("Type=", "Type : ", StringComparison.Ordinal)
         .Replace("Bytes=", "Taille : ", StringComparison.Ordinal)
+        .Replace("Characters=", "Caractères : ", StringComparison.Ordinal)
+        .Replace("Documented maximum=", "Maximum documenté : ", StringComparison.Ordinal)
         .Replace("Service=", "Service : ", StringComparison.Ordinal)
         .Replace("Extension=", "Extension : ", StringComparison.Ordinal)
         .Replace("ProgID=", "ProgID : ", StringComparison.Ordinal)

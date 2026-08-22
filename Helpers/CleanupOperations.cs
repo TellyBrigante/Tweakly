@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using Microsoft.Win32;
 
@@ -29,6 +30,7 @@ namespace Optimisation_Tool.Helpers
         public long Freed { get; init; }
         public int Ops { get; init; }
         public int Residues { get; init; }
+        public int ResiduesRemoved { get; init; }
         public int Skipped { get; init; }
         public int Errors { get; init; }
         public string Summary { get; init; } = "";
@@ -39,6 +41,7 @@ namespace Optimisation_Tool.Helpers
             long freed = results.Sum(result => result.Freed);
             int ops = results.Sum(result => result.Ops);
             int residues = results.Sum(result => result.Residues);
+            int residuesRemoved = results.Sum(result => result.ResiduesRemoved);
             int skipped = results.Sum(result => result.Skipped);
             int errors = results.Sum(result => result.Errors);
 
@@ -47,6 +50,7 @@ namespace Optimisation_Tool.Helpers
                 Freed = freed,
                 Ops = ops,
                 Residues = residues,
+                ResiduesRemoved = residuesRemoved,
                 Skipped = skipped,
                 Errors = errors,
                 Summary = FormatSummary(freed, ops, skipped, errors),
@@ -311,9 +315,11 @@ namespace Optimisation_Tool.Helpers
         public static CleanupOperationResult CleanSoftwareResidues()
         {
             CleanupOperationResult registry = CleanOrphanUninstallEntries();
+            CleanupOperationResult appPaths = CleanOrphanAppPaths();
+            CleanupOperationResult startup = CleanOrphanStartupValues();
             CleanupOperationResult? shortcuts = null;
             Exception? threadError = null;
-            var cancellation = new CancellationTokenSource();
+            using var cancellation = new CancellationTokenSource();
             var thread = new Thread(() =>
             {
                 try
@@ -357,21 +363,188 @@ namespace Optimisation_Tool.Helpers
 
             CleanupOperationResult combined = CleanupOperationResult.Combine(
                 registry,
+                appPaths,
+                startup,
                 shortcuts ?? new CleanupOperationResult { Errors = 1, Summary = "Analyse des raccourcis impossible" });
             return new CleanupOperationResult
             {
                 Freed = combined.Freed,
                 Ops = combined.Ops,
-                Residues = combined.Ops,
+                Residues = combined.Residues,
+                ResiduesRemoved = combined.ResiduesRemoved,
                 Skipped = combined.Skipped,
                 Errors = combined.Errors,
-                Summary = combined.Ops > 0 ? $"{combined.Ops} résidu(s)" : "0 résidu sûr",
+                Summary = combined.Residues > 0
+                    ? $"{combined.ResiduesRemoved} traité(s) sur {combined.Residues} résidu(s) détecté(s)"
+                    : "aucun résidu sûr détecté",
                 Details = combined.Details,
             };
         }
 
+        private static CleanupOperationResult CleanOrphanAppPaths()
+        {
+            int detected = 0;
+            int removed = 0;
+            int skipped = 0;
+            var details = new List<string>();
+            var roots = new (RegistryKey Hive, string Path)[]
+            {
+                (Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
+                (Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths"),
+                (Registry.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"),
+            };
+
+            foreach ((RegistryKey hive, string path) in roots)
+            {
+                try
+                {
+                    using RegistryKey? root = hive.OpenSubKey(path, writable: true);
+                    if (root == null) continue;
+
+                    foreach (string subKeyName in root.GetSubKeyNames())
+                    {
+                        try
+                        {
+                            using (RegistryKey? key = root.OpenSubKey(subKeyName))
+                            {
+                                if (key == null || !IsProvablyOrphanedAppPath(key)) continue;
+                            }
+
+                            detected++;
+                            string fullKeyName = root.Name + "\\" + subKeyName;
+                            if (!TryExportRegistryKey(fullKeyName, details))
+                            {
+                                skipped++;
+                                continue;
+                            }
+
+                            root.DeleteSubKeyTree(subKeyName, throwOnMissingSubKey: false);
+                            removed++;
+                        }
+                        catch (Exception ex)
+                        {
+                            skipped++;
+                            AppLog.ErrorOnce(
+                                "cleanup-app-path:" + subKeyName,
+                                "Nettoyage : App Path orphelin ignoré",
+                                ex);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    details.Add("Registre inaccessible : " + path);
+                    AppLog.ErrorOnce("cleanup-app-path-root:" + path, "Nettoyage : App Paths inaccessible", ex);
+                }
+            }
+
+            return new CleanupOperationResult
+            {
+                Ops = removed,
+                Residues = detected,
+                ResiduesRemoved = removed,
+                Skipped = skipped,
+                Summary = detected > 0
+                    ? $"{removed} App Path(s) retiré(s) sur {detected} détecté(s)"
+                    : "aucun App Path orphelin",
+                Details = details,
+            };
+        }
+
+        internal static bool IsProvablyOrphanedAppPath(RegistryKey key)
+        {
+            ArgumentNullException.ThrowIfNull(key);
+            string target = NormalizeAbsolutePath(
+                key.GetValue(null, "", RegistryValueOptions.DoNotExpandEnvironmentNames) as string ?? "",
+                requireExecutable: true);
+            return target.Length > 0 && DriveExists(target) && !File.Exists(target);
+        }
+
+        private static CleanupOperationResult CleanOrphanStartupValues()
+        {
+            int detected = 0;
+            int removed = 0;
+            int skipped = 0;
+            var details = new List<string>();
+            var roots = new (RegistryKey Hive, string Path)[]
+            {
+                (Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
+                (Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"),
+                (Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"),
+                (Registry.LocalMachine, @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\RunOnce"),
+                (Registry.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
+                (Registry.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce"),
+            };
+
+            foreach ((RegistryKey hive, string path) in roots)
+            {
+                try
+                {
+                    using RegistryKey? root = hive.OpenSubKey(path, writable: true);
+                    if (root == null) continue;
+
+                    string[] candidates = root.GetValueNames()
+                        .Where(name => IsProvablyOrphanedStartupCommand(
+                            root.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string))
+                        .ToArray();
+                    if (candidates.Length == 0) continue;
+
+                    detected += candidates.Length;
+                    if (!TryExportRegistryKey(root.Name, details))
+                    {
+                        skipped += candidates.Length;
+                        continue;
+                    }
+
+                    foreach (string valueName in candidates)
+                    {
+                        try
+                        {
+                            root.DeleteValue(valueName, throwOnMissingValue: false);
+                            removed++;
+                        }
+                        catch (Exception ex)
+                        {
+                            skipped++;
+                            AppLog.ErrorOnce(
+                                "cleanup-startup:" + root.Name + ":" + valueName,
+                                "Nettoyage : démarrage orphelin ignoré",
+                                ex);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    skipped++;
+                    details.Add("Registre inaccessible : " + path);
+                    AppLog.ErrorOnce("cleanup-startup-root:" + path, "Nettoyage : démarrage automatique inaccessible", ex);
+                }
+            }
+
+            return new CleanupOperationResult
+            {
+                Ops = removed,
+                Residues = detected,
+                ResiduesRemoved = removed,
+                Skipped = skipped,
+                Summary = detected > 0
+                    ? $"{removed} démarrage(s) retiré(s) sur {detected} détecté(s)"
+                    : "aucun démarrage orphelin",
+                Details = details,
+            };
+        }
+
+        internal static bool IsProvablyOrphanedStartupCommand(string? command)
+        {
+            if (string.IsNullOrWhiteSpace(command)) return false;
+            string executable = ExtractExecutablePath(command);
+            return executable.Length > 0 && DriveExists(executable) && !File.Exists(executable);
+        }
+
         private static CleanupOperationResult CleanOrphanUninstallEntries()
         {
+            int detected = 0;
             int removed = 0;
             int skipped = 0;
             var details = new List<string>();
@@ -387,11 +560,7 @@ namespace Optimisation_Tool.Helpers
                 try
                 {
                     using RegistryKey? root = hive.OpenSubKey(path, writable: true);
-                    if (root == null)
-                    {
-                        skipped++;
-                        continue;
-                    }
+                    if (root == null) continue;
 
                     foreach (string subKeyName in root.GetSubKeyNames())
                     {
@@ -402,6 +571,14 @@ namespace Optimisation_Tool.Helpers
                                 if (key == null) continue;
                                 if (!IsProvablyOrphanedUninstallEntry(key))
                                     continue;
+                            }
+
+                            detected++;
+                            string fullKeyName = root.Name + "\\" + subKeyName;
+                            if (!TryExportRegistryKey(fullKeyName, details))
+                            {
+                                skipped++;
+                                continue;
                             }
 
                             root.DeleteSubKeyTree(subKeyName, throwOnMissingSubKey: false);
@@ -425,11 +602,49 @@ namespace Optimisation_Tool.Helpers
             return new CleanupOperationResult
             {
                 Ops = removed,
-                Residues = removed,
+                Residues = detected,
+                ResiduesRemoved = removed,
                 Skipped = skipped,
-                Summary = removed > 0 ? $"{removed} résidu(s)" : "0 résidu sûr",
+                Summary = detected > 0
+                    ? $"{removed} entrée(s) retirée(s) sur {detected} détectée(s)"
+                    : "aucune entrée orpheline",
                 Details = details,
             };
+        }
+
+        private static bool TryExportRegistryKey(string fullKeyName, List<string> details)
+        {
+            try
+            {
+                string backupDirectory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "Tweakly",
+                    "RegistryBackups");
+                Directory.CreateDirectory(backupDirectory);
+
+                string safeName = string.Concat(fullKeyName.Select(static c =>
+                    char.IsLetterOrDigit(c) ? c : '_'));
+                string backupPath = Path.Combine(
+                    backupDirectory,
+                    $"cleanup-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{safeName}.reg");
+
+                ProcessCommandResult export = ProcessCommand.Run(
+                    "reg.exe",
+                    $"export \"{fullKeyName}\" \"{backupPath}\" /y",
+                    10_000);
+                if (export.Success && File.Exists(backupPath))
+                {
+                    details.Add("Sauvegarde registre : " + backupPath);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("cleanup-registry-backup:" + fullKeyName, "Nettoyage : sauvegarde registre impossible", ex);
+            }
+
+            details.Add("Suppression registre ignorée : sauvegarde impossible pour " + fullKeyName);
+            return false;
         }
 
         internal static bool IsProvablyOrphanedUninstallEntry(RegistryKey key)
@@ -532,92 +747,138 @@ namespace Optimisation_Tool.Helpers
 
         private static CleanupOperationResult CleanBrokenShortcuts(CancellationToken cancellationToken)
         {
+            int detected = 0;
             int removed = 0;
             int skipped = 0;
-            var directories = new[]
+            string quarantineRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "Tweakly",
+                "CleanupQuarantine",
+                DateTime.UtcNow.ToString("yyyyMMdd-HHmmssfff"));
+            var directories = new (string Path, bool Recursive, string Scope)[]
             {
-                Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
-                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
-            }.Where(directory => !string.IsNullOrEmpty(directory)).Distinct();
+                (Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), true, "UserStartMenu"),
+                (Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu), true, "CommonStartMenu"),
+                (Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), false, "UserDesktop"),
+                (Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory), false, "CommonDesktop"),
+            }.Where(directory => !string.IsNullOrEmpty(directory.Path))
+             .DistinctBy(directory => directory.Path);
 
-            Type? shellType = Type.GetTypeFromProgID("WScript.Shell");
-            if (shellType == null)
-                return new CleanupOperationResult { Skipped = 1, Summary = "Raccourcis non analysés" };
-
-            object? shell = Activator.CreateInstance(shellType);
-            if (shell == null)
-                return new CleanupOperationResult { Skipped = 1, Summary = "Raccourcis non analysés" };
-
-            try
+            var details = new List<string>();
+            foreach ((string directory, bool recursive, string scope) in directories)
             {
-                var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
-                foreach (string directory in directories)
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!Directory.Exists(directory)) continue;
+
+                List<string> shortcuts;
+                try
+                {
+                    EnumerationOptions options = CreateEnumerationOptions(recursive);
+                    shortcuts = Directory.EnumerateFiles(directory, "*.lnk", options).ToList();
+                }
+                catch
+                {
+                    skipped++;
+                    continue;
+                }
+
+                foreach (string shortcutPath in shortcuts)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (!Directory.Exists(directory)) continue;
-
-                    List<string> shortcuts;
                     try
                     {
-                        shortcuts = Directory.EnumerateFiles(directory, "*.lnk", options).ToList();
+                        string target = ReadShortcutTarget(shortcutPath);
+                        if (!IsBrokenShortcutTarget(target)) continue;
+
+                        detected++;
+                        cancellationToken.ThrowIfCancellationRequested();
+                        string quarantined = QuarantineShortcut(
+                            shortcutPath,
+                            directory,
+                            scope,
+                            quarantineRoot);
+                        removed++;
+                        if (details.Count < 20)
+                            details.Add("Raccourci cassé mis en quarantaine : " + quarantined);
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         skipped++;
-                        continue;
-                    }
-
-                    foreach (string shortcutPath in shortcuts)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        object? shortcut = null;
-                        try
-                        {
-                            shortcut = shellType.InvokeMember(
-                                "CreateShortcut",
-                                System.Reflection.BindingFlags.InvokeMethod,
-                                binder: null,
-                                target: shell,
-                                args: new object[] { shortcutPath });
-                            string target = shortcut?.GetType().InvokeMember(
-                                "TargetPath",
-                                System.Reflection.BindingFlags.GetProperty,
-                                binder: null,
-                                target: shortcut,
-                                args: null) as string ?? "";
-                            if (!target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) continue;
-                            string? drive = Path.GetPathRoot(target);
-                            if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive) || File.Exists(target)) continue;
-
-                            cancellationToken.ThrowIfCancellationRequested();
-                            File.Delete(shortcutPath);
-                            removed++;
-                        }
-                        catch
-                        {
-                            skipped++;
-                        }
-                        finally
-                        {
-                            ReleaseComObject(shortcut);
-                        }
+                        if (details.Count < 20)
+                            details.Add("Raccourci ignoré : " + shortcutPath + " — " + ex.Message);
                     }
                 }
-            }
-            finally
-            {
-                ReleaseComObject(shell);
             }
 
             return new CleanupOperationResult
             {
                 Ops = removed,
-                Residues = removed,
+                Residues = detected,
+                ResiduesRemoved = removed,
                 Skipped = skipped,
-                Summary = removed > 0 ? $"{removed} raccourci(s) retiré(s)" : "0 raccourci cassé",
+                Summary = detected > 0
+                    ? $"{removed} raccourci(s) mis en quarantaine sur {detected} détecté(s)"
+                    : "aucun raccourci cassé",
+                Details = details,
             };
+        }
+
+        private static string QuarantineShortcut(
+            string shortcutPath,
+            string sourceRoot,
+            string scope,
+            string quarantineRoot)
+        {
+            string relativePath = Path.GetRelativePath(sourceRoot, shortcutPath);
+            if (Path.IsPathFullyQualified(relativePath)
+                || relativePath.Equals("..", StringComparison.Ordinal)
+                || relativePath.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                throw new InvalidOperationException("Chemin de raccourci hors de la racine autorisée.");
+
+            string destination = Path.Combine(quarantineRoot, scope, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            if (File.Exists(destination))
+            {
+                destination = Path.Combine(
+                    Path.GetDirectoryName(destination)!,
+                    Path.GetFileNameWithoutExtension(destination) + "-" + Guid.NewGuid().ToString("N") + ".lnk");
+            }
+
+            File.Move(shortcutPath, destination);
+            return destination;
+        }
+
+        private static string ReadShortcutTarget(string shortcutPath)
+        {
+            Type shellLinkType = Type.GetTypeFromCLSID(ShellLinkClsid)
+                ?? throw new InvalidOperationException("ShellLink indisponible.");
+            object shellLink = Activator.CreateInstance(shellLinkType)
+                ?? throw new InvalidOperationException("ShellLink indisponible.");
+            IShellLinkW link = (IShellLinkW)shellLink;
+            try
+            {
+                ((IPersistFile)link).Load(shortcutPath, 0);
+                var target = new StringBuilder(32_768);
+                link.GetPath(target, target.Capacity, IntPtr.Zero, 0);
+                return target.ToString();
+            }
+            finally
+            {
+                ReleaseComObject(shellLink);
+            }
+        }
+
+        internal static bool IsBrokenShortcutTarget(string target)
+        {
+            string expanded = Environment.ExpandEnvironmentVariables(target).Trim().Trim('"');
+            if (!Path.IsPathFullyQualified(expanded))
+                return false;
+
+            string? drive = Path.GetPathRoot(expanded);
+            if (string.IsNullOrEmpty(drive) || !Directory.Exists(drive))
+                return false;
+
+            return !File.Exists(expanded) && !Directory.Exists(expanded);
         }
 
         private static void ReleaseComObject(object? value)
@@ -633,6 +894,51 @@ namespace Optimisation_Tool.Helpers
             ReturnSpecialDirectories = false,
             AttributesToSkip = FileAttributes.Hidden | FileAttributes.System | FileAttributes.ReparsePoint,
         };
+
+        private static readonly Guid ShellLinkClsid = new("00021401-0000-0000-C000-000000000046");
+
+        [ComImport]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        [Guid("000214F9-0000-0000-C000-000000000046")]
+        private interface IShellLinkW
+        {
+            void GetPath(
+                [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile,
+                int cchMaxPath,
+                IntPtr pfd,
+                uint fFlags);
+
+            void GetIDList(out IntPtr ppidl);
+            void SetIDList(IntPtr pidl);
+            void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszName, int cchMaxName);
+            void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string pszName);
+            void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszDir, int cchMaxPath);
+            void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string pszDir);
+            void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszArgs, int cchMaxPath);
+            void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string pszArgs);
+            void GetHotkey(out short pwHotkey);
+            void SetHotkey(short wHotkey);
+            void GetShowCmd(out int piShowCmd);
+            void SetShowCmd(int iShowCmd);
+            void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszIconPath, int cchIconPath, out int piIcon);
+            void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string pszIconPath, int iIcon);
+            void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string pszPathRel, uint dwReserved);
+            void Resolve(IntPtr hwnd, uint fFlags);
+            void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
+        }
+
+        [ComImport]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        [Guid("0000010B-0000-0000-C000-000000000046")]
+        private interface IPersistFile
+        {
+            void GetClassID(out Guid pClassID);
+            void IsDirty();
+            void Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
+            void Save([MarshalAs(UnmanagedType.LPWStr)] string? pszFileName, bool fRemember);
+            void SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
+            void GetCurFile([MarshalAs(UnmanagedType.LPWStr)] out string ppszFileName);
+        }
 
     }
 }

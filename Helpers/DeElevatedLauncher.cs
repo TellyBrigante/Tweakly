@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace Optimisation_Tool.Helpers
 {
@@ -25,10 +26,10 @@ namespace Optimisation_Tool.Helpers
         /// Retourne le code de sortie, ou -1 en cas de timeout, ou jette une exception.
         /// </summary>
         public static int StartAndWait(string fileName, string arguments,
-                                       int timeoutMs, string? workingDir = null)
+                                       int timeoutMs, string? workingDir = null,
+                                       CancellationToken cancellationToken = default)
         {
-            using var explorer = Process.GetProcessesByName("explorer").FirstOrDefault()
-                ?? throw new InvalidOperationException("explorer.exe introuvable (session utilisateur absente).");
+            using var explorer = FindExplorerInCurrentSession();
 
             IntPtr hExplorer = OpenProcess(PROCESS_QUERY_INFORMATION, false, explorer.Id);
             if (hExplorer == IntPtr.Zero)
@@ -77,20 +78,27 @@ namespace Optimisation_Tool.Helpers
 
                 try
                 {
-                    uint wait = WaitForSingleObject(pi.hProcess, (uint)timeoutMs);
-                    if (wait == WAIT_TIMEOUT)
+                    var elapsed = Stopwatch.StartNew();
+                    while (true)
                     {
-                        if (!TerminateProcess(pi.hProcess, 1))
-                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Arrêt du processus expiré impossible.");
-                        uint terminatedWait = WaitForSingleObject(pi.hProcess, 2000);
-                        if (terminatedWait == WAIT_FAILED)
-                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Confirmation de l'arrêt impossible.");
-                        if (terminatedWait == WAIT_TIMEOUT)
-                            throw new TimeoutException("Le processus expiré ne s'est pas arrêté sous 2 000 ms.");
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            StopProcessTree(pi, "annulé");
+                            cancellationToken.ThrowIfCancellationRequested();
+                        }
+
+                        uint wait = WaitForSingleObject(pi.hProcess, 200);
+                        if (wait == WAIT_OBJECT_0) break;
+                        if (wait == WAIT_FAILED)
+                            throw new Win32Exception(Marshal.GetLastWin32Error(), "Attente du processus impossible.");
+                        if (wait != WAIT_TIMEOUT)
+                            throw new Win32Exception("Résultat d'attente du processus inattendu.");
+                        if (elapsed.ElapsedMilliseconds < timeoutMs) continue;
+
+                        StopProcessTree(pi, "expiré");
                         return -1;
                     }
-                    if (wait == WAIT_FAILED)
-                        throw new Win32Exception(Marshal.GetLastWin32Error(), "Attente du processus impossible.");
+
                     if (!GetExitCodeProcess(pi.hProcess, out uint exitCode))
                         throw new Win32Exception(Marshal.GetLastWin32Error(), "Lecture du code de sortie impossible.");
                     return (int)exitCode;
@@ -110,6 +118,69 @@ namespace Optimisation_Tool.Helpers
             }
         }
 
+        private static Process FindExplorerInCurrentSession()
+        {
+            int sessionId;
+            using (Process current = Process.GetCurrentProcess())
+                sessionId = current.SessionId;
+
+            Process[] explorers = Process.GetProcessesByName("explorer");
+            Process? selected = null;
+            try
+            {
+                foreach (Process candidate in explorers)
+                {
+                    try
+                    {
+                        if (candidate.SessionId != sessionId) continue;
+                        selected = candidate;
+                        return candidate;
+                    }
+                    catch
+                    {
+                        // La session peut disparaître pendant l'énumération.
+                    }
+                }
+
+                throw new InvalidOperationException(
+                    "explorer.exe introuvable dans la session utilisateur courante.");
+            }
+            finally
+            {
+                foreach (Process candidate in explorers)
+                    if (!ReferenceEquals(candidate, selected)) candidate.Dispose();
+            }
+        }
+
+        private static void StopProcessTree(PROCESS_INFORMATION pi, string reason)
+        {
+            if (WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0) return;
+
+            try
+            {
+                using Process process = Process.GetProcessById((int)pi.dwProcessId);
+                process.Kill(entireProcessTree: true);
+                if (!process.WaitForExit(2000))
+                    throw new TimeoutException($"Le processus {reason} ne s'est pas arrêté sous 2 000 ms.");
+                return;
+            }
+            catch (ArgumentException)
+            {
+                return;
+            }
+            catch
+            {
+                if (!TerminateProcess(pi.hProcess, 1))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), $"Arrêt du processus {reason} impossible.");
+            }
+
+            uint terminatedWait = WaitForSingleObject(pi.hProcess, 2000);
+            if (terminatedWait == WAIT_FAILED)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Confirmation de l'arrêt impossible.");
+            if (terminatedWait == WAIT_TIMEOUT)
+                throw new TimeoutException($"Le processus {reason} ne s'est pas arrêté sous 2 000 ms.");
+        }
+
         // ═══════════════════════════════════════════════════════════════════════
         // P/Invoke
         // ═══════════════════════════════════════════════════════════════════════
@@ -123,6 +194,7 @@ namespace Optimisation_Tool.Helpers
         private const uint CREATE_UNICODE_ENVIRONMENT        = 0x00000400;
         private const uint CREATE_NO_WINDOW                  = 0x08000000;
         private const uint LOGON_WITH_PROFILE                = 0x00000001;
+        private const uint WAIT_OBJECT_0                     = 0x00000000;
         private const uint WAIT_TIMEOUT                      = 0x00000102;
         private const uint WAIT_FAILED                       = 0xFFFFFFFF;
 

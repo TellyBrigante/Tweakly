@@ -267,11 +267,11 @@
                         <StackPanel>
                             <TextBlock Text="Profil à tester" Foreground="{DynamicResource ThTextTitle}"
                                        FontFamily="{StaticResource AppFont}" FontSize="15" FontWeight="SemiBold"/>
-                            <TextBlock Text="Applique d'abord le profil dans ton outil habituel, puis renseigne ses valeurs ici. Tweakly mesure et compare, sans modifier le pilote."
+                            <TextBlock Text="Applique d'abord le profil dans ton outil habituel. Tweakly valide uniquement l'undervolt du cœur : mémoire à stock et Power Limit à 100 %."
                                        Foreground="{DynamicResource ThTextDim}" FontFamily="{StaticResource AppFont}"
                                        FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
-                        <TextBlock Grid.Column="1" Text="~ 5 min" Foreground="{DynamicResource ThTextNav}"
+                        <TextBlock Grid.Column="1" Text="~ 20 min" Foreground="{DynamicResource ThTextNav}"
                                    Background="{DynamicResource ThPill}" FontFamily="{StaticResource AppFont}"
                                    FontSize="10.5" FontWeight="SemiBold" Padding="10,5"
                                    VerticalAlignment="Center" Margin="14,0,0,0"/>
@@ -291,12 +291,12 @@
                             <TextBox x:Name="TxtProfileClock" Style="{StaticResource GpuTextBox}"/>
                         </StackPanel>
                         <StackPanel Width="145" Margin="0,0,10,10">
-                            <TextBlock Text="MÉMOIRE (+MHz)" Style="{StaticResource GpuLabel}" Margin="1,0,0,5"/>
-                            <TextBox x:Name="TxtProfileMemory" Text="0" Style="{StaticResource GpuTextBox}"/>
+                            <TextBlock Text="MÉMOIRE (STOCK)" Style="{StaticResource GpuLabel}" Margin="1,0,0,5"/>
+                            <TextBox x:Name="TxtProfileMemory" Text="0" IsReadOnly="True" Style="{StaticResource GpuTextBox}"/>
                         </StackPanel>
                         <StackPanel Width="145" Margin="0,0,0,10">
-                            <TextBlock Text="POWER LIMIT (%)" Style="{StaticResource GpuLabel}" Margin="1,0,0,5"/>
-                            <TextBox x:Name="TxtProfilePower" Text="100" Style="{StaticResource GpuTextBox}"/>
+                            <TextBlock Text="POWER LIMIT (STOCK)" Style="{StaticResource GpuLabel}" Margin="1,0,0,5"/>
+                            <TextBox x:Name="TxtProfilePower" Text="100" IsReadOnly="True" Style="{StaticResource GpuTextBox}"/>
                         </StackPanel>
                     </WrapPanel>
 
@@ -328,8 +328,11 @@
                                FontSize="11.5" Margin="0,9,0,0" TextWrapping="Wrap"/>
 
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                        <Button x:Name="BtnProfileStart" Content="MESURER CE PROFIL"
+                        <Button x:Name="BtnProfileStart" Content="CONFIRMER 20 MIN"
                                 Style="{StaticResource PrimaryBtnStyle}" Click="BtnProfileStart_Click"/>
+                        <Button x:Name="BtnProfileLongValidation" Content="VALIDER 60 MIN" Margin="8,0,0,0"
+                                Style="{StaticResource SecondaryBtnStyle}" Click="BtnProfileLongValidation_Click"
+                                Visibility="Collapsed"/>
                         <TextBlock x:Name="TxtProfileButtonHint" Margin="10,0,0,0"
                                    VerticalAlignment="Center" Visibility="Collapsed"
                                    Foreground="{DynamicResource ThWarn}" FontFamily="{StaticResource AppFont}"

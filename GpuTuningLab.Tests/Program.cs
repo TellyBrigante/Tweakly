@@ -94,8 +94,13 @@ var tests = new List<(string Name, Func<Task> Run)>
     ("Block sparse mixed evidence", BlockSparseMixedEvidence),
     ("Block every under-documented GPU model", BlockEveryUnderDocumentedModel),
     ("Do not suggest stock-or-higher voltage", RejectNonUndervoltSeed),
-    ("Build measured next profile", BuildMeasuredNextProfile),
-    ("Isolate memory before raising voltage", IsolateMemoryBeforeRaisingVoltage)
+    ("Block exploratory and build confirmed next profile", BuildMeasuredNextProfile),
+    ("Reject mixed undervolt profile", RejectMixedUndervoltProfile),
+    ("Allow bounded first undervolt step", () => Run(AllowBoundedFirstUndervoltStep)),
+    ("Block aggressive first undervolt step", () => Run(BlockAggressiveFirstUndervoltStep)),
+    ("Repeat exact exploratory profile only", () => Run(RepeatExactExploratoryProfileOnly)),
+    ("Allow one proven transition variable", () => Run(AllowOneProvenTransitionVariable)),
+    ("Require recovery after failed undervolt", () => Run(RequireRecoveryAfterFailedUndervolt))
 };
 
 int passed = 0;
@@ -1510,10 +1515,21 @@ static async Task BuildMeasuredNextProfile()
         CandidateVerdict = StabilityVerdict.Validated,
         MeetsPerformanceFloor = true
     };
+    RunSummary confirmedSummary = RunAnalyzer.Summarize(candidate, Policy());
+    GpuAdviceStatus exploratory = GpuProfileAdvisor.BuildNext(
+        baseline,
+        candidate,
+        confirmedSummary with { Verdict = StabilityVerdict.Exploratory },
+        comparison,
+        Policy(),
+        entries);
+    True(!exploratory.Available && exploratory.Suggestion == null,
+        "An exploratory run must never produce a more aggressive profile.");
+
     GpuAdviceStatus advice = GpuProfileAdvisor.BuildNext(
         baseline,
         candidate,
-        RunAnalyzer.Summarize(candidate, Policy()),
+        confirmedSummary,
         comparison,
         Policy(),
         entries);
@@ -1523,7 +1539,7 @@ static async Task BuildMeasuredNextProfile()
     Equal(2700, advice.Suggestion.Profile.TargetClockMhz);
 }
 
-static async Task IsolateMemoryBeforeRaisingVoltage()
+static async Task RejectMixedUndervoltProfile()
 {
     string path = Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "data", "gpu-tuning", "published_tuning_evidence.json"));
@@ -1577,14 +1593,15 @@ static async Task IsolateMemoryBeforeRaisingVoltage()
         Policy(),
         entries);
 
-    True(advice.Available && advice.Suggestion != null, "A low-performance mixed profile must yield an isolating retry.");
-    Equal(920, advice.Suggestion!.Profile.TargetVoltageMv);
-    Equal(2670, advice.Suggestion.Profile.TargetClockMhz);
-    Equal(0, advice.Suggestion.Profile.MemoryOffsetMhz);
-    True(advice.Message.Contains("mémoire 0 MHz", StringComparison.OrdinalIgnoreCase),
-        "The retry message must state the exact memory reset.");
-    True(advice.Message.Contains("mémoire vidéo", StringComparison.OrdinalIgnoreCase),
-        "The retry message must identify the weakest workload.");
+    True(!advice.Available && advice.Suggestion == null,
+        "A profile mixing a memory offset into the core undervolt protocol must be rejected.");
+    True(advice.Message.Contains("protocole undervolt cœur isolé", StringComparison.OrdinalIgnoreCase),
+        "The rejection must explain the protocol boundary.");
+
+    IReadOnlyList<string> powerReasons = UndervoltProtocol.ValidateCandidate(
+        candidate.Profile with { MemoryOffsetMhz = 0, PowerLimitPercent = 90 });
+    True(powerReasons.Any(reason => reason.Contains("Power Limit", StringComparison.OrdinalIgnoreCase)),
+        "A mixed Power Limit must also be rejected.");
 }
 
 static async Task BlockSparseMixedEvidence()
@@ -1670,6 +1687,138 @@ static async Task RejectNonUndervoltSeed()
     True(!advice.Available, "Tweakly must not suggest a voltage equal to or above measured stock voltage.");
 }
 
+static void AllowBoundedFirstUndervoltStep()
+{
+    TestRun baseline = ProtocolRun(1.025, 100, 160, 65, 4, ProfileKind.Stock, null);
+    GpuTuningProfile requested = ProtocolProfile(1000, 2700);
+
+    UndervoltTransitionAssessment assessment = UndervoltProtocol.AssessTransition(
+        baseline,
+        requested,
+        [],
+        Policy());
+
+    True(assessment.Allowed, string.Join(" | ", assessment.BlockingReasons));
+}
+
+static void BlockAggressiveFirstUndervoltStep()
+{
+    TestRun baseline = ProtocolRun(1.025, 100, 160, 65, 4, ProfileKind.Stock, null);
+    GpuTuningProfile requested = ProtocolProfile(950, 2700);
+
+    UndervoltTransitionAssessment assessment = UndervoltProtocol.AssessTransition(
+        baseline,
+        requested,
+        [],
+        Policy());
+
+    True(!assessment.Allowed, "A 75 mV first step must be rejected.");
+    True(assessment.BlockingReasons.Any(reason => reason.Contains("first voltage step", StringComparison.OrdinalIgnoreCase)),
+        "The rejection must identify the oversized first step.");
+}
+
+static void RepeatExactExploratoryProfileOnly()
+{
+    EvaluationPolicy protocolPolicy = Policy() with
+    {
+        ShortValidationMinutes = 20,
+        LongValidationMinutes = 60
+    };
+    TestRun baseline = ProtocolRun(1.025, 100, 160, 65, 4, ProfileKind.Stock, null);
+    GpuTuningProfile explored = ProtocolProfile(1000, 2700);
+    TestRun exploratory = ProtocolRun(1.000, 100, 125, 55, 4, ProfileKind.Undervolt, explored);
+
+    UndervoltTransitionAssessment repeat = UndervoltProtocol.AssessTransition(
+        baseline,
+        explored,
+        [exploratory],
+        protocolPolicy);
+    True(repeat.Allowed, string.Join(" | ", repeat.BlockingReasons));
+
+    UndervoltTransitionAssessment changed = UndervoltProtocol.AssessTransition(
+        baseline,
+        ProtocolProfile(975, 2700),
+        [exploratory],
+        protocolPolicy);
+    True(!changed.Allowed, "An exploratory profile must be repeated exactly before changing voltage.");
+}
+
+static void AllowOneProvenTransitionVariable()
+{
+    TestRun baseline = ProtocolRun(1.025, 100, 160, 65, 4, ProfileKind.Stock, null);
+    GpuTuningProfile confirmedProfile = ProtocolProfile(1000, 2700);
+    TestRun confirmed = ProtocolRun(1.000, 100, 125, 65, 4, ProfileKind.Undervolt, confirmedProfile);
+
+    UndervoltTransitionAssessment voltageOnly = UndervoltProtocol.AssessTransition(
+        baseline,
+        ProtocolProfile(975, 2700),
+        [confirmed],
+        Policy());
+    True(voltageOnly.Allowed, string.Join(" | ", voltageOnly.BlockingReasons));
+
+    UndervoltTransitionAssessment twoVariables = UndervoltProtocol.AssessTransition(
+        baseline,
+        ProtocolProfile(975, 2670),
+        [confirmed],
+        Policy());
+    True(!twoVariables.Allowed, "Voltage and frequency must not change in the same step.");
+}
+
+static void RequireRecoveryAfterFailedUndervolt()
+{
+    TestRun baseline = ProtocolRun(1.025, 100, 160, 65, 4, ProfileKind.Stock, null);
+    GpuTuningProfile failedProfile = ProtocolProfile(1000, 2700);
+    TestRun failed = ProtocolRun(1.000, 100, 125, 55, 4, ProfileKind.Undervolt, failedProfile) with
+    {
+        StabilityEvents =
+        [
+            new StabilityEvent
+            {
+                Timestamp = DateTimeOffset.Now,
+                Kind = StabilityEventKind.Tdr,
+                Evidence = "Synthetic protocol transition test"
+            }
+        ]
+    };
+
+    UndervoltTransitionAssessment assessment = UndervoltProtocol.AssessTransition(
+        baseline,
+        ProtocolProfile(975, 2700),
+        [failed],
+        Policy());
+
+    True(!assessment.Allowed, "A failed profile without a long-validated recovery point must force stock recovery.");
+    True(assessment.BlockingReasons.Any(reason => reason.Contains("Return to stock", StringComparison.OrdinalIgnoreCase)),
+        "The recovery instruction must explicitly require stock.");
+}
+
+static GpuTuningProfile ProtocolProfile(int voltageMv, int clockMhz) => new()
+{
+    Name = $"Protocol {voltageMv} mV",
+    Kind = ProfileKind.Undervolt,
+    TargetVoltageMv = voltageMv,
+    TargetClockMhz = clockMhz,
+    MemoryOffsetMhz = 0,
+    PowerLimitPercent = 100,
+    AppliedBy = "manual-confirmed"
+};
+
+static TestRun ProtocolRun(
+    double voltageV,
+    double score,
+    double power,
+    double temperature,
+    int minutes,
+    ProfileKind kind,
+    GpuTuningProfile? profile)
+{
+    TestRun source = MakeRun(score, power, temperature, minutes, kind);
+    return source with
+    {
+        Profile = profile ?? source.Profile,
+        Samples = source.Samples.Select(sample => sample with { VoltageV = voltageV }).ToArray()
+    };
+}
 static EvaluationPolicy Policy() => new()
 {
     SamplingIntervalMs = 500,

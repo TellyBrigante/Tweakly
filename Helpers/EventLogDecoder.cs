@@ -781,12 +781,11 @@ namespace Optimisation_Tool.Helpers
                     {
                         "Identifier le service dans services.msc (Win+R > services.msc).",
                         "Si service tiers (jeu, antivirus, agent constructeur, RGB software) : mettre à jour ou désactiver.",
-                        "Si service Windows critique : ouvrir Réparation Windows pour lancer DISM puis SFC dans le bon ordre.",
+                        "Si service Windows critique : vérifier l'intégrité de Windows avec les outils système hors Tweakly.",
                     };
                     inc.Actions = new List<LogAction>
                     {
                         new LogAction { Label = "Ouvrir services.msc", Tooltip = "Console des services Windows.",          Kind = LogActionKind.Diag,    Target = "services.msc" },
-                        new LogAction { Label = "Réparation Windows", Tooltip = "Lance DISM puis SFC dans le bon ordre.", Kind = LogActionKind.Navigate, Target = "WinRepair" },
                     };
                     return;
 
@@ -947,12 +946,11 @@ namespace Optimisation_Tool.Helpers
                         e.Steps = new List<string>
                         {
                             "Tester la RAM avec MemTest86 (clé USB, plusieurs passes) — si erreurs : barrette défectueuse ou XMP trop agressif.",
-                            "Ouvrir Réparation Windows pour lancer DISM puis SFC dans le bon ordre.",
+                            "Vérifier l'intégrité de Windows avec les outils système hors Tweakly.",
                             "Forcer Windows Update à jour (Réglages > Windows Update).",
                         };
                         e.Actions = new List<LogAction>
                         {
-                            new LogAction { Label = "Réparation Windows",   Tooltip = "Lance DISM puis SFC dans le bon ordre.",                                                     Kind = LogActionKind.Navigate, Target = "WinRepair" },
                             new LogAction { Label = "MemTest86",            Tooltip = "Page officielle MemTest86 (PassMark) pour tester la RAM.",                                 Kind = LogActionKind.Url,     Target = "https://www.memtest86.com/" },
                         };
                     }
@@ -1019,12 +1017,11 @@ namespace Optimisation_Tool.Helpers
                             ? $"Identifier le service « {svc} » dans services.msc (Win+R > services.msc) et regarder son éditeur."
                             : "Identifier le service fautif dans services.msc (Win+R > services.msc).",
                         "Si c'est un service tiers (jeu, antivirus, agent constructeur type AsusOptimization, RGB software…) : mettre à jour le logiciel associé, ou le désactiver s'il est inutile.",
-                        "Si c'est un service Windows critique : ouvrir Réparation Windows pour lancer DISM puis SFC dans le bon ordre.",
+                        "Si c'est un service Windows critique : vérifier l'intégrité de Windows avec les outils système hors Tweakly.",
                     };
                     e.Actions = new List<LogAction>
                     {
                         new LogAction { Label = "Ouvrir services.msc", Tooltip = "Console des services Windows.",                                          Kind = LogActionKind.Diag,    Target = "services.msc" },
-                        new LogAction { Label = "Réparation Windows", Tooltip = "Lance DISM puis SFC dans le bon ordre.",                                  Kind = LogActionKind.Navigate, Target = "WinRepair" },
                     };
                     return e;
                 }

@@ -7,6 +7,8 @@ namespace Optimisation_Tool.Helpers
 {
     internal static class WingetCli
     {
+        public const string CommunitySource = "winget";
+
         private static readonly Regex PackageIdPattern = new(
             @"^[A-Za-z0-9][A-Za-z0-9._+-]{2,127}$",
             RegexOptions.CultureInvariant | RegexOptions.Compiled);
@@ -18,7 +20,7 @@ namespace Optimisation_Tool.Helpers
                 string alias = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "Microsoft", "WindowsApps", "winget.exe");
-                return File.Exists(alias) ? alias : "winget.exe";
+                return alias;
             }
         }
 

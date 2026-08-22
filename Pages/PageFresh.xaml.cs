@@ -30,7 +30,9 @@ namespace Optimisation_Tool.Pages
         private string _status = "—";
 
         public string Name     { get; set; } = "";
+        public string Publisher { get; set; } = "";
         public string WingetId { get; set; } = "";
+        public string WingetSource { get; set; } = WingetCli.CommunitySource;
         public string Version  { get; set; } = "";
 
         public bool IsSelected
@@ -70,7 +72,9 @@ namespace Optimisation_Tool.Pages
     internal sealed class ManifestEntry
     {
         [JsonPropertyName("name")]     public string Name     { get; set; } = "";
+        [JsonPropertyName("publisher")] public string Publisher { get; set; } = "";
         [JsonPropertyName("wingetId")] public string WingetId { get; set; } = "";
+        [JsonPropertyName("source")] public string Source { get; set; } = WingetCli.CommunitySource;
         [JsonPropertyName("version")]  public string Version  { get; set; } = "";
     }
 
@@ -92,17 +96,17 @@ namespace Optimisation_Tool.Pages
         // Noms des hints par mode et étape
         private static readonly string[] SaveHints =
         {
-            "Coche les applications à conserver. WMT-GUI va télécharger les installeurs via winget et les compresser dans un ZIP portable.",
-            "Téléchargement en cours via winget — les installeurs sont récupérés un par un. Ne ferme pas WMT-GUI.",
+            "Coche les applications à conserver. Tweakly enregistre uniquement leurs identifiants Winget vérifiés dans un pack portable.",
+            "Création du manifest Winget en cours. Aucun installeur local n'est téléchargé ni intégré.",
             "ZIP créé avec succès — copie ce fichier sur une clé USB ou un stockage externe avant de formater.",
         };
 
         private static readonly string[] RestoreHints =
         {
-            "Sélectionne le fichier ZIP généré par WMT-GUI (mode SAVE). Il contient les installeurs et le manifest de tes apps.",
+            "Sélectionne le fichier ZIP généré par Tweakly. Il contient uniquement le manifest des identifiants Winget vérifiés.",
             "Extraction du manifest depuis le ZIP en cours…",
-            "Coche les applications à réinstaller, puis clique INSTALLER. L'installation utilise les fichiers locaux du ZIP.",
-            "Installation en cours — chaque app est installée automatiquement. Ne ferme pas WMT-GUI.",
+            "Coche les applications à réinstaller, puis clique INSTALLER. Winget retélécharge chaque paquet depuis sa source déclarée.",
+            "Installation en cours — chaque app est installée via Winget. Ne ferme pas Tweakly.",
         };
 
         public PageFresh(MainWindow main)
@@ -320,7 +324,9 @@ namespace Optimisation_Tool.Pages
                 var item = new FreshAppItem
                 {
                     Name       = reg.Name,
+                    Publisher  = reg.Publisher,
                     WingetId   = hasId ? entry.id  : "",
+                    WingetSource = WingetCli.CommunitySource,
                     Version    = hasId && entry.ver.Length > 0 ? entry.ver : reg.Version,
                     IsSelected = false,
                     Status     = hasId ? "—" : "— Sans Winget ID",
@@ -349,6 +355,7 @@ namespace Optimisation_Tool.Pages
                 .Select(app => new FreshAppItem
                 {
                     Name = app.Name,
+                    Publisher = app.Publisher,
                     Version = app.Version,
                 })
                 .ToList();
@@ -362,10 +369,9 @@ namespace Optimisation_Tool.Pages
 
             try
             {
-                ProcessCommandResult version = ProcessCommand.Run("winget", "--version", 5_000);
-                if (!version.Success)
+                if (string.IsNullOrWhiteSpace(RunWingetCommand("--version")))
                 {
-                    AppLog.WriteOnce("fresh-winget-version", "Pack Réinstallation : Winget indisponible : " + version.FailureDescription);
+                    AppLog.WriteOnce("fresh-winget-version", "Pack Réinstallation : Winget indisponible.");
                     return (map, false);
                 }
 
@@ -396,8 +402,33 @@ namespace Optimisation_Tool.Pages
 
         private static string RunWingetCommand(string arguments)
         {
-            ProcessCommandResult result = ProcessCommand.Run("winget", arguments, 60_000);
-            if (result.Success) return result.Output;
+            string tempOutput = Path.Combine(Path.GetTempPath(), $"tweakly_fresh_wg_{Guid.NewGuid():N}.txt");
+            try
+            {
+                int exitCode = DeElevatedLauncher.StartAndWait(
+                    WindowsSystemTools.PathFor("cmd.exe"),
+                    $"/d /c chcp 65001 > nul && winget.exe {arguments} > \"{tempOutput}\" 2>&1",
+                    60_000);
+                string userOutput = File.Exists(tempOutput)
+                    ? Regex.Replace(File.ReadAllText(tempOutput, Encoding.UTF8), @"\x1B\[[0-9;?]*[A-Za-z]", "")
+                    : "";
+                if (!string.IsNullOrWhiteSpace(userOutput)) return userOutput;
+
+                AppLog.WriteOnce(
+                    "fresh-winget-user-context:" + arguments.Split(' ')[0],
+                    $"Pack Réinstallation : Winget utilisateur terminé sans sortie (code {exitCode}).");
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("fresh-winget-user-context", "Pack Réinstallation : contexte Winget utilisateur indisponible", ex);
+            }
+            finally
+            {
+                try { File.Delete(tempOutput); } catch { }
+            }
+
+            ProcessCommandResult result = ProcessCommand.Run(WingetCli.UserExecutablePath, arguments, 60_000);
+            if (result.Success && !string.IsNullOrWhiteSpace(result.Output)) return result.Output;
 
             string operation = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "commande";
             AppLog.WriteOnce("fresh-winget-command:" + operation,
@@ -476,11 +507,13 @@ namespace Optimisation_Tool.Pages
 
         private static string SearchWingetId(string appName)
         {
+            if (string.IsNullOrWhiteSpace(appName) || appName.Contains('"')) return "";
+
             try
             {
-                // winget search retourne un tableau similaire à winget list
                 var raw = RunWingetCommand(
-                    $"search --query \"{appName}\" --count 5 --accept-source-agreements --disable-interactivity");
+                    $"search --name \"{appName}\" --exact --source {WingetCli.CommunitySource} " +
+                    "--count 2 --accept-source-agreements --disable-interactivity");
 
                 if (string.IsNullOrWhiteSpace(raw)) return "";
 
@@ -489,6 +522,7 @@ namespace Optimisation_Tool.Pages
                 var lines = raw.Split('\n');
                 int nameCol = -1, idCol = -1;
                 bool past = false;
+                var matches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var rawLine in lines)
                 {
@@ -523,14 +557,11 @@ namespace Optimisation_Tool.Pages
 
                     if (!WingetCli.IsValidPackageId(id)) continue;
 
-                    // Match exact ou début de nom
-                    if (name.Equals(appName, StringComparison.OrdinalIgnoreCase) ||
-                        appName.StartsWith(name, StringComparison.OrdinalIgnoreCase) ||
-                        name.StartsWith(appName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return id;
-                    }
+                    if (name.Equals(appName, StringComparison.OrdinalIgnoreCase))
+                        matches.Add(id);
                 }
+
+                return matches.Count == 1 ? matches.Single() : "";
             }
             catch (Exception ex)
             {
@@ -550,14 +581,14 @@ namespace Optimisation_Tool.Pages
 
             GoToStep(2);
 
-            var dlFolder = Path.Combine(Path.GetTempPath(), $"WMT-Fresh-{DateTime.Now:yyyyMMddHHmmss}");
+            var dlFolder = Path.Combine(Path.GetTempPath(), $"Tweakly-Fresh-{Guid.NewGuid():N}");
             Directory.CreateDirectory(dlFolder);
 
             TxtDlTitle.Text  = "Téléchargement en cours…";
             TxtDlStatus.Text = $"0 / {selected.Count}";
             SetBar(BarDl, 0, selected.Count);
 
-            _main.Log($"Pack Réinstallation : début téléchargement de {selected.Count} app(s).");
+            _main.Log($"Pack Réinstallation : résolution de {selected.Count} identifiant(s) Winget.");
 
             int done = 0;
             int downloadFailures = 0;
@@ -578,6 +609,7 @@ namespace Optimisation_Tool.Pages
                     }
                     else
                     {
+                        downloadFailures++;
                         _main.Log($"Pack Réinstallation : {item.Name} — introuvable dans le catalogue, ignoré.");
                         done++;
                         TxtDlStatus.Text = $"{done} / {selected.Count}";
@@ -588,6 +620,7 @@ namespace Optimisation_Tool.Pages
 
                 if (!WingetCli.IsValidPackageId(wingetId))
                 {
+                    downloadFailures++;
                     item.Status = "✗ ID Winget invalide";
                     _main.Log($"Pack Réinstallation : ID Winget invalide pour {item.Name}, élément ignoré.");
                     done++;
@@ -596,24 +629,8 @@ namespace Optimisation_Tool.Pages
                     continue;
                 }
 
-                // ── Téléchargement ───────────────────────────────────────────
-                TxtDlApp.Text = $"Téléchargement : {item.Name}";
-                _main.Log($"Pack Réinstallation : winget download → {item.Name} ({wingetId})");
-
-                ProcessCommandResult download = await Task.Run(() => ProcessCommand.Run(
-                    "winget",
-                    $"download --id \"{wingetId}\" -l \"{dlFolder}\" --accept-package-agreements --accept-source-agreements",
-                    120_000));
-                if (download.Success)
-                {
-                    item.Status = "✓ Téléchargée";
-                }
-                else
-                {
-                    downloadFailures++;
-                    item.Status = "✗ Téléchargement impossible";
-                    _main.Log($"Pack Réinstallation : téléchargement de {item.Name} échoué — {download.FailureDescription}");
-                }
+                TxtDlApp.Text = $"Identifiant vérifié : {item.Name}";
+                item.Status = "✓ Référencée";
 
                 done++;
                 TxtDlStatus.Text = $"{done} / {selected.Count}";
@@ -626,10 +643,14 @@ namespace Optimisation_Tool.Pages
             {
                 Date    = DateTime.Now.ToString("o"),
                 Machine = Environment.MachineName,
-                Apps    = selected.Select(a => new ManifestEntry
+                Apps    = selected
+                    .Where(a => WingetCli.IsValidPackageId(a.WingetId))
+                    .Select(a => new ManifestEntry
                 {
                     Name     = a.Name,
+                    Publisher = a.Publisher,
                     WingetId = a.WingetId,
+                    Source   = a.WingetSource,
                     Version  = a.Version,
                 }).ToList(),
             };
@@ -639,7 +660,7 @@ namespace Optimisation_Tool.Pages
             // Créer le ZIP dans Téléchargements
             TxtDlApp.Text = "Compression du ZIP…";
             var downloads  = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var zipName    = $"WMT-FreshInstall-{DateTime.Now:yyyyMMdd-HHmmss}.zip";
+            var zipName    = $"Tweakly-FreshInstall-{DateTime.Now:yyyyMMdd-HHmmss-fff}.zip";
             _zipPath       = Path.Combine(downloads, "Downloads", zipName);
 
             bool zipOk = false;
@@ -665,8 +686,8 @@ namespace Optimisation_Tool.Pages
             if (zipOk)
             {
                 TxtZipTitle.Text = downloadFailures == 0
-                    ? "✓  ZIP prêt !"
-                    : $"ZIP prêt — {downloadFailures} téléchargement(s) manquant(s)";
+                    ? "✓  Pack Winget prêt !"
+                    : $"Pack prêt — {downloadFailures} application(s) sans identifiant fiable";
                 TxtZipTitle.SetResourceReference(TextBlock.ForegroundProperty,
                     downloadFailures == 0 ? "ThOk" : "ThWarn");
                 TxtZipPath.Text        = _zipPath;
@@ -755,13 +776,19 @@ namespace Optimisation_Tool.Pages
                         throw new InvalidDataException("Le manifeste contient un nom d'application invalide.");
                     if (!string.IsNullOrEmpty(a.WingetId) && !WingetCli.IsValidPackageId(a.WingetId))
                         throw new InvalidDataException($"ID Winget invalide pour {a.Name}.");
-                    if (a.Version.Length > 128)
+                    if (!string.Equals(a.Source, WingetCli.CommunitySource, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"Source Winget non prise en charge pour {a.Name}.");
+                    if ((a.Publisher?.Length ?? 0) > 256)
+                        throw new InvalidDataException($"Éditeur invalide pour {a.Name}.");
+                    if ((a.Version?.Length ?? 0) > 128)
                         throw new InvalidDataException($"Version invalide pour {a.Name}.");
                     _restoreItems.Add(new FreshAppItem
                     {
                         Name       = a.Name,
+                        Publisher  = a.Publisher ?? "",
                         WingetId   = a.WingetId,
-                        Version    = a.Version,
+                        WingetSource = a.Source,
+                        Version    = a.Version ?? "",
                         IsSelected = false,
                         Status     = "—",
                     });
@@ -800,21 +827,8 @@ namespace Optimisation_Tool.Pages
             SetBar(BarInst, 0, toInstall.Count);
             BtnCancelInst.IsEnabled = true;
 
-            // Extraire le ZIP dans un dossier temp
-            var extractDir = Path.Combine(Path.GetTempPath(), $"WMT-Restore-{DateTime.Now:yyyyMMddHHmmss}");
-            bool extracted = false;
             try
             {
-                try
-                {
-                    await Task.Run(() => ZipFile.ExtractToDirectory(_zipPath, extractDir));
-                    extracted = true;
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Error("Pack Réinstallation : extraction du ZIP", ex);
-                }
-
                 foreach (var item in toInstall)
                 {
                     item.Status = "En attente";
@@ -829,8 +843,7 @@ namespace Optimisation_Tool.Pages
                     TxtInstApp.Text     = $"Installation : {item.Name}";
                     SetBar(BarInst, done, toInstall.Count);
 
-                    var (result, debug) = await Task.Run(() =>
-                        InstallApp(item, extracted ? extractDir : null, token));
+                    var (result, debug) = await Task.Run(() => InstallApp(item, token));
 
                     item.Status = result switch
                     {
@@ -884,12 +897,6 @@ namespace Optimisation_Tool.Pages
                 TxtInstApp.Text = "";
                 BtnCancelInst.IsEnabled = false;
                 _main.ClearTaskbarProgress();
-                if (extracted)
-                {
-                    try { Directory.Delete(extractDir, recursive: true); }
-                    catch (Exception ex) { AppLog.Error("Pack Réinstallation : nettoyage temporaire", ex); }
-                }
-
                 if (ReferenceEquals(_cts, operationCts))
                     _cts = null;
                 operationCts.Dispose();
@@ -904,13 +911,13 @@ namespace Optimisation_Tool.Pages
         }
 
         // ═════════════════════════════════════════════════════════════════════
-        // INSTALLATION D'UNE APP (depuis fichier local ou winget)
+        // INSTALLATION D'UNE APP (identifiant Winget vérifié uniquement)
         // ═════════════════════════════════════════════════════════════════════
 
         private enum InstallResult { Ok, Already, Failed, Cancelled }
 
         private static (InstallResult result, string debug) InstallApp(
-            FreshAppItem item, string? extractDir, CancellationToken ct)
+            FreshAppItem item, CancellationToken ct)
         {
             if (ct.IsCancellationRequested) return (InstallResult.Cancelled, "annulé");
             var log = new StringBuilder();
@@ -925,17 +932,24 @@ namespace Optimisation_Tool.Pages
             {
                 if (!WingetCli.IsValidPackageId(item.WingetId))
                     return (InstallResult.Failed, "ID Winget invalide");
+                if (!string.Equals(item.WingetSource, WingetCli.CommunitySource, StringComparison.OrdinalIgnoreCase))
+                    return (InstallResult.Failed, "source Winget non prise en charge");
 
-                var args = $"install --id \"{item.WingetId}\" --silent " +
+                var args = $"/d /c winget.exe install --id \"{item.WingetId}\" --exact " +
+                           $"--source {item.WingetSource} --silent " +
                            "--accept-package-agreements --accept-source-agreements --disable-interactivity";
                 try
                 {
                     int ec = DeElevatedLauncher.StartAndWait(
-                        WingetCli.UserExecutablePath,
-                        args, 300_000, null);
+                        WindowsSystemTools.PathFor("cmd.exe"),
+                        args, 300_000, null, ct);
                     log.Append($"winget-userctx ec={ec}; ");
                     if (ec == 0)            return (InstallResult.Ok,      log.ToString());
                     if (IsAlready(ec))      return (InstallResult.Already, log.ToString());
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    return (InstallResult.Cancelled, log + "annulé");
                 }
                 catch (Exception ex) { log.Append($"winget-userctx err={ex.Message}; "); }
             }
@@ -952,8 +966,9 @@ namespace Optimisation_Tool.Pages
                     {
                         var scopeArg = scope.Length > 0 ? $" {scope}" : "";
                         using var p = Process.Start(new ProcessStartInfo(
-                            "winget",
-                            $"install --id \"{item.WingetId}\" --silent{scopeArg} " +
+                            WingetCli.UserExecutablePath,
+                            $"install --id \"{item.WingetId}\" --exact --source {item.WingetSource} " +
+                            $"--silent{scopeArg} " +
                             "--accept-package-agreements --accept-source-agreements --disable-interactivity")
                         {
                             UseShellExecute        = false,
@@ -1009,36 +1024,11 @@ namespace Optimisation_Tool.Pages
                 }
             }
 
-            // ── 3. Installeur local du ZIP (dé-élevé), dernier recours ────────
-            if (extractDir != null && Directory.Exists(extractDir))
-            {
-                var idPrefix = item.WingetId.Contains('.') ? item.WingetId.Split('.')[0] : item.WingetId;
-                var subDir = Directory.GetDirectories(extractDir, "*", SearchOption.TopDirectoryOnly)
-                    .FirstOrDefault(d =>
-                    {
-                        var fn = Path.GetFileName(d);
-                        return fn.StartsWith(idPrefix,      StringComparison.OrdinalIgnoreCase)
-                            || fn.StartsWith(item.WingetId, StringComparison.OrdinalIgnoreCase);
-                    });
-                var searchRoot = subDir ?? extractDir;
-
-                foreach (var pat in new[] { "*.exe", "*.msi", "*.msix", "*.msixbundle" })
-                {
-                    var files = Directory.GetFiles(searchRoot, pat, SearchOption.AllDirectories);
-                    if (files.Length == 0) continue;
-
-                    var (res, dbg) = RunLocalInstaller(files[0], ct);
-                    log.Append($"local[{dbg}]; ");
-                    if (res == InstallResult.Ok || res == InstallResult.Cancelled)
-                        return (res, log.ToString());
-                    break;
-                }
-            }
-            else log.Append("pas d'installeur local; ");
-
+            log.Append("installation locale refusée : source non authentifiée; ");
             return (InstallResult.Failed, log.ToString());
         }
 
+#if false
         /// <summary>
         /// Lance un installeur local avec les bons flags silencieux selon son type.
         /// Les .exe sont lancés DÉ-ÉLEVÉS (contexte utilisateur) pour gérer les apps
@@ -1118,6 +1108,7 @@ namespace Optimisation_Tool.Pages
             }
             catch (Exception ex) { return (InstallResult.Failed, $"local {name} erreur: {ex.Message}"); }
         }
+#endif
 
         // ═════════════════════════════════════════════════════════════════════
         // SÉLECTION
@@ -1168,7 +1159,7 @@ namespace Optimisation_Tool.Pages
         {
             var n = _saveItems.Count(i => i.IsSelected);
             BtnDownload.IsEnabled = n > 0;
-            BtnDownload.Content   = $"TÉLÉCHARGER ET ZIPPER ({n})";
+            BtnDownload.Content   = $"CRÉER LE PACK WINGET ({n})";
         }
 
         private void UpdateInstallButton()

@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -88,15 +89,15 @@ namespace Optimisation_Tool.Pages
 
     // ── Résidu détecté après désinstallation ───────────────────────────────────
 
-    public sealed class Leftover
-    {
-        public enum LType { Reg, File, Task }
-        public LType  Type    { get; init; }
-        public string Target  { get; init; } = "";
-        public string Display { get; init; } = "";
-    }
-
     // ── Page ──────────────────────────────────────────────────────────────────
+
+    internal sealed class Leftover
+    {
+        internal enum LType { Reg, File, Task }
+        internal LType Type { get; init; }
+        internal string Target { get; init; } = "";
+        internal string Display { get; init; } = "";
+    }
 
     public partial class PageApps : UserControl
     {
@@ -105,6 +106,7 @@ namespace Optimisation_Tool.Pages
         private          ICollectionView?                   _view;
         private          bool                               _loaded   = false;
         private          bool                               _updating = false;
+        private          CancellationTokenSource?           _updateCts;
         private          List<Leftover>                     _pendingCleanup = new();
 
         public PageApps(MainWindow main)
@@ -124,6 +126,9 @@ namespace Optimisation_Tool.Pages
 
             await LoadAppsAsync();
         }
+
+        private void UserControl_Unloaded(object sender, RoutedEventArgs e)
+            => _updateCts?.Cancel();
 
         private bool FilterApp(object obj)
         {
@@ -248,8 +253,8 @@ namespace Optimisation_Tool.Pages
                 try
                 {
                     int exit = DeElevatedLauncher.StartAndWait(
-                        "cmd.exe",
-                        $"/c chcp 65001 > nul && winget {arguments} > \"{tmp}\" 2>&1",
+                        WindowsSystemTools.PathFor("cmd.exe"),
+                        $"/d /c chcp 65001 > nul && winget.exe {arguments} > \"{tmp}\" 2>&1",
                         70_000);
                     if (File.Exists(tmp))
                     {
@@ -268,7 +273,7 @@ namespace Optimisation_Tool.Pages
             catch (Exception ex) { _main.Log($"Applications : de-élévation — {ex.Message}"); }
 
             // Tentative 2 : direct (fallback)
-            ProcessCommandResult direct = ProcessCommand.Run("winget", arguments, 60_000);
+            ProcessCommandResult direct = ProcessCommand.Run(WingetCli.UserExecutablePath, arguments, 60_000);
             if (direct.Success)
             {
                 string raw = Regex.Replace(direct.Output, "\x1B\\[[0-9;?]*[A-Za-z]", "");
@@ -318,6 +323,11 @@ namespace Optimisation_Tool.Pages
          || exitCode ==  -1978335146   // ERROR_UPDATE_ALL_HAS_FAILURE … ou no apps to update
          || exitCode ==  -1978335189;  // ERROR_NO_APPLICABLE_UPDATE_FOUND
 
+        private static bool IsRuntimeUpdateUnsafeForRunningTweakly(AppItem app) =>
+            app.WingetId.StartsWith("Microsoft.DotNet.", StringComparison.OrdinalIgnoreCase)
+            || app.Name.Contains(".NET Runtime", StringComparison.OrdinalIgnoreCase)
+            || app.Name.Contains("Windows Desktop Runtime", StringComparison.OrdinalIgnoreCase);
+
         // Process .exe qui doit être fermé pour permettre la MAJ de telle app (mapping conservateur,
         // ajouts ponctuels au fil du retour utilisateur).
         private static readonly Dictionary<string, string[]> _appProcesses = new(StringComparer.OrdinalIgnoreCase)
@@ -349,13 +359,19 @@ namespace Optimisation_Tool.Pages
             return running.Count > 0 ? running.ToArray() : null;
         }
 
-        private async Task UpdateSingleAppAsync(AppItem app)
+        private async Task UpdateSingleAppAsync(AppItem app, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(app.WingetId)) return;
             if (!WingetCli.IsValidPackageId(app.WingetId))
             {
                 app.UpdateStatus = UpdateStatus.Failed;
                 _main.Log($"Applications : ID Winget invalide pour « {app.Name} ».");
+                return;
+            }
+            if (IsRuntimeUpdateUnsafeForRunningTweakly(app))
+            {
+                app.UpdateStatus = UpdateStatus.Unknown;
+                _main.Log($"Applications : MAJ ignorée pour « {app.Name} » — runtime .NET utilisé par Tweakly pendant l'exécution.");
                 return;
             }
 
@@ -374,59 +390,67 @@ namespace Optimisation_Tool.Pages
                 return;
             }
 
-            // ── 2) Tentative MAJ avec différents scopes (user → machine → défaut) ─
-            //    Discord = user-scope, TeamSpeak = machine-scope, etc. Winget devine
-            //    parfois mal → on retente proprement.
-            int lastExit = 0;
-            string lastOutput = "";
-            foreach (var scope in new[] { "", "--scope user", "--scope machine" })
-            {
-                var scopeArg = scope.Length > 0 ? $" {scope}" : "";
-                var (exit, output) = await Task.Run(() => RunWingetCmd(
-                    $"upgrade --id \"{app.WingetId}\" --silent{scopeArg} --accept-package-agreements --accept-source-agreements --disable-interactivity"));
-                lastExit   = exit;
-                lastOutput = output;
+            cancellationToken.ThrowIfCancellationRequested();
+            var (exit, output) = await Task.Run(() => RunWingetCmd(
+                $"upgrade --id \"{app.WingetId}\" --exact --source {WingetCli.CommunitySource} " +
+                "--silent --accept-package-agreements --accept-source-agreements --disable-interactivity",
+                cancellationToken), cancellationToken);
 
-                if (exit == 0)
-                {
-                    app.AvailableVersion = "";
-                    app.UpdateStatus     = UpdateStatus.Updated;
-                    _main.Log($"Applications : « {app.Name} » mise à jour avec succès{(scope.Length>0?$" ({scope})":"")}.");
-                    return;
-                }
-                if (WingetIsBenign(exit) ||
-                    output.Contains("already installed", StringComparison.OrdinalIgnoreCase) ||
-                    output.Contains("déjà install", StringComparison.OrdinalIgnoreCase) ||
-                    output.Contains("No applicable update", StringComparison.OrdinalIgnoreCase))
-                {
-                    app.AvailableVersion = "";
-                    app.UpdateStatus     = UpdateStatus.Updated;
-                    _main.Log($"Applications : « {app.Name} » déjà à jour (winget ec={exit}).");
-                    return;
-                }
+            if (exit == 0)
+            {
+                app.AvailableVersion = "";
+                app.UpdateStatus     = UpdateStatus.Updated;
+                _main.Log($"Applications : « {app.Name} » mise à jour avec succès.");
+                return;
+            }
+            if (WingetIsBenign(exit) ||
+                output.Contains("already installed", StringComparison.OrdinalIgnoreCase) ||
+                output.Contains("déjà install", StringComparison.OrdinalIgnoreCase) ||
+                output.Contains("No applicable update", StringComparison.OrdinalIgnoreCase))
+            {
+                app.AvailableVersion = "";
+                app.UpdateStatus     = UpdateStatus.Updated;
+                _main.Log($"Applications : « {app.Name} » déjà à jour (winget ec={exit}).");
+                return;
             }
 
-            // ── 3) Tous les scopes ont échoué : log diagnostic + statut Failed ───
             app.UpdateStatus = UpdateStatus.Failed;
-            string firstLine = lastOutput.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "";
-            _main.Log($"Applications : échec MAJ « {app.Name} » — winget ec={lastExit} | {firstLine}");
+            string firstLine = output.Split('\n').FirstOrDefault(l => l.Trim().Length > 0)?.Trim() ?? "";
+            _main.Log($"Applications : échec MAJ « {app.Name} » — winget ec={exit} | {firstLine}");
         }
 
         // Lance winget (DÉ-ÉLEVÉ, contexte user) et capture stdout+stderr + code d'erreur.
         // Indispensable pour distinguer « rien à faire » d'un vrai échec.
-        private (int exit, string output) RunWingetCmd(string args)
+        private (int exit, string output) RunWingetCmd(
+            string args,
+            CancellationToken cancellationToken)
         {
             var tmp = Path.Combine(Path.GetTempPath(), $"tweakly_wgu_{Guid.NewGuid():N}.txt");
             try
             {
                 int exit = DeElevatedLauncher.StartAndWait(
-                    "cmd.exe",
-                    $"/c chcp 65001 > nul && winget {args} > \"{tmp}\" 2>&1",
-                    300_000);
+                    WindowsSystemTools.PathFor("cmd.exe"),
+                    $"/d /c chcp 65001 > nul && winget.exe {args} > \"{tmp}\" 2>&1",
+                    300_000,
+                    cancellationToken: cancellationToken);
                 var output = File.Exists(tmp) ? File.ReadAllText(tmp, Encoding.UTF8) : "";
                 output = Regex.Replace(output, "\x1B\\[[0-9;?]*[A-Za-z]", "");
+                if (exit != 0 && string.IsNullOrWhiteSpace(output))
+                {
+                    ProcessCommandResult direct = ProcessCommand.Run(
+                        WingetCli.UserExecutablePath,
+                        args,
+                        300_000,
+                        cancellationToken);
+                    string directOutput = Regex.Replace(
+                        string.Join(Environment.NewLine, direct.Output, direct.Error),
+                        "\x1B\\[[0-9;?]*[A-Za-z]",
+                        "");
+                    return (direct.ExitCode, directOutput);
+                }
                 return (exit, output);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex) { return (-1, "exception: " + ex.Message); }
             finally { try { File.Delete(tmp); } catch { } }
         }
@@ -440,16 +464,29 @@ namespace Optimisation_Tool.Pages
             _updating              = true;
             BtnUpdateAll.IsEnabled = false;
             BtnRefresh.IsEnabled   = false;
-
-            await UpdateSingleAppAsync(app);
-
-            BtnUpdateAll.IsEnabled = _apps.Any(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
-            BtnRefresh.IsEnabled   = true;
-            _updating              = false;
-
-            TxtStatus.Text = app.UpdateStatus == UpdateStatus.Updated
-                ? $"« {app.Name} » mise à jour avec succès."
-                : $"Échec de la mise à jour de « {app.Name} ».";
+            var operationCts = new CancellationTokenSource();
+            _updateCts = operationCts;
+            try
+            {
+                await UpdateSingleAppAsync(app, operationCts.Token);
+                TxtStatus.Text = app.UpdateStatus == UpdateStatus.Updated
+                    ? $"« {app.Name} » mise à jour avec succès."
+                    : $"Échec de la mise à jour de « {app.Name} ».";
+            }
+            catch (OperationCanceledException)
+            {
+                if (app.UpdateStatus == UpdateStatus.Updating)
+                    app.UpdateStatus = UpdateStatus.UpdateAvailable;
+                TxtStatus.Text = $"Mise à jour de « {app.Name} » annulée.";
+            }
+            finally
+            {
+                BtnUpdateAll.IsEnabled = _apps.Any(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
+                BtnRefresh.IsEnabled   = true;
+                _updating              = false;
+                if (ReferenceEquals(_updateCts, operationCts)) _updateCts = null;
+                operationCts.Dispose();
+            }
         }
 
         private async void BtnUpdateAll_Click(object sender, RoutedEventArgs e)
@@ -463,22 +500,36 @@ namespace Optimisation_Tool.Pages
             BtnRefresh.IsEnabled      = false;
             BtnDesinstaller.IsEnabled = false;
             _main.Log($"Applications : mise à jour groupée — {toUpdate.Count} application(s)…");
+            var operationCts = new CancellationTokenSource();
+            _updateCts = operationCts;
+            try
+            {
+                foreach (var app in toUpdate)
+                    await UpdateSingleAppAsync(app, operationCts.Token);
 
-            foreach (var app in toUpdate)
-                await UpdateSingleAppAsync(app);
-
-            int updated = toUpdate.Count(a => a.UpdateStatus == UpdateStatus.Updated);
-            int failed  = toUpdate.Count(a => a.UpdateStatus == UpdateStatus.Failed);
-
-            BtnUpdateAll.IsEnabled    = _apps.Any(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
-            BtnRefresh.IsEnabled      = true;
-            BtnDesinstaller.IsEnabled = DgApps.SelectedItem != null;
-            _updating                 = false;
-
-            TxtStatus.Text = failed > 0
-                ? $"Mises à jour : {updated} réussie(s), {failed} échouée(s)."
-                : $"{updated} application(s) mise(s) à jour avec succès.";
-            _main.Log($"Applications : MAJ groupée — {updated} réussie(s), {failed} échouée(s).");
+                int updated = toUpdate.Count(a => a.UpdateStatus == UpdateStatus.Updated);
+                int failed  = toUpdate.Count(a => a.UpdateStatus == UpdateStatus.Failed);
+                TxtStatus.Text = failed > 0
+                    ? $"Mises à jour : {updated} réussie(s), {failed} échouée(s)."
+                    : $"{updated} application(s) mise(s) à jour avec succès.";
+                _main.Log($"Applications : MAJ groupée — {updated} réussie(s), {failed} échouée(s).");
+            }
+            catch (OperationCanceledException)
+            {
+                foreach (AppItem app in toUpdate.Where(a => a.UpdateStatus == UpdateStatus.Updating))
+                    app.UpdateStatus = UpdateStatus.UpdateAvailable;
+                TxtStatus.Text = "Mise à jour groupée annulée.";
+                _main.Log("Applications : mise à jour groupée annulée.");
+            }
+            finally
+            {
+                BtnUpdateAll.IsEnabled    = _apps.Any(a => a.UpdateStatus == UpdateStatus.UpdateAvailable);
+                BtnRefresh.IsEnabled      = true;
+                BtnDesinstaller.IsEnabled = DgApps.SelectedItem != null;
+                _updating                 = false;
+                if (ReferenceEquals(_updateCts, operationCts)) _updateCts = null;
+                operationCts.Dispose();
+            }
         }
 
         // ── Lecture registre ──────────────────────────────────────────────────
@@ -603,25 +654,8 @@ namespace Optimisation_Tool.Pages
 
             if (ok)
             {
-                TxtStatus.Text = "Scan des résidus en cours…";
-                var leftovers = await Task.Run(
-                    () => FindLeftovers(app.Name, app.Publisher, app.InstallLocation));
-
-                if (leftovers.Count > 0)
-                {
-                    _pendingCleanup        = leftovers;
-                    int n                  = leftovers.Count;
-                    BtnNettoyer.Content    = $"NETTOYER {n} RÉSIDU{(n > 1 ? "S" : "")}";
-                    BtnNettoyer.Visibility = Visibility.Visible;
-                    BtnNettoyer.IsEnabled  = true;
-                    TxtStatus.Text         = $"Désinstallée — {n} résidu(s) détecté(s), cliquez pour nettoyer.";
-                    _main.Log($"Applications : {n} résidu(s) détecté(s) après désinstallation.");
-                }
-                else
-                {
-                    TxtStatus.Text = "Désinstallée — aucun résidu détecté.";
-                    _main.Log("Applications : aucun résidu détecté.");
-                }
+                TxtStatus.Text = "Désinstallée. Aucun nettoyage générique n'est effectué.";
+                _main.Log("Applications : nettoyage générique volontairement désactivé — aucune appartenance fiable ne peut être prouvée.");
             }
 
             BtnRefresh.IsEnabled      = true;
@@ -824,37 +858,10 @@ namespace Optimisation_Tool.Pages
 
         private static (int cleaned, int errors) CleanLeftovers(List<Leftover> items)
         {
-            int cleaned = 0, errors = 0;
-            foreach (var item in items)
-            {
-                try
-                {
-                    switch (item.Type)
-                    {
-                        case Leftover.LType.Reg:
-                            DeleteRegistryKey(item.Target);
-                            cleaned++;
-                            break;
-                        case Leftover.LType.File:
-                            if (Directory.Exists(item.Target))
-                                Directory.Delete(item.Target, recursive: true);
-                            else if (File.Exists(item.Target))
-                                File.Delete(item.Target);
-                            cleaned++;
-                            break;
-                        case Leftover.LType.Task:
-                            DeleteScheduledTask(item.Target);
-                            cleaned++;
-                            break;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    errors++;
-                    AppLog.Error("Applications : suppression du résidu " + item.Display, ex);
-                }
-            }
-            return (cleaned, errors);
+            // Une correspondance textuelle n'est pas une preuve d'appartenance.
+            // Refus fail-closed : aucun fichier, aucune clé et aucune tâche ne
+            // sont supprimés par ce mécanisme générique.
+            return (0, items.Count);
         }
 
         private static void DeleteRegistryKey(string fullPath)
@@ -889,13 +896,13 @@ namespace Optimisation_Tool.Pages
         {
             if (!string.IsNullOrEmpty(app.WingetId))
             {
-                ProcessCommandResult byId = ProcessCommand.Run(
-                    "winget",
-                    $"uninstall --id \"{app.WingetId}\" --silent --accept-source-agreements --disable-interactivity",
-                    120_000);
-                if (byId.Success) return true;
+                int byId = RunDeElevatedUninstaller(
+                    WingetCli.UserExecutablePath,
+                    $"uninstall --id \"{app.WingetId}\" --exact --source {WingetCli.CommunitySource} " +
+                    "--silent --accept-source-agreements --disable-interactivity");
+                if (byId == 0) return true;
                 AppLog.Write($"Applications : winget n'a pas désinstallé {app.Name} par ID — "
-                    + byId.FailureDescription);
+                    + $"code {byId}.");
             }
 
             if (!string.IsNullOrEmpty(app.UninstallString))
@@ -916,22 +923,15 @@ namespace Optimisation_Tool.Pages
                         exe  = sp > 0 ? us.Substring(0, sp) : us;
                         args = sp > 0 ? us.Substring(sp + 1).Trim() : "";
                     }
-                    using var p = Process.Start(new ProcessStartInfo(exe, args) { UseShellExecute = true });
-                    if (p == null)
-                    {
-                        AppLog.Write($"Applications : lancement du désinstalleur impossible pour {app.Name}.");
-                    }
-                    else if (!p.WaitForExit(120_000))
-                    {
-                        AppLog.Write($"Applications : le désinstalleur de {app.Name} est encore actif après 120 s.");
-                    }
-                    else if (p.ExitCode == 0)
+                    exe = ResolveUninstallerPath(exe);
+                    int exitCode = RunDeElevatedUninstaller(exe, args);
+                    if (exitCode == 0)
                     {
                         return true;
                     }
                     else
                     {
-                        AppLog.Write($"Applications : désinstalleur de {app.Name} terminé avec le code {p.ExitCode}.");
+                        AppLog.Write($"Applications : désinstalleur de {app.Name} terminé avec le code {exitCode}.");
                     }
                 }
                 catch (Exception ex)
@@ -940,14 +940,36 @@ namespace Optimisation_Tool.Pages
                 }
             }
 
-            ProcessCommandResult byName = ProcessCommand.Run(
-                "winget",
-                $"uninstall --name \"{app.Name}\" --silent --accept-source-agreements --disable-interactivity",
-                120_000);
-            if (!byName.Success)
-                AppLog.Write($"Applications : winget n'a pas désinstallé {app.Name} par nom — "
-                    + byName.FailureDescription);
-            return byName.Success;
+            return false;
+        }
+
+        private static int RunDeElevatedUninstaller(string executablePath, string arguments)
+        {
+            return DeElevatedLauncher.StartAndWait(executablePath, arguments, 120_000,
+                Path.GetDirectoryName(executablePath));
+        }
+
+        private static string ResolveUninstallerPath(string executable)
+        {
+            string expanded = Environment.ExpandEnvironmentVariables(executable.Trim().Trim('"'));
+            if (string.Equals(expanded, "msiexec", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(expanded, "msiexec.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return WindowsSystemTools.PathFor("msiexec.exe");
+            }
+
+            if (!Path.IsPathFullyQualified(expanded))
+                throw new InvalidOperationException("Chemin de désinstallation non absolu refusé.");
+
+            string fullPath = Path.GetFullPath(expanded);
+            if (!File.Exists(fullPath))
+                throw new FileNotFoundException("Désinstalleur introuvable.", fullPath);
+
+            FileAttributes attributes = File.GetAttributes(fullPath);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Désinstalleur situé derrière un lien de redirection refusé.");
+
+            return fullPath;
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────

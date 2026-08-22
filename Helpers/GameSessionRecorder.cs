@@ -78,6 +78,7 @@ namespace Optimisation_Tool.Helpers
             try
             {
                 if (!File.Exists(PathLayout.PresentMon)) { error = "PresentMon.exe introuvable dans data\\tools."; return false; }
+                using IDisposable presentMonLease = BundledFileTrust.OpenVerifiedLease(PathLayout.PresentMon);
 
                 // --output_stdout : PresentMon écrit le CSV (1 ligne par frame) sur STDOUT, qu'on
                 // lit EN DIRECT → FPS live fiable + accumulation des frames. --timed 3600 = filet

@@ -61,7 +61,9 @@ public static class GpuProfileAdvisor
         int publicVoltage = anchor.Tuned.VoltageMv!.Value;
         int publicClock = anchor.Tuned.ClockMhz!.Value;
         int targetVoltage = stockVoltage.HasValue
-            ? Math.Max(publicVoltage, RoundDown(stockVoltage.Value - 50, 25))
+            ? Math.Max(publicVoltage, RoundDown(
+                stockVoltage.Value - policy.VoltageStepMv,
+                5))
             : publicVoltage;
         if (stockVoltage.HasValue)
             targetVoltage = Math.Min(targetVoltage, stockVoltage.Value - 5);
@@ -72,8 +74,7 @@ public static class GpuProfileAdvisor
 
         int units = advisoryPool.Select(static item => item.IndependentUnitId)
             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        int sources = advisoryPool.Select(static item => item.Source.Url)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        int sources = CountIndependentSources(advisoryPool);
         string confidence = coreIsolated.Length == 0
             ? "Préliminaire"
             : units >= 5 && sources >= 3
@@ -138,8 +139,20 @@ public static class GpuProfileAdvisor
             return new(false, "Le test n'est pas complet. Aucun nouveau profil n'est calculé.", null);
         if (summary.Verdict is StabilityVerdict.Rejected or StabilityVerdict.InvalidTelemetry)
             return new(false, "Le profil n'est pas exploitable. Reviens au dernier profil stable.", null);
+        if (!UndervoltProtocol.CanCalculateNextProfile(summary.Verdict))
+            return new(
+                false,
+                "Le profil reste exploratoire. Termine une confirmation de 20 minutes avant de calculer un autre palier.",
+                null);
         if (!candidate.Profile.TargetVoltageMv.HasValue || !candidate.Profile.TargetClockMhz.HasValue)
             return new(false, "Le profil mesuré ne contient pas de tension et de fréquence exploitables.", null);
+        IReadOnlyList<string> protocolReasons = UndervoltProtocol.ValidateCandidate(candidate.Profile);
+        if (protocolReasons.Count > 0)
+            return new(
+                false,
+                "Le profil ne respecte pas le protocole undervolt cœur isolé : " +
+                string.Join(" ", protocolReasons),
+                null);
 
         PublishedTuningEvidence[] sameModel = evidence
             .Where(item => GpuReferenceMatcher.SameModel(item.Model, baseline.Identity.Name))
@@ -184,7 +197,9 @@ public static class GpuProfileAdvisor
             }
             else
             {
-                int maximumVoltage = stockVoltage ?? 1_200;
+                int maximumVoltage = stockVoltage.HasValue
+                    ? Math.Max(600, stockVoltage.Value - 5)
+                    : 1_200;
                 nextVoltage = Math.Min(maximumVoltage, currentVoltage + policy.VoltageStepMv);
                 if (nextVoltage == currentVoltage)
                 {
@@ -226,8 +241,7 @@ public static class GpuProfileAdvisor
 
         int units = usable.Select(static item => item.IndependentUnitId)
             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        int sources = usable.Select(static item => item.Source.Url)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        int sources = CountIndependentSources(usable);
         var profile = new GpuTuningProfile
         {
             Name = nextMemory == 0 && currentMemory != 0
@@ -328,16 +342,33 @@ public static class GpuProfileAdvisor
     {
         int units = usable.Select(static item => item.IndependentUnitId)
             .Distinct(StringComparer.OrdinalIgnoreCase).Count();
-        int sources = usable.Select(static item => item.Source.Url)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        int sources = CountIndependentSources(usable);
+        bool hasDirectReview = usable.Any(static item =>
+            string.Equals(item.Source.EvidenceType, "direct-review", StringComparison.OrdinalIgnoreCase));
         bool enough = usable.Count >= MinimumAdvisoryPoints
             && units >= MinimumIndependentUnits
             && sources >= MinimumIndependentSources
-            && coreIsolated.Count > 0;
+            && coreIsolated.Count > 0
+            && hasDirectReview;
         message = enough
             ? ""
-            : $"Base publique insuffisante pour conseiller ce modèle : {usable.Count} point(s) exploitable(s), {units} carte(s), {sources} source(s) et {coreIsolated.Count} point(s) cœur isolé(s).";
+            : $"Base publique insuffisante pour conseiller ce modèle : {usable.Count} point(s) exploitable(s), {units} carte(s), {sources} provenance(s) indépendante(s), {coreIsolated.Count} point(s) cœur isolé(s) et revue directe : {(hasDirectReview ? "oui" : "non")}.";
         return enough;
+    }
+
+    private static int CountIndependentSources(IEnumerable<PublishedTuningEvidence> evidence)
+        => evidence.Select(SourceKey)
+            .Where(static key => !string.IsNullOrWhiteSpace(key))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+    private static string SourceKey(PublishedTuningEvidence evidence)
+    {
+        if (Uri.TryCreate(evidence.Source.Url, UriKind.Absolute, out Uri? uri))
+            return uri.IdnHost.StartsWith("www.", StringComparison.OrdinalIgnoreCase)
+                ? uri.IdnHost[4..]
+                : uri.IdnHost;
+        return evidence.Source.Publisher.Trim();
     }
 
     private static int RoundDown(int value, int step) => Math.Max(step, value / step * step);

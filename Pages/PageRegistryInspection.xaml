@@ -173,7 +173,7 @@
                             BorderBrush="{DynamicResource ThCritBorderTint}" BorderThickness="1"
                             CornerRadius="6" Padding="11,8">
                         <StackPanel>
-                            <TextBlock Text="DONN&#201;ES INVALIDES" Style="{StaticResource RegistryCaption}"
+                            <TextBlock Text="ANOMALIES CERTAINES" Style="{StaticResource RegistryCaption}"
                                        Foreground="{DynamicResource ThCrit}"/>
                             <TextBlock x:Name="TxtMalformed" Text="&#8212;" Foreground="{DynamicResource ThCrit}"
                                        FontFamily="{StaticResource AppFont}" FontSize="18" FontWeight="SemiBold"/>
@@ -183,7 +183,7 @@
                             BorderBrush="{DynamicResource ThWarnBorderTint}" BorderThickness="1"
                             CornerRadius="6" Padding="11,8">
                         <StackPanel>
-                            <TextBlock Text="&#192; V&#201;RIFIER" Style="{StaticResource RegistryCaption}"
+                            <TextBlock Text="INHABITUELS" Style="{StaticResource RegistryCaption}"
                                        Foreground="{DynamicResource ThWarn}"/>
                             <TextBlock x:Name="TxtReview" Text="&#8212;" Foreground="{DynamicResource ThWarn}"
                                        FontFamily="{StaticResource AppFont}" FontSize="18" FontWeight="SemiBold"/>
@@ -193,7 +193,7 @@
                             BorderBrush="{DynamicResource ThBorder}" BorderThickness="1"
                             CornerRadius="6" Padding="11,8">
                         <StackPanel>
-                            <TextBlock Text="NON LUS" Style="{StaticResource RegistryCaption}"/>
+                            <TextBlock Text="INFORMATIONS" Style="{StaticResource RegistryCaption}"/>
                             <TextBlock x:Name="TxtUnreadable" Text="&#8212;" Foreground="{DynamicResource ThTextBody}"
                                        FontFamily="{StaticResource AppFont}" FontSize="18" FontWeight="SemiBold"/>
                         </StackPanel>

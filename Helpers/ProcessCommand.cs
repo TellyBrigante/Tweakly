@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Optimisation_Tool.Helpers
@@ -42,7 +43,11 @@ namespace Optimisation_Tool.Helpers
     /// </summary>
     public static class ProcessCommand
     {
-        public static ProcessCommandResult Run(string fileName, string arguments, int timeoutMs)
+        public static ProcessCommandResult Run(
+            string fileName,
+            string arguments,
+            int timeoutMs,
+            CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(fileName))
                 throw new ArgumentException("Le nom du processus est vide.", nameof(fileName));
@@ -67,21 +72,20 @@ namespace Optimisation_Tool.Helpers
 
                 Task<string> stdout = process.StandardOutput.ReadToEndAsync();
                 Task<string> stderr = process.StandardError.ReadToEndAsync();
-                if (!process.WaitForExit(timeoutMs))
+                var elapsed = Stopwatch.StartNew();
+                while (!process.WaitForExit(200))
                 {
-                    string killError = "";
-                    try
+                    if (cancellationToken.IsCancellationRequested)
                     {
-                        process.Kill(entireProcessTree: true);
-                        if (!process.WaitForExit(5000))
-                        {
-                            killError = " Arrêt forcé impossible : le processus ne s'est pas arrêté sous 5 s.";
-                        }
+                        _ = StopProcessTree(process);
+                        Observe(stdout);
+                        Observe(stderr);
+                        cancellationToken.ThrowIfCancellationRequested();
                     }
-                    catch (Exception ex)
-                    {
-                        killError = " Arrêt forcé impossible : " + ex.Message;
-                    }
+
+                    if (elapsed.ElapsedMilliseconds < timeoutMs) continue;
+
+                    string killError = StopProcessTree(process);
 
                     Observe(stdout);
                     Observe(stderr);
@@ -101,9 +105,28 @@ namespace Optimisation_Tool.Helpers
                     stdout.Result,
                     stderr.Result.Trim());
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 return new ProcessCommandResult(false, false, -1, "", ex.Message);
+            }
+        }
+
+        private static string StopProcessTree(Process process)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+                return process.WaitForExit(5000)
+                    ? ""
+                    : " Arrêt forcé impossible : le processus ne s'est pas arrêté sous 5 s.";
+            }
+            catch (Exception ex)
+            {
+                return " Arrêt forcé impossible : " + ex.Message;
             }
         }
 

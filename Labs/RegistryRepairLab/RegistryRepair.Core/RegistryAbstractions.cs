@@ -26,6 +26,9 @@ public interface IRegistryRepairJournal
 
     Task<IReadOnlyList<RegistryRepairTransaction>> GetIncompleteAsync(
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<RegistryRepairTransaction>> GetBlockingAsync(
+        CancellationToken cancellationToken);
 }
 
 public interface IRegistryRepairFaultInjector

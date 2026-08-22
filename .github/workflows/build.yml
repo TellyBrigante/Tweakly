@@ -1,6 +1,5 @@
-# CI minimale (audit I-5) : vérifie que chaque push sur main COMPILE en Release.
-# Pas de tests (il n'y en a pas encore), pas de publish : juste le filet de
-# sécurité "ce commit ne casse pas le build". Le protocole de release local
+# CI : vérifie le build Release, les tests déterministes et les dépendances NuGet.
+# Pas de publish : le protocole de release local
 # (MISE_A_JOUR_PROTOCOLE.txt) reste la seule voie de publication.
 name: build
 
@@ -23,3 +22,18 @@ jobs:
 
       - name: Build Release
         run: dotnet build Tweakly.csproj -c Release --nologo
+
+      - name: Audit NuGet vulnerabilities
+        run: dotnet list Tweakly.csproj package --vulnerable --include-transitive
+
+      - name: Test Tweakly helpers and registry rules
+        run: dotnet run --project Tweakly.RegistryTests/Tweakly.RegistryTests.csproj -c Release
+
+      - name: Test fan control core
+        run: dotnet run --project FanControl.Tests/FanControl.Tests.csproj -c Release
+
+      - name: Test GPU tuning core
+        run: dotnet run --project GpuTuningLab.Tests/GpuTuningLab.Tests.csproj -c Release
+
+      - name: Test registry repair core
+        run: dotnet run --project Labs/RegistryRepairLab/RegistryRepair.Tests/RegistryRepair.Tests.csproj -c Release

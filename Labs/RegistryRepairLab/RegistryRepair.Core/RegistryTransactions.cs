@@ -9,6 +9,7 @@ public enum RegistryTransactionState
     Undone,
     UndoFailed,
     Recovered,
+    UndoPrepared,
 }
 
 public sealed record RegistryRepairTransaction(

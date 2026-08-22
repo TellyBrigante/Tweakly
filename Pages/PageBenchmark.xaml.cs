@@ -302,7 +302,7 @@ namespace Optimisation_Tool.Pages
         // sur LA machine (plan d'alim, HVCI, Power Throttling, SystemResponsiveness,
         // Game DVR, programmes au démarrage NOMMÉS) et on affiche chaque constat avec
         // un bouton qui mène directement au réglage qui corrige.
-        private async void RefreshSysAdvice(int sysScore)
+        private async Task RefreshSysAdviceAsync(int sysScore)
         {
             try
             {
@@ -329,12 +329,12 @@ namespace Optimisation_Tool.Pages
                     var row = new Border
                     {
                         CornerRadius = new CornerRadius(8),
-                        Background   = new SolidColorBrush(Color.FromArgb(0x0A, 0x80, 0x80, 0x80)),
-                        BorderBrush  = new SolidColorBrush(Color.FromArgb(0x1A, 0x80, 0x80, 0x80)),
                         BorderThickness = new Thickness(1),
                         Padding = new Thickness(12, 9, 12, 9),
                         Margin  = new Thickness(0, 0, 0, 6),
                     };
+                    row.SetResourceReference(Border.BackgroundProperty, "ThSecBtn");
+                    row.SetResourceReference(Border.BorderBrushProperty, "ThBorder");
                     var g = new Grid();
                     g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                     g.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -444,7 +444,7 @@ namespace Optimisation_Tool.Pages
             SysCol.Width     = new GridLength(sysT,         GridUnitType.Star);
             SysColRest.Width = new GridLength(100.0 - sysT, GridUnitType.Star);
             TxtSysMeasured.Text = Verdict(r.SysScore, "Système");
-            RefreshSysAdvice(r.SysScore);
+            _ = RefreshSysAdviceAsync(r.SysScore);
 
             // ── RAM (échelle 0-100) ────────────────────────────────────────
             TxtRamScore.Text = r.RamScore.ToString();

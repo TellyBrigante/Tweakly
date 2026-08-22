@@ -7,9 +7,8 @@
                   MainWindow directe (mode « démarrer minimisé ») — voir App.xaml.cs -->
     <Application.Resources>
 
-        <!-- ── Police globale : douce/arrondie, repli sur des polices Windows ── -->
-        <!-- Nunito (si installee) > Calibri (presente partout, douce) > Segoe UI -->
-        <FontFamily x:Key="AppFont">Segoe UI Variable, Segoe UI</FontFamily>
+        <!-- ── Police globale embarquée, avec repli Windows si la ressource est indisponible ── -->
+        <FontFamily x:Key="AppFont">pack://application:,,,/Resources/Fonts/#Instrument Sans, Segoe UI Variable, Segoe UI</FontFamily>
 
         <!-- ── Brushes thémables (valeurs SOMBRES par défaut) — swap via ThemeManager ── -->
         <SolidColorBrush x:Key="ThBg"        Color="#2B3252"/>

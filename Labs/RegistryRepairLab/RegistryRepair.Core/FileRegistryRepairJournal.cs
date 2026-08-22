@@ -5,7 +5,7 @@ namespace RegistryRepair.Core;
 
 public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposable
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -13,11 +13,15 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
     };
 
     private readonly string _directory;
+    private readonly byte[] _authenticationKey;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public FileRegistryRepairJournal(string directory)
+    public FileRegistryRepairJournal(string directory, ReadOnlySpan<byte> authenticationKey)
     {
+        if (authenticationKey.Length < 32)
+            throw new ArgumentException("The journal authentication key must contain at least 32 bytes.", nameof(authenticationKey));
         _directory = Path.GetFullPath(directory);
+        _authenticationKey = authenticationKey.ToArray();
         Directory.CreateDirectory(_directory);
     }
 
@@ -34,7 +38,7 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
             var envelope = new JournalEnvelope(
                 CurrentSchemaVersion,
                 transaction,
-                Convert.ToHexString(SHA256.HashData(transactionJson)));
+                Convert.ToHexString(HMACSHA256.HashData(_authenticationKey, transactionJson)));
             byte[] json = JsonSerializer.SerializeToUtf8Bytes(envelope, JsonOptions);
 
             await using (var stream = new FileStream(
@@ -73,7 +77,26 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
         }
     }
 
-    public async Task<IReadOnlyList<RegistryRepairTransaction>> GetIncompleteAsync(
+    public Task<IReadOnlyList<RegistryRepairTransaction>> GetIncompleteAsync(
+        CancellationToken cancellationToken) =>
+        GetByStateAsync(
+            static state => state is
+                RegistryTransactionState.Prepared or
+                RegistryTransactionState.UndoPrepared,
+            cancellationToken);
+
+    public Task<IReadOnlyList<RegistryRepairTransaction>> GetBlockingAsync(
+        CancellationToken cancellationToken) =>
+        GetByStateAsync(
+            static state => state is
+                RegistryTransactionState.Prepared or
+                RegistryTransactionState.UndoPrepared or
+                RegistryTransactionState.RollbackFailed or
+                RegistryTransactionState.UndoFailed,
+            cancellationToken);
+
+    private async Task<IReadOnlyList<RegistryRepairTransaction>> GetByStateAsync(
+        Func<RegistryTransactionState, bool> predicate,
         CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -89,7 +112,7 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
 
                 RegistryRepairTransaction? transaction =
                     await ReadFileAsync(path, id, cancellationToken).ConfigureAwait(false);
-                if (transaction?.State == RegistryTransactionState.Prepared)
+                if (transaction is not null && predicate(transaction.State))
                     result.Add(transaction);
             }
 
@@ -101,11 +124,15 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
         }
     }
 
-    public void Dispose() => _gate.Dispose();
+    public void Dispose()
+    {
+        CryptographicOperations.ZeroMemory(_authenticationKey);
+        _gate.Dispose();
+    }
 
     private string PathFor(Guid id) => Path.Combine(_directory, id.ToString("N") + ".json");
 
-    private static async Task<RegistryRepairTransaction?> ReadFileAsync(
+    private async Task<RegistryRepairTransaction?> ReadFileAsync(
         string path,
         Guid expectedId,
         CancellationToken cancellationToken)
@@ -119,7 +146,7 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
             JournalEnvelope envelope = JsonSerializer.Deserialize<JournalEnvelope>(json, JsonOptions)
                 ?? throw new RegistryRepairException("The registry repair journal is empty.");
 
-            if (envelope.Transaction is null || string.IsNullOrWhiteSpace(envelope.Digest))
+            if (envelope.Transaction is null || string.IsNullOrWhiteSpace(envelope.Mac))
                 throw new RegistryRepairException(
                     "The registry repair journal is incomplete.");
 
@@ -133,12 +160,12 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
             byte[] transactionJson = JsonSerializer.SerializeToUtf8Bytes(
                 envelope.Transaction,
                 JsonOptions);
-            string actualDigest = Convert.ToHexString(SHA256.HashData(transactionJson));
+            byte[] actualMac = HMACSHA256.HashData(_authenticationKey, transactionJson);
             if (!CryptographicOperations.FixedTimeEquals(
-                    Convert.FromHexString(envelope.Digest),
-                    Convert.FromHexString(actualDigest)))
+                    Convert.FromHexString(envelope.Mac),
+                    actualMac))
                 throw new RegistryRepairException(
-                    "The registry repair journal failed its integrity check.");
+                    "The registry repair journal failed its authenticated integrity check.");
 
             return envelope.Transaction;
         }
@@ -158,5 +185,5 @@ public sealed class FileRegistryRepairJournal : IRegistryRepairJournal, IDisposa
     private sealed record JournalEnvelope(
         int SchemaVersion,
         RegistryRepairTransaction Transaction,
-        string Digest);
+        string Mac);
 }

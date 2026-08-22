@@ -71,7 +71,7 @@ namespace Optimisation_Tool.Helpers
             var list = new List<Task>();
             try
             {
-                ProcessCommandResult query = ProcessCommand.Run("schtasks", "/query /xml ONE", 10_000);
+                ProcessCommandResult query = ProcessCommand.Run(WindowsSystemTools.PathFor("schtasks.exe"), "/query /xml ONE", 10_000);
                 if (!query.Success)
                 {
                     AppLog.WriteOnce("scheduled-shutdown-query",

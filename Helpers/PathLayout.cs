@@ -40,6 +40,7 @@ namespace Optimisation_Tool.Helpers
         public static string BenchRefFile   => Path.Combine(Config, "tweakly-bench-ref.json");
         public static string FanProfilesFile => Path.Combine(Config, "tweakly-fans.json");
         public static string FanWatchdogLog => Path.Combine(Config, "tweakly-fan-watchdog.log");
+        public static string NetworkUndoFile => Path.Combine(Config, "tweakly-network-undo.json");
 
         // Fichiers fournis (data\<sous-dossier>\)
         public static string PawnIoSetup     => Path.Combine(DataDrv,   "PawnIO_setup.exe");

@@ -55,7 +55,7 @@ namespace Optimisation_Tool.Pages
                 if (d is CheckBox) return;
             }
 
-            if (sender is Border row && row.Tag is CheckBox chk)
+            if (sender is Border row && row.Tag is CheckBox chk && chk.IsEnabled)
                 chk.IsChecked = chk.IsChecked != true;
         }
 
@@ -97,6 +97,7 @@ namespace Optimisation_Tool.Pages
             long freed = 0;
             int ops = 0;
             int residues = 0;
+            int residuesRemoved = 0;
             int skipped = 0;
             int errors = 0;
             int done = 0;
@@ -123,6 +124,7 @@ namespace Optimisation_Tool.Pages
                 freed += result.Freed;
                 ops += result.Ops;
                 residues += result.Residues;
+                residuesRemoved += result.ResiduesRemoved;
                 skipped += result.Skipped;
                 errors += result.Errors;
 
@@ -136,7 +138,7 @@ namespace Optimisation_Tool.Pages
 
             _main.Log($"Nettoyage terminé - {FormatBytes(freed)} libérés ({ops} opération(s)).");
 
-            string summary = BuildSummary(selected, freed, residues, skipped, errors);
+            string summary = BuildSummary(selected, freed, residues, residuesRemoved, skipped, errors);
             TxtLastSummary.Text = summary;
             if (errors == 0)
             {
@@ -300,11 +302,10 @@ namespace Optimisation_Tool.Pages
 
                     if (ui.Check.Name == nameof(ChkResidues))
                     {
-                        ui.Status.Text = "Registre et raccourcis, taille négligeable";
+                        ui.Status.Text = "Registre sauvegardé avant suppression";
                         ui.Status.SetResourceReference(ForegroundProperty, "ThTextDim");
                         continue;
                     }
-
                     ui.Status.Text = "Calcul en cours...";
                     ui.Status.SetResourceReference(ForegroundProperty, "ThTextDim");
                 }
@@ -399,7 +400,13 @@ namespace Optimisation_Tool.Pages
             ui.Progress.SetResourceReference(Control.ForegroundProperty, brush);
         }
 
-        private static string BuildSummary(IEnumerable<StepPlan> selected, long freed, int residues, int skipped, int errors)
+        private static string BuildSummary(
+            IEnumerable<StepPlan> selected,
+            long freed,
+            int residues,
+            int residuesRemoved,
+            int skipped,
+            int errors)
         {
             var list = selected.ToList();
             var parts = new List<string>();
@@ -408,7 +415,9 @@ namespace Optimisation_Tool.Pages
             if (list.Any(s => s.Ui.Check.Name == nameof(ChkTrimSSD))) parts.Add("TRIM terminé");
             if (list.Any(s => s.Ui.Check.Name == nameof(ChkEventLogs))) parts.Add("journaux Windows traités");
             if (list.Any(s => s.Ui.Check.Name == nameof(ChkResidues)))
-                parts.Add(residues > 0 ? $"{residues} résidu(s) retiré(s)" : "0 résidu sûr");
+                parts.Add(residues > 0
+                    ? $"{residuesRemoved} traité(s) sur {residues} résidu(s) détecté(s)"
+                    : "aucun résidu sûr détecté");
 
             string summary = parts.Count > 0
                 ? "Terminé - " + string.Join(" | ", parts)

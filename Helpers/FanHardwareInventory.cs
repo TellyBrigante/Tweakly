@@ -37,14 +37,6 @@ public static class FanHardwareInventory
         using IDisposable hardwareLease = HardwareMonitorAccess.Enter();
         CpuTemperature.SuspendForExclusiveHardwareAccess();
 
-        if (!SetDllDirectory(PathLayout.DataDrv))
-        {
-            AppLog.ErrorOnce(
-                "fan-inventory-dll-directory",
-                "Ventilation : dossier PawnIO non enregistre",
-                new Win32Exception(Marshal.GetLastWin32Error()));
-        }
-
         var computer = new Computer
         {
             IsMotherboardEnabled = true,
@@ -53,6 +45,9 @@ public static class FanHardwareInventory
 
         try
         {
+            using IDisposable pawnIoLease = BundledFileTrust.OpenVerifiedLease(PathLayout.PawnIoLib);
+            if (!SetDllDirectory(PathLayout.DataDrv))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Le dossier PawnIO est indisponible.");
             computer.Open();
             IHardware? motherboard = computer.Hardware.FirstOrDefault(x => x.HardwareType == HardwareType.Motherboard);
             if (motherboard is null)

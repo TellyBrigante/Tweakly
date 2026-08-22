@@ -171,7 +171,7 @@ namespace Optimisation_Tool.Helpers
                 && (DateTime.UtcNow - _wifiSignalCacheTime).TotalMilliseconds < 5000)
                 return _wifiSignalCache;
 
-            ProcessCommandResult result = ProcessCommand.Run("netsh", "wlan show interfaces", 3000);
+            ProcessCommandResult result = ProcessCommand.Run(WindowsSystemTools.PathFor("netsh.exe"), "wlan show interfaces", 3000);
             if (!result.Success)
             {
                 AppLog.WriteOnce("network-monitor-wifi-signal", "Monitoring réseau : signal Wi-Fi indisponible : " + result.Error);

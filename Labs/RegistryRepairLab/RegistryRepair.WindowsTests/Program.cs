@@ -34,7 +34,7 @@ async Task DwordRepairAndUndo()
     RegistryAddress address = Address(RegistryViewId.Registry64, "Dword");
     hive.Seed(address, RawRegistryValue.DWord(2));
     WindowsRegistryBackend backend = hive.CreateBackend();
-    using var journal = new FileRegistryRepairJournal(Path.Combine(root, "journal-dword"));
+    using var journal = new FileRegistryRepairJournal(Path.Combine(root, "journal-dword"), JournalAuthenticationKey());
     var engine = new RegistryRepairEngine(backend, journal);
     RegistryFinding finding = Single(engine.Scan([Rule(address, RawRegistryValue.DWord(1))], Windows()));
     Equal(RegistryFindingState.WrongData, finding.State);
@@ -52,7 +52,7 @@ async Task BinaryRepairAndUndo()
     var expected = new RawRegistryValue(RegistryValueType.Binary, [0x10, 0x20, 0x30]);
     hive.Seed(address, original);
     WindowsRegistryBackend backend = hive.CreateBackend();
-    using var journal = new FileRegistryRepairJournal(Path.Combine(root, "journal-binary"));
+    using var journal = new FileRegistryRepairJournal(Path.Combine(root, "journal-binary"), JournalAuthenticationKey());
     var engine = new RegistryRepairEngine(backend, journal);
     RegistryRepairResult repair = await engine.RepairAsync(
         Single(engine.Scan([Rule(address, expected)], Windows())));
@@ -84,7 +84,7 @@ async Task MissingKeyCannotBeRepaired()
     WindowsRegistryBackend backend = hive.CreateBackend();
     var engine = new RegistryRepairEngine(
         backend,
-        new FileRegistryRepairJournal(Path.Combine(root, "journal-missing")));
+        new FileRegistryRepairJournal(Path.Combine(root, "journal-missing"), JournalAuthenticationKey()));
     RegistryFinding finding = Single(engine.Scan([Rule(address, RawRegistryValue.DWord(1))], Windows()));
     Equal(RegistryFindingState.Missing, finding.State);
     False(finding.CanRepair);
@@ -291,6 +291,8 @@ static void True(bool condition)
     if (!condition)
         throw new InvalidOperationException("Expected true.");
 }
+
+static byte[] JournalAuthenticationKey() => Enumerable.Range(33, 32).Select(static value => (byte)value).ToArray();
 
 static void False(bool condition) => True(!condition);
 

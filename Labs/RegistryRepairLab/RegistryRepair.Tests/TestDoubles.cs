@@ -219,9 +219,25 @@ internal sealed class InMemoryJournal : IRegistryRepairJournal
     {
         cancellationToken.ThrowIfCancellationRequested();
         IReadOnlyList<RegistryRepairTransaction> pending = _entries.Values
-            .Where(entry => entry.State == RegistryTransactionState.Prepared)
+            .Where(entry => entry.State is
+                RegistryTransactionState.Prepared or
+                RegistryTransactionState.UndoPrepared)
             .ToArray();
         return Task.FromResult(pending);
+    }
+
+    public Task<IReadOnlyList<RegistryRepairTransaction>> GetBlockingAsync(
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        IReadOnlyList<RegistryRepairTransaction> blocking = _entries.Values
+            .Where(entry => entry.State is
+                RegistryTransactionState.Prepared or
+                RegistryTransactionState.UndoPrepared or
+                RegistryTransactionState.RollbackFailed or
+                RegistryTransactionState.UndoFailed)
+            .ToArray();
+        return Task.FromResult(blocking);
     }
 }
 

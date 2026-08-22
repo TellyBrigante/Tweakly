@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace RegistryRepair.Core;
 
@@ -76,6 +78,7 @@ public sealed class RegistryRepairEngine
         using AddressLease addressLease = await AddressLocks.AcquireAsync(
             address,
             cancellationToken).ConfigureAwait(false);
+        await EnsureNoBlockingTransactionAsync(address, cancellationToken).ConfigureAwait(false);
         RegistryKeySnapshot keyBefore = ReadKeyRequired(address);
         RegistrySnapshot current = keyBefore.ForValue(address.ValueName);
         if (!string.Equals(
@@ -157,28 +160,50 @@ public sealed class RegistryRepairEngine
         using AddressLease addressLease = await AddressLocks.AcquireAsync(
             transaction.Address,
             cancellationToken).ConfigureAwait(false);
+        await EnsureNoBlockingTransactionAsync(
+            transaction.Address,
+            cancellationToken).ConfigureAwait(false);
 
-        RegistrySnapshot current = ReadRequired(transaction.Address);
+        RegistryKeySnapshot currentKey = ReadKeyRequired(transaction.Address);
+        RegistrySnapshot current = currentKey.ForValue(transaction.Address.ValueName);
         EnsureExpectedValueAndSecurity(transaction, current);
+        EnsureExpectedKeyBeforeUndo(transaction, currentKey);
+
+        transaction = transaction.WithState(RegistryTransactionState.UndoPrepared);
+        await _journal.SaveAsync(transaction, cancellationToken).ConfigureAwait(false);
 
         try
         {
             _backend.Restore(transaction.Address, transaction.Before);
-            RegistrySnapshot restored = ReadRequired(transaction.Address);
-            if (!transaction.Before.ContentEquals(restored))
+            bool restoredExactly = transaction.KeyBefore is not null
+                ? transaction.KeyBefore.ContentEquals(ReadKeyRequired(transaction.Address))
+                : transaction.Before.ContentEquals(ReadRequired(transaction.Address));
+            if (!restoredExactly)
                 throw new RegistryRepairException("The restored state does not match the backup.");
 
             transaction = transaction.WithState(RegistryTransactionState.Undone);
-            await _journal.SaveAsync(transaction, cancellationToken).ConfigureAwait(false);
+            await _journal.SaveAsync(transaction, CancellationToken.None).ConfigureAwait(false);
             return new RegistryUndoResult(true, transaction, "Original value restored and verified.");
+        }
+        catch (SimulatedProcessTerminationException)
+        {
+            throw;
         }
         catch (Exception error)
         {
+            bool correctionRestored = TryReapplyAndVerify(transaction, out string rollbackDetail);
             transaction = transaction.WithState(
-                RegistryTransactionState.UndoFailed,
-                error.Message);
+                correctionRestored
+                    ? RegistryTransactionState.Committed
+                    : RegistryTransactionState.UndoFailed,
+                $"Undo failed: {error.Message} | {rollbackDetail}");
             await _journal.SaveAsync(transaction, CancellationToken.None).ConfigureAwait(false);
-            return new RegistryUndoResult(false, transaction, "Undo failed.");
+            return new RegistryUndoResult(
+                false,
+                transaction,
+                correctionRestored
+                    ? "Undo failed; the correction was restored and verified."
+                    : "Undo and rollback both failed. Manual recovery is required.");
         }
     }
 
@@ -198,11 +223,25 @@ public sealed class RegistryRepairEngine
             bool restored = TryRestoreAndVerify(
                 pending.Address,
                 pending.Before,
-                null,
+                pending.KeyBefore,
                 out string detail);
-            RegistryRepairTransaction updated = pending.WithState(
-                restored ? RegistryTransactionState.Recovered : RegistryTransactionState.RollbackFailed,
-                detail);
+            RegistryRepairTransaction updated = pending.State switch
+            {
+                RegistryTransactionState.Prepared => pending.WithState(
+                    restored
+                        ? RegistryTransactionState.Recovered
+                        : RegistryTransactionState.RollbackFailed,
+                    detail),
+                RegistryTransactionState.UndoPrepared => pending.WithState(
+                    restored
+                        ? RegistryTransactionState.Undone
+                        : RegistryTransactionState.UndoFailed,
+                    restored
+                        ? "Interrupted undo completed. " + detail
+                        : "Interrupted undo recovery failed. " + detail),
+                _ => throw new RegistryRepairException(
+                    $"Unsupported incomplete transaction state: {pending.State}."),
+            };
             await _journal.SaveAsync(updated, CancellationToken.None).ConfigureAwait(false);
             recovered.Add(updated);
         }
@@ -226,6 +265,25 @@ public sealed class RegistryRepairEngine
             throw new RegistryRepairException(
                 $"Registry key read failed: {read.ErrorCode ?? read.ErrorMessage ?? "unknown error"}.");
         return read.Snapshot;
+    }
+
+    private async Task EnsureNoBlockingTransactionAsync(
+        RegistryAddress address,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<RegistryRepairTransaction> blocking =
+            await _journal.GetBlockingAsync(cancellationToken).ConfigureAwait(false);
+        RegistryRepairTransaction? unresolved = blocking.FirstOrDefault(transaction =>
+            transaction.Address.Hive == address.Hive &&
+            transaction.Address.View == address.View &&
+            string.Equals(
+                transaction.Address.KeyPath,
+                address.KeyPath,
+                StringComparison.OrdinalIgnoreCase));
+        if (unresolved is not null)
+            throw new RegistryRepairException(
+                "A previous registry transaction for this key is unresolved. " +
+                "Automatic corrections are blocked until recovery is verified.");
     }
 
     private bool TryRestoreAndVerify(
@@ -252,6 +310,37 @@ public sealed class RegistryRepairEngine
         catch (Exception error)
         {
             detail = "Rollback failed: " + error.Message;
+            return false;
+        }
+    }
+
+    private bool TryReapplyAndVerify(
+        RegistryRepairTransaction transaction,
+        out string detail)
+    {
+        try
+        {
+            _backend.SetValue(transaction.Address, transaction.AppliedValue);
+            RegistryKeySnapshot verified = ReadKeyRequired(transaction.Address);
+            RegistryKeySnapshot? before = transaction.KeyBefore;
+            bool valid = before is not null
+                ? before.WithValue(
+                    transaction.Address.ValueName,
+                    transaction.AppliedValue).ContentEquals(verified)
+                : transaction.AppliedValue.ContentEquals(
+                    verified.ForValue(transaction.Address.ValueName).Value);
+            detail = valid
+                ? "Undo rollback verified."
+                : "Undo rollback completed but verification failed.";
+            return valid;
+        }
+        catch (SimulatedProcessTerminationException)
+        {
+            throw;
+        }
+        catch (Exception error)
+        {
+            detail = "Undo rollback failed: " + error.Message;
             return false;
         }
     }
@@ -284,6 +373,21 @@ public sealed class RegistryRepairEngine
             throw new RegistryRepairException("The registry key security descriptor changed.");
     }
 
+    private static void EnsureExpectedKeyBeforeUndo(
+        RegistryRepairTransaction transaction,
+        RegistryKeySnapshot current)
+    {
+        if (transaction.KeyBefore is null)
+            return;
+
+        RegistryKeySnapshot expected = transaction.KeyBefore.WithValue(
+            transaction.Address.ValueName,
+            transaction.AppliedValue);
+        if (!expected.ContentEquals(current))
+            throw new RegistryRepairException(
+                "The registry key changed after the correction. Run the scan again before undoing it.");
+    }
+
     private static class AddressLocks
     {
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates =
@@ -296,17 +400,54 @@ public sealed class RegistryRepairEngine
             string key = address.Normalize().ToString();
             SemaphoreSlim gate = Gates.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            return new AddressLease(gate);
+            FileStream? processLock = null;
+            try
+            {
+                string digest = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
+                string lockDirectory = Path.Combine(Path.GetTempPath(), "Tweakly.RegistryRepair.Locks");
+                Directory.CreateDirectory(lockDirectory);
+                string lockPath = Path.Combine(lockDirectory, digest[..32] + ".lock");
+                while (processLock is null)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        processLock = new FileStream(
+                            lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None,
+                            1, FileOptions.None);
+                    }
+                    catch (IOException)
+                    {
+                        await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                return new AddressLease(gate, processLock);
+            }
+            catch
+            {
+                processLock?.Dispose();
+                gate.Release();
+                throw;
+            }
         }
     }
 
     private sealed class AddressLease : IDisposable
     {
         private SemaphoreSlim? _gate;
+        private FileStream? _processLock;
 
-        public AddressLease(SemaphoreSlim gate) => _gate = gate;
+        public AddressLease(SemaphoreSlim gate, FileStream processLock)
+        {
+            _gate = gate;
+            _processLock = processLock;
+        }
 
-        public void Dispose() => Interlocked.Exchange(ref _gate, null)?.Release();
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _processLock, null)?.Dispose();
+            Interlocked.Exchange(ref _gate, null)?.Release();
+        }
     }
 
     private static void EnsureExpectedKeyAfterWrite(

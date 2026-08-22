@@ -56,6 +56,7 @@ namespace Optimisation_Tool.Helpers
             if (_failed) return false;
             try
             {
+                using IDisposable pawnIoLease = BundledFileTrust.OpenVerifiedLease(PathLayout.PawnIoLib);
                 // PawnIOLib.dll (user-mode) est livré dans data\drivers\ → on ajoute ce dossier au
                 // chemin de recherche des DLL natives pour que le P/Invoke de LHM la trouve.
                 if (!SetDllDirectory(PathLayout.DataDrv))

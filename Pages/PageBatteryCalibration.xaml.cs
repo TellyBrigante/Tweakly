@@ -476,19 +476,23 @@ namespace Optimisation_Tool.Pages
                     break;
 
                 case BatteryCalibrationPhase.Drain:
-#if DEBUG
-                    if (_debugSimulationEnabled && snapshot.ChargePercent <= 5)
+                    if (snapshot.IsCritical == true || snapshot.ChargePercent is <= 7)
                     {
                         StopDrainLoad();
                         RestorePowerPlanGuardIfNeeded();
                         SetPhase(BatteryCalibrationPhase.Rest, save: true);
                         break;
                     }
-#endif
                     if (snapshot.OnAcPower == true)
                     {
                         StopDrainLoad();
                         RestorePowerPlanGuardIfNeeded();
+                    }
+                    else if (!snapshot.TemperatureC.HasValue)
+                    {
+                        StopDrainLoad();
+                        RestorePowerPlanGuardIfNeeded();
+                        MarkProtocolWarning("Drain CPU en pause : température batterie indisponible. Décharge manuelle requise.");
                     }
                     else if (snapshot.TemperatureC >= DrainHotBatteryC)
                     {
@@ -684,26 +688,11 @@ namespace Optimisation_Tool.Pages
 
         private void EnsureDrainPowerPlanGuard()
         {
-            if (_session.PowerPlanGuardApplied) return;
-
-            var snapshot = BatteryPowerPlanGuard.Read();
-            _session.OriginalDcCriticalBatteryAction = snapshot.DcCriticalAction;
-            _session.OriginalDcLowBatteryAction = snapshot.DcLowAction;
-            _session.PowerPlanGuardError = snapshot.Error;
-
-            if (BatteryPowerPlanGuard.ApplyDrainSettings(out var error))
-            {
-                _session.PowerPlanGuardApplied = true;
-                _session.PowerPlanGuardError = "";
-                ClearProtocolWarningPrefix("Action batterie critique Windows");
-            }
-            else
-            {
-                _session.PowerPlanGuardError = error;
-                MarkProtocolWarning("Action batterie critique Windows non modifiée : " + error);
-            }
-
-            BatteryCalibrationStore.Save(_session);
+            // Depuis cette version, Tweakly ne modifie plus les actions batterie.
+            // Une ancienne session est d'abord restaurée, puis les protections
+            // Windows restent intégralement sous le contrôle de l'utilisateur.
+            if (_session.PowerPlanGuardApplied)
+                RestorePowerPlanGuardIfNeeded();
         }
 
         private void RestorePowerPlanGuardIfNeeded()
@@ -793,7 +782,9 @@ namespace Optimisation_Tool.Pages
             TxtStepBalance.Text = _session.BalanceInterrupted && _session.Phase == BatteryCalibrationPhase.CellBalance
                 ? $"Maintien branché : compteur réinitialisé après coupure secteur. {ElapsedPhaseText(BatteryCalibrationPhase.CellBalance)} / {BalanceTargetLabel()}."
                 : $"Maintien branché : {ElapsedPhaseText(BatteryCalibrationPhase.CellBalance)} / {BalanceTargetLabel()}.";
-            TxtStepDrain.Text = _session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.TemperatureC >= DrainHotBatteryC
+            TxtStepDrain.Text = _session.Phase == BatteryCalibrationPhase.Drain && !_lastSnapshot.TemperatureC.HasValue
+                ? "Drain CPU en pause sécurité : température batterie indisponible. Décharge manuelle requise."
+                : _session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.TemperatureC >= DrainHotBatteryC
                 ? $"Drain en pause sécurité : température batterie {FormatC(_lastSnapshot.TemperatureC)}."
                 : _session.Phase == BatteryCalibrationPhase.Drain && _lastSnapshot.OnAcPower == false
                 ? $"Drain CPU contrôlé actif : {_drainThreads.Count} thread(s), intensité {_drainDutyPercent} %. Dernier point : {FormatPercent(_lastSnapshot.ChargePercent)}."
@@ -946,7 +937,7 @@ namespace Optimisation_Tool.Pages
             var cts = new CancellationTokenSource();
             CancellationToken token = cts.Token;
             _drainCts = cts;
-            int workers = Math.Clamp(Environment.ProcessorCount, 2, 8);
+            int workers = Math.Clamp(Environment.ProcessorCount / 4, 1, 2);
             _drainThreads.Clear();
 
             for (int i = 0; i < workers; i++)
@@ -972,8 +963,8 @@ namespace Optimisation_Tool.Pages
             cts.Cancel();
             foreach (Thread thread in _drainThreads)
             {
-                if (!thread.Join(millisecondsTimeout: 500))
-                    AppLog.Write($"Calibrage batterie : le thread de drain {thread.ManagedThreadId} ne s'est pas arrêté en 500 ms.");
+                if (!thread.Join(millisecondsTimeout: 2_000))
+                    AppLog.Write($"Calibrage batterie : le thread de drain {thread.ManagedThreadId} ne s'est pas arrêté en 2 s.");
             }
             _drainThreads.Clear();
             cts.Dispose();
@@ -1016,8 +1007,8 @@ namespace Optimisation_Tool.Pages
                 }
 
                 int sleepMs = cycleMs - busyMs;
-                if (sleepMs > 0)
-                    Thread.Sleep(sleepMs);
+                if (sleepMs > 0 && token.WaitHandle.WaitOne(sleepMs))
+                    break;
             }
         }
 

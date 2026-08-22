@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
@@ -262,26 +263,9 @@ namespace Optimisation_Tool.Pages
             {
                 try
                 {
-                    using var p = Process.Start(new ProcessStartInfo("ipconfig", "/flushdns")
-                    {
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                    });
-                    if (p == null) return (Ok: false, Error: "ipconfig n'a pas démarré.");
-                    string output = p.StandardOutput.ReadToEnd();
-                    string error = p.StandardError.ReadToEnd();
-                    if (!p.WaitForExit(10_000))
-                    {
-                        try { p.Kill(entireProcessTree: true); } catch { }
-                        return (false, "ipconfig n'a pas répondu sous 10 s.");
-                    }
-                    if (p.ExitCode != 0)
-                    {
-                        string detail = string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim();
-                        return (false, string.IsNullOrWhiteSpace(detail) ? $"ipconfig a retourné le code {p.ExitCode}." : detail);
-                    }
+                    ProcessCommandResult command = ProcessCommand.Run(WindowsSystemTools.PathFor("ipconfig.exe"), "/flushdns", 10_000);
+                    if (!command.Success)
+                        return (false, command.FailureDescription);
                     return (true, "");
                 }
                 catch (Exception ex) { return (false, ex.Message); }

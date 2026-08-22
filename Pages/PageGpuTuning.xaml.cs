@@ -23,6 +23,7 @@ namespace Optimisation_Tool.Pages
         private bool _runningProfile;
         private bool _actionPending;
         private GpuProfileSuggestion? _profileSuggestion;
+        private GpuTuningProfile? _longValidationProfile;
 
         public PageGpuTuning()
         {
@@ -47,7 +48,9 @@ namespace Optimisation_Tool.Pages
             _readyForBaseline = false;
             _baselineValid = false;
             _profileSuggestion = null;
+            _longValidationProfile = null;
             AdviceCard.Visibility = Visibility.Collapsed;
+            BtnProfileLongValidation.Visibility = Visibility.Collapsed;
             TxtProtocolState.Text = "Vérification du GPU et des outils de test…";
             ProfileResult.Visibility = Visibility.Collapsed;
             try
@@ -298,6 +301,24 @@ namespace Optimisation_Tool.Pages
         }
 
         private async void BtnProfileStart_Click(object sender, RoutedEventArgs e)
+            => await StartProfileMeasurementAsync(
+                UndervoltProtocol.ConfirmationWorkloadSeconds,
+                longValidation: false);
+
+        private async void BtnProfileLongValidation_Click(object sender, RoutedEventArgs e)
+        {
+            if (_longValidationProfile is not GpuTuningProfile profile) return;
+            TxtProfileName.Text = profile.Name;
+            TxtProfileVoltage.Text = profile.TargetVoltageMv?.ToString(CultureInfo.InvariantCulture) ?? "";
+            TxtProfileClock.Text = profile.TargetClockMhz?.ToString(CultureInfo.InvariantCulture) ?? "";
+            TxtProfileMemory.Text = "0";
+            TxtProfilePower.Text = "100";
+            await StartProfileMeasurementAsync(
+                UndervoltProtocol.LongValidationWorkloadSeconds,
+                longValidation: true);
+        }
+
+        private async Task StartProfileMeasurementAsync(int workloadSeconds, bool longValidation)
         {
             if (!TryBeginAction()) return;
             if (!EnsurePolicyAvailable(TxtProfileState))
@@ -316,10 +337,10 @@ namespace Optimisation_Tool.Pages
             if (name.Length is < 2 or > 60
                 || !TryInt(TxtProfileVoltage.Text, out int voltage) || voltage is < 600 or > 1200
                 || !TryInt(TxtProfileClock.Text, out int clock) || clock is < 300 or > 4000
-                || !TryInt(TxtProfileMemory.Text, out int memory) || memory is < -4000 or > 4000
-                || !TryDouble(TxtProfilePower.Text, out double power) || power is < 20 or > 150)
+                || !TryInt(TxtProfileMemory.Text, out int memory) || memory != 0
+                || !TryDouble(TxtProfilePower.Text, out double power) || Math.Abs(power - 100) > 0.01)
             {
-                TxtProfileState.Text = "Vérifie les valeurs : tension 600–1 200 mV, fréquence 300–4 000 MHz, mémoire -4 000 à +4 000 MHz et Power Limit 20–150 %.";
+                TxtProfileState.Text = "Vérifie les valeurs : tension 600–1 200 mV, fréquence 300–4 000 MHz, mémoire à stock et Power Limit à 100 %.";
                 TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty, "ThWarn");
                 EndAction();
                 return;
@@ -358,13 +379,19 @@ namespace Optimisation_Tool.Pages
                 return;
             }
 
+            string durationText = longValidation
+                ? "La validation longue dure environ 60 min et peut confirmer ce profil comme validé."
+                : "La confirmation dure environ 20 min et autorise seulement un prochain petit palier.";
+            string dialogTitle = longValidation
+                ? "Validation longue du profil GPU"
+                : "Confirmation du profil GPU";
             MessageBoxResult answer = MessageBox.Show(
                 "FONCTION EXPÉRIMENTALE\n\n" +
                 "Continue uniquement si tu sais revenir manuellement au dernier profil stable après un crash du pilote ou un écran noir.\n\n" +
                 "L'application automatique du profil au démarrage doit rester désactivée pendant toute la recherche.\n\n" +
                 $"Confirme que le profil « {name} » est déjà appliqué dans ton outil habituel.\n\n" +
-                $"Tweakly n'écrira aucun réglage. La mesure dure environ 5 min et compare ce profil à la référence stock.",
-                "Mesurer le profil GPU",
+                $"Tweakly n'écrira aucun réglage. {durationText} Le résultat sera comparé à la référence stock.",
+                dialogTitle,
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning);
             if (answer != MessageBoxResult.OK)
@@ -384,6 +411,11 @@ namespace Optimisation_Tool.Pages
                 AppliedBy = "manual-confirmed",
                 VerificationEvidence = ["User confirmed that the documented profile was applied manually before measurement."]
             };
+            if (!longValidation)
+            {
+                _longValidationProfile = null;
+                BtnProfileLongValidation.Visibility = Visibility.Collapsed;
+            }
             _runCancellation = new CancellationTokenSource();
             SetRunning(true, profile: true);
             EndAction();
@@ -397,7 +429,7 @@ namespace Optimisation_Tool.Pages
                     PathLayout.GpuTuningTools,
                     PathLayout.GpuTuningSession,
                     profile,
-                    workloadSeconds: 60,
+                    workloadSeconds: workloadSeconds,
                     progress: progress,
                     cancellationToken: _runCancellation.Token,
                     evidencePath: PathLayout.GpuTuningEvidence);
@@ -446,6 +478,11 @@ namespace Optimisation_Tool.Pages
 
         private void RenderProfileResult(GpuProfileMeasurementResult result)
         {
+            _profileSuggestion = null;
+            _longValidationProfile = null;
+            AdviceCard.Visibility = Visibility.Collapsed;
+            BtnProfileLongValidation.Visibility = Visibility.Collapsed;
+
             WorkloadResult? incomplete = result.Run.Workloads
                 .FirstOrDefault(static workload => !workload.Completed);
             if (incomplete != null)
@@ -513,9 +550,24 @@ namespace Optimisation_Tool.Pages
                     ? comparison.TemperatureDeltaC <= 0 ? "ThOk" : "ThWarn"
                     : "ThTextMuted");
             ProfileResult.Visibility = Visibility.Visible;
-            TxtProfileState.Text = result.NextSuggestion is not null && !string.IsNullOrWhiteSpace(result.NextSuggestionMessage)
-                ? result.NextSuggestionMessage
-                : MeasuredConclusion(comparison, result.Recommendation);
+            bool validated = result.Summary.Verdict == StabilityVerdict.Validated
+                             && comparison.MeetsPerformanceFloor;
+            if (result.Summary.Verdict == StabilityVerdict.ShortPass
+                && comparison.MeetsPerformanceFloor)
+            {
+                _longValidationProfile = result.Run.Profile;
+                BtnProfileLongValidation.Visibility = Visibility.Visible;
+            }
+
+            string measuredConclusion = MeasuredConclusion(comparison, result.Recommendation);
+            TxtProfileState.Text = validated
+                ? "Validation longue de 60 minutes réussie. Ce profil est validé par le protocole Tweakly." +
+                  (result.NextSuggestion is not null && !string.IsNullOrWhiteSpace(result.NextSuggestionMessage)
+                      ? " " + result.NextSuggestionMessage
+                      : "")
+                : result.NextSuggestion is not null && !string.IsNullOrWhiteSpace(result.NextSuggestionMessage)
+                    ? result.NextSuggestionMessage
+                    : measuredConclusion;
             TxtProfileState.SetResourceReference(TextBlock.ForegroundProperty,
                 comparison.MeetsPerformanceFloor ? "ThTextBody" : "ThCrit");
             if (result.NextSuggestion is GpuProfileSuggestion next)
@@ -570,6 +622,7 @@ namespace Optimisation_Tool.Pages
             _runningProfile = running && profile;
             BtnStart.IsEnabled = false;
             BtnProfileStart.IsEnabled = false;
+            BtnProfileLongValidation.IsEnabled = false;
             BtnRefresh.IsEnabled = !running;
             BtnCancel.Visibility = running && !profile ? Visibility.Visible : Visibility.Collapsed;
             BtnCancel.IsEnabled = running && !profile;
@@ -593,6 +646,8 @@ namespace Optimisation_Tool.Pages
             // La charge GPU est transitoire : elle est contrôlée à nouveau au clic.
             // Un relevé ancien ne doit pas condamner le bouton jusqu'au prochain chargement de page.
             BtnProfileStart.IsEnabled = idle && _baselineValid;
+            BtnProfileLongValidation.IsEnabled =
+                idle && _baselineValid && _longValidationProfile is not null;
             UpdateProfileButtonHint();
         }
 
@@ -621,6 +676,7 @@ namespace Optimisation_Tool.Pages
             BtnRefresh.IsEnabled = false;
             BtnStart.IsEnabled = false;
             BtnProfileStart.IsEnabled = false;
+            BtnProfileLongValidation.IsEnabled = false;
             UpdateProfileButtonHint();
             return true;
         }
@@ -647,6 +703,28 @@ namespace Optimisation_Tool.Pages
 
         private static string ToFrenchReason(string reason)
         {
+            if (reason.Contains("Undervolt protocol blocked", StringComparison.OrdinalIgnoreCase))
+            {
+                if (reason.Contains("first voltage step", StringComparison.OrdinalIgnoreCase))
+                    return "Le premier palier de tension est trop important. Reviens au stock puis essaie seulement le petit palier proposé par Tweakly.";
+                if (reason.Contains("still exploratory", StringComparison.OrdinalIgnoreCase))
+                    return "Le dernier essai est encore exploratoire. Répète exactement ce profil avant de modifier une valeur.";
+                if (reason.Contains("latest undervolt failed", StringComparison.OrdinalIgnoreCase)
+                    || reason.Contains("Return to stock", StringComparison.OrdinalIgnoreCase))
+                    return "Le dernier profil a échoué. Reviens au stock avant tout nouvel essai.";
+                if (reason.Contains("Voltage and core frequency cannot change", StringComparison.OrdinalIgnoreCase))
+                    return "Une seule variable peut changer à la fois : la tension ou la fréquence, jamais les deux.";
+                if (reason.Contains("lower-voltage step requires", StringComparison.OrdinalIgnoreCase))
+                    return "Le profil précédent n'est pas assez probant pour réduire encore la tension.";
+                if (reason.Contains("Requested clock", StringComparison.OrdinalIgnoreCase))
+                    return "La fréquence demandée dépasse la limite sûre calculée depuis la référence stock.";
+                if (reason.Contains("Requested voltage", StringComparison.OrdinalIgnoreCase))
+                    return "La tension demandée n'est pas un undervolt sûr par rapport à la référence stock.";
+                if (reason.Contains("predates", StringComparison.OrdinalIgnoreCase))
+                    return "Le dernier profil est antérieur au protocole sécurisé actuel. Reviens au stock avant de continuer.";
+                return "Le protocole sécurisé Tweakly refuse cette transition. Reviens au dernier état explicitement autorisé.";
+            }
+
             if (reason.Contains("GPU workload already active", StringComparison.OrdinalIgnoreCase))
                 return reason.Replace(
                     "GPU workload already active:",

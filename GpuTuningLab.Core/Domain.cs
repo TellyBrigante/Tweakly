@@ -253,8 +253,8 @@ public sealed record EvaluationPolicy
     public double MaximumBenchmarkVariancePercent { get; init; } = 2;
     public double MaximumStartingTemperatureDeltaC { get; init; } = 3;
     public int MinimumBaselineWorkloadSeconds { get; init; } = 30;
-    public int ShortValidationMinutes { get; init; } = 10;
-    public int LongValidationMinutes { get; init; } = 60;
+    public int ShortValidationMinutes { get; init; } = UndervoltProtocol.ConfirmationDurationMinutes;
+    public int LongValidationMinutes { get; init; } = UndervoltProtocol.LongValidationDurationMinutes;
     public int VoltageStepMv { get; init; } = 25;
     public int ProfileVoltageToleranceMv { get; init; } = 25;
     public int ProfileClockToleranceMhz { get; init; } = 90;

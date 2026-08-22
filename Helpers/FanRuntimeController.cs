@@ -156,34 +156,17 @@ public static class FanRuntimeController
 
     public static FanRestorationOutcome StopAndRestore()
     {
-        TransitionGate.Wait();
         try
         {
-            FanHardwareSession? session;
-            FanSafetyWatchdogClient? watchdog;
-            CancellationTokenSource? cancellation;
-            lock (Sync)
-            {
-                session = _session;
-                watchdog = _watchdog;
-                cancellation = _cancellation;
-                _session = null;
-                _watchdog = null;
-                _cancellation = null;
-                _loopTask = null;
-                _configuration = null;
-            }
-
-            try { cancellation?.Cancel(); } catch { }
-            FanRestorationOutcome outcome = FanSafetyRestore.RestoreAndClose(session, watchdog);
-            cancellation?.Dispose();
-            if (!outcome.Success)
-                AppLog.Write("Ventilation : " + outcome.Message);
-            return outcome;
+            // Le chemin synchrone de fermeture utilise exactement la même
+            // séquence que StopAsync : annulation, attente de la boucle, puis
+            // restauration BIOS dans le finally détenu par cette boucle.
+            return StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
         }
-        finally
+        catch (Exception ex)
         {
-            TransitionGate.Release();
+            AppLog.Error("Ventilation : arrêt synchrone et retour BIOS", ex);
+            return new(false, "Retour au BIOS non confirmé : " + ex.GetBaseException().Message);
         }
     }
 

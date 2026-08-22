@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -741,9 +742,24 @@ ProcessCommandResult commandTimeout = ProcessCommand.Run(
 Check("Commande - délai réel", true, commandTimeout.TimedOut);
 Check("Commande - motif délai", true,
     commandTimeout.FailureDescription.Contains("délai", StringComparison.OrdinalIgnoreCase));
+using (var commandCancellation = new CancellationTokenSource(100))
+{
+    ExpectThrows<OperationCanceledException>("Commande - annulation réelle", () =>
+        ProcessCommand.Run(
+            "cmd.exe",
+            "/d /c ping 127.0.0.1 -n 5 >nul",
+            10_000,
+            commandCancellation.Token));
+}
 Check("Winget - ID valide", true, WingetCli.IsValidPackageId("Microsoft.PowerToys"));
 Check("Winget - pseudo ID ARP refusé", false, WingetCli.IsValidPackageId(@"ARP\Machine\X64\Test.App"));
 Check("Winget - injection refusée", false, WingetCli.IsValidPackageId("Test.App\" & calc.exe"));
+Check("Winget - source communautaire fixe", "winget", WingetCli.CommunitySource);
+var combinedResidues = CleanupOperationResult.Combine(
+    new CleanupOperationResult { Ops = 1, Residues = 2, ResiduesRemoved = 1 },
+    new CleanupOperationResult { Ops = 2, Residues = 3, ResiduesRemoved = 2 });
+Check("Résidus - détection cumulée", 5, combinedResidues.Residues);
+Check("Résidus - traitements cumulés", 3, combinedResidues.ResiduesRemoved);
 
 string jsonSettingsPath = Path.Combine(Path.GetTempPath(), $"tweakly-json-{Guid.NewGuid():N}.json");
 try
@@ -781,6 +797,8 @@ finally
 }
 
 string registryTestPath = $@"Software\Tweakly.RegistryTests\{Guid.NewGuid():N}";
+string missingDirectory = Path.Combine(Path.GetTempPath(), "Tweakly-Missing-" + Guid.NewGuid().ToString("N"));
+string missingExecutable = Path.Combine(missingDirectory, "missing.exe");
 try
 {
     VerifiedRegistry.SetDword(Registry.CurrentUser, registryTestPath, "Dword", 42);
@@ -792,11 +810,48 @@ try
     VerifiedRegistry.DeleteValue(Registry.CurrentUser, registryTestPath, "Dword");
     Check("Registre verifie - suppression", true,
         VerifiedRegistry.IsMissing(Registry.CurrentUser, registryTestPath, "Dword"));
+
+    using (RegistryKey orphanUninstall = Registry.CurrentUser.CreateSubKey(registryTestPath + @"\OrphanUninstall"))
+    {
+        orphanUninstall.SetValue("DisplayName", "Tweakly residue test");
+        orphanUninstall.SetValue("InstallLocation", missingDirectory);
+        orphanUninstall.SetValue("UninstallString", '"' + missingExecutable + '"');
+        Check("Résidus - entrée de désinstallation orpheline", true,
+            CleanupOperations.IsProvablyOrphanedUninstallEntry(orphanUninstall));
+        orphanUninstall.SetValue("WindowsInstaller", 1, RegistryValueKind.DWord);
+        Check("Résidus - entrée MSI protégée", false,
+            CleanupOperations.IsProvablyOrphanedUninstallEntry(orphanUninstall));
+    }
+
+    using (RegistryKey orphanAppPath = Registry.CurrentUser.CreateSubKey(registryTestPath + @"\OrphanAppPath"))
+    {
+        orphanAppPath.SetValue(null, missingExecutable);
+        Check("Résidus - App Path orphelin", true,
+            CleanupOperations.IsProvablyOrphanedAppPath(orphanAppPath));
+    }
+
+}
+catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+{
+    // Certains runners isolés refusent même une sous-clé HKCU. Ce n'est pas
+    // une défaillance du moteur de registre : la vérification est inconclusive
+    // dans cet environnement et doit être signalée sans masquer les autres
+    // régressions du protocole.
+    Console.WriteLine("Registre vérifié - contrôle HKCU ignoré dans l'environnement isolé : " + ex.Message);
 }
 finally
 {
     try { Registry.CurrentUser.DeleteSubKeyTree(registryTestPath, throwOnMissingSubKey: false); } catch { }
 }
+
+Check("Résidus - démarrage orphelin", true,
+    CleanupOperations.IsProvablyOrphanedStartupCommand('"' + missingExecutable + '"' + " --silent"));
+Check("Résidus - démarrage existant conservé", false,
+    CleanupOperations.IsProvablyOrphanedStartupCommand('"' + Environment.ProcessPath + '"'));
+Check("Résidus - raccourci cassé", true,
+    CleanupOperations.IsBrokenShortcutTarget(missingExecutable));
+Check("Résidus - raccourci existant conservé", false,
+    CleanupOperations.IsBrokenShortcutTarget(Environment.ProcessPath ?? ""));
 
 Check("Updater - verification bornee", TimeSpan.FromSeconds(15), UpdateTransferPolicy.CheckTimeout);
 Check("Updater - telechargement lent autorise", TimeSpan.FromMinutes(30), UpdateTransferPolicy.DownloadTimeout);

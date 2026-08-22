@@ -166,7 +166,7 @@ namespace Optimisation_Tool.Helpers
         /// <summary>Lance schtasks et CAPTURE stdout + stderr (5 s timeout).</summary>
         private static (int exitCode, string stdout, string stderr) RunSchtasks(string args)
         {
-            var psi = new ProcessStartInfo("schtasks", args)
+            var psi = new ProcessStartInfo(WindowsSystemTools.PathFor("schtasks.exe"), args)
             {
                 UseShellExecute        = false,
                 CreateNoWindow         = true,

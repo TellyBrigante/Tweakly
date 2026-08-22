@@ -17,7 +17,15 @@ public enum RegistryInspectionStatus
 {
     Malformed,
     Review,
+    Informational,
     Unreadable,
+}
+
+public enum RegistryInspectionAssessment
+{
+    CertainAnomaly,
+    Unusual,
+    Information,
 }
 
 public sealed record RegistryInspectionFinding(
@@ -30,6 +38,13 @@ public sealed record RegistryInspectionFinding(
     Uri Source)
 {
     public bool AutomaticCorrectionAvailable => false;
+
+    public RegistryInspectionAssessment Assessment => Status switch
+    {
+        RegistryInspectionStatus.Malformed => RegistryInspectionAssessment.CertainAnomaly,
+        RegistryInspectionStatus.Review => RegistryInspectionAssessment.Unusual,
+        _ => RegistryInspectionAssessment.Information,
+    };
 }
 
 public sealed record RegistryInspectionProgress(
@@ -139,6 +154,17 @@ public sealed class RegistryContextInspector
                                 valueAddress,
                                 "Startup value contains no command.",
                                 ["Decoded command is empty."],
+                                RunSource));
+                        }
+                        else if (command.Length > 260)
+                        {
+                            findings.Add(Finding(
+                                "STARTUP_COMMAND_TOO_LONG",
+                                RegistryInspectionCategory.Startup,
+                                RegistryInspectionStatus.Malformed,
+                                valueAddress,
+                                "Startup command exceeds the documented 260-character limit.",
+                                [$"Characters={command.Length}", "Documented maximum=260"],
                                 RunSource));
                         }
                     }
@@ -474,6 +500,10 @@ public sealed class RegistryContextInspector
             if (lookup.State == AssociationLookupState.Exists)
                 continue;
 
+            if (lookup.State == AssociationLookupState.Missing &&
+                HasValidOpenWithProgId(association.Address, view))
+                continue;
+
             if (lookup.State == AssociationLookupState.Unreadable)
             {
                 findings.Add(Finding(
@@ -490,12 +520,32 @@ public sealed class RegistryContextInspector
             findings.Add(Finding(
                 "FILE_ASSOCIATION_PROGID_MISSING",
                 RegistryInspectionCategory.FileAssociation,
-                RegistryInspectionStatus.Review,
+                RegistryInspectionStatus.Informational,
                 association.Address,
-                "A file extension references a ProgID that is not registered.",
-                [$"Extension={extension}", $"ProgID={association.ProgId}"],
+                "A file extension references a legacy ProgID that is no longer registered.",
+                [$"Extension={extension}", $"ProgID={association.ProgId}",
+                    "Windows can still ask the user to choose an application."],
                 FileAssociationSource));
         }
+    }
+
+    private bool HasValidOpenWithProgId(RegistryAddress association, RegistryViewId view)
+    {
+        RegistryAddress openWith = association with
+        {
+            KeyPath = association.KeyPath + @"\OpenWithProgids",
+            ValueName = string.Empty,
+        };
+        RegistryKeyReadResult read = _backend.ReadKey(openWith);
+        if (!read.Success || read.Snapshot?.KeyExists != true)
+            return false;
+
+        foreach (string progId in read.Snapshot.Values.Keys.Where(name => !string.IsNullOrWhiteSpace(name)))
+        {
+            if (LookupAssociationProgId(progId, view).State == AssociationLookupState.Exists)
+                return true;
+        }
+        return false;
     }
 
     private IReadOnlyDictionary<string, AssociationReference> ReadAssociationReferences(
@@ -717,11 +767,26 @@ public sealed class RegistryContextInspector
     private static bool IsStandardUserinit(string value)
     {
         string[] commands = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return commands.Length == 1 &&
-               string.Equals(
-                   Path.GetFileName(commands[0]),
-                   "userinit.exe",
-                   StringComparison.OrdinalIgnoreCase);
+        if (commands.Length != 1)
+            return false;
+
+        string candidate = Environment.ExpandEnvironmentVariables(commands[0].Trim().Trim('"'));
+        if (!Path.IsPathFullyQualified(candidate))
+            return false;
+
+        string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrWhiteSpace(windows))
+            return false;
+
+        try
+        {
+            string expected = Path.GetFullPath(Path.Combine(windows, "System32", "userinit.exe"));
+            return string.Equals(Path.GetFullPath(candidate), expected, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
     }
 
     private static RegistryViewId SystemView(WindowsIdentity windows) =>

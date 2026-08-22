@@ -10,7 +10,6 @@ namespace Optimisation_Tool.Helpers
         private const string SubBattery = "SUB_BATTERY";
         private const string CriticalAction = "BATACTIONCRIT";
         private const string LowAction = "BATACTIONLOW";
-        private const int DoNothing = 0;
 
         public sealed record Snapshot(int? DcCriticalAction, int? DcLowAction, string Error);
 
@@ -21,12 +20,10 @@ namespace Optimisation_Tool.Helpers
 
         public static bool ApplyDrainSettings(out string error)
         {
+            // Une calibration ne doit jamais neutraliser les actions de batterie
+            // critique ou faible configurées par Windows ou par l'utilisateur.
             error = "";
-            bool okCrit = SetDcIndex(SubBattery, CriticalAction, DoNothing, out var errCrit);
-            bool okLow = SetDcIndex(SubBattery, LowAction, DoNothing, out var errLow);
-            bool okActive = RunPowerCfg($"/setactive {Scheme}", out var errActive);
-            error = FirstNonEmpty(errCrit, errLow, errActive);
-            return okCrit && okLow && okActive;
+            return true;
         }
 
         public static bool RestoreDrainSettings(int? dcCriticalAction, int? dcLowAction, out string error)
@@ -82,7 +79,7 @@ namespace Optimisation_Tool.Helpers
             error = "";
             output = "";
 
-            ProcessCommandResult result = ProcessCommand.Run("powercfg", arguments, 15_000);
+            ProcessCommandResult result = ProcessCommand.Run(WindowsSystemTools.PathFor("powercfg.exe"), arguments, 15_000);
             output = result.Output;
             if (result.Success) return true;
 

@@ -797,19 +797,15 @@ namespace Optimisation_Tool.Pages
                         break;
 
                     case LogActionKind.Url:
-                        using (var _ = Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true })) { }
+                        OpenTrustedUrl(act.Target);
                         break;
 
                     case LogActionKind.Diag:
-                        // Outils Windows standards (services.msc, devmgmt.msc, appwiz.cpl…)
-                        using (var _ = Process.Start(new ProcessStartInfo(act.Target) { UseShellExecute = true })) { }
+                        OpenTrustedDiagnostic(act.Target);
                         break;
 
                     case LogActionKind.Command:
-                        // Commande système — on lance via cmd.exe (target est attendu type
-                        // "cmd /k ..." ou "cmd /c ..."). Pas de redirection, fenêtre visible.
-                        var (file, args) = SplitCmd(act.Target);
-                        using (var _ = Process.Start(new ProcessStartInfo(file, args) { UseShellExecute = true })) { }
+                        RunTrustedCommand(act.Target);
                         break;
                 }
                 _main.Log($"Erreurs Windows : action exécutée — {act.Label}");
@@ -847,13 +843,90 @@ namespace Optimisation_Tool.Pages
             return null;
         }
 
-        /// <summary>Sépare "cmd /k sfc /scannow" en (file="cmd", args="/k sfc /scannow").</summary>
-        private static (string file, string args) SplitCmd(string s)
+        private static void OpenTrustedUrl(string target)
         {
-            s = (s ?? "").Trim();
-            int i = s.IndexOf(' ');
-            if (i <= 0) return (s, "");
-            return (s.Substring(0, i), s.Substring(i + 1));
+            if (!Uri.TryCreate(target, UriKind.Absolute, out Uri? uri) ||
+                uri.Scheme != Uri.UriSchemeHttps ||
+                !IsTrustedSupportHost(uri.Host))
+                throw new InvalidOperationException("Lien externe non autorisé.");
+
+            using var _ = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+        }
+
+        private static bool IsTrustedSupportHost(string host)
+        {
+            string[] suffixes =
+            [
+                "microsoft.com", "intel.fr", "intel.com", "nvidia.fr", "nvidia.com",
+                "amd.com", "memtest86.com", "wagnardsoft.com", "nirsoft.net"
+            ];
+            return suffixes.Any(suffix =>
+                host.Equals(suffix, StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void OpenTrustedDiagnostic(string target)
+        {
+            string[] allowed = ["services.msc", "devmgmt.msc", "appwiz.cpl", "timedate.cpl", "inetcpl.cpl"];
+            if (!allowed.Contains(target, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Outil de diagnostic non autorisé.");
+
+            string path = System.IO.Path.Combine(Environment.SystemDirectory, target);
+            if (!System.IO.File.Exists(path))
+                throw new System.IO.FileNotFoundException("Outil Windows introuvable.", path);
+            using var _ = Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+
+        private static void RunTrustedCommand(string target)
+        {
+            string normalized = (target ?? "").Trim();
+            string executable;
+            string arguments;
+
+            if (normalized.Equals("cmd /k chkdsk C: /f", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(Environment.SystemDirectory, "chkdsk.exe");
+                arguments = "C: /f";
+            }
+            else if (normalized.Equals("cmd /c SystemPropertiesProtection.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(Environment.SystemDirectory, "SystemPropertiesProtection.exe");
+                arguments = "";
+            }
+            else if (normalized.Equals("cmd /c taskmgr", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(Environment.SystemDirectory, "Taskmgr.exe");
+                arguments = "";
+            }
+            else if (normalized.Equals("cmd /c SystemPropertiesPerformance.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(Environment.SystemDirectory, "SystemPropertiesPerformance.exe");
+                arguments = "";
+            }
+            else if (normalized.Equals("cmd /c ipconfig /flushdns && pause", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(Environment.SystemDirectory, "ipconfig.exe");
+                arguments = "/flushdns";
+            }
+            else if (normalized.Equals("cmd /k w32tm /resync", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(Environment.SystemDirectory, "w32tm.exe");
+                arguments = "/resync";
+            }
+            else if (normalized.StartsWith("explorer ", StringComparison.OrdinalIgnoreCase))
+            {
+                executable = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe");
+                arguments = normalized["explorer ".Length..];
+            }
+            else
+            {
+                throw new InvalidOperationException("Commande non autorisée.");
+            }
+
+            if (!System.IO.File.Exists(executable))
+                throw new System.IO.FileNotFoundException("Outil Windows introuvable.", executable);
+            using var _ = Process.Start(new ProcessStartInfo(executable, arguments) { UseShellExecute = true });
         }
     }
 }

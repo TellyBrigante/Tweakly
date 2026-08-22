@@ -354,7 +354,14 @@ public sealed class LocalGpuLabService
             throw new ArgumentOutOfRangeException(nameof(profile), "Power Limit must be between 20 % and 150 %.");
         if (string.IsNullOrWhiteSpace(profile.Name) || profile.Name.Length is < 2 or > 60)
             throw new ArgumentException("Profile name must contain between 2 and 60 characters.", nameof(profile));
-        if (workloadSeconds < _policy.MinimumBaselineWorkloadSeconds || workloadSeconds > 120)
+        IReadOnlyList<string> protocolReasons = UndervoltProtocol.ValidateCandidate(profile);
+        if (protocolReasons.Count > 0)
+            throw new ArgumentException(
+                "The profile does not follow the Tweakly core-undervolt protocol: " +
+                string.Join(" | ", protocolReasons),
+                nameof(profile));
+        if (workloadSeconds < _policy.MinimumBaselineWorkloadSeconds
+            || workloadSeconds > UndervoltProtocol.LongValidationWorkloadSeconds)
             throw new ArgumentOutOfRangeException(nameof(workloadSeconds));
 
         GpuLabReadiness readiness = await InspectAsync(workloadPackageRoot, cancellationToken).ConfigureAwait(false);
@@ -378,6 +385,16 @@ public sealed class LocalGpuLabService
             || !GpuIdentityCompatibility.SameMeasurementEnvironment(baseline.Identity, readiness.Identity))
             throw new InvalidOperationException(
                 "The valid stock baseline was measured with a different GPU, VBIOS, or driver. Measure stock again.");
+
+        UndervoltTransitionAssessment transition = UndervoltProtocol.AssessTransition(
+            baseline,
+            profile,
+            session.Runs,
+            _policy);
+        if (!transition.Allowed)
+            throw new InvalidOperationException(
+                "Undervolt protocol blocked the measurement: " +
+                string.Join(" | ", transition.BlockingReasons));
 
         ExternalWorkloadDefinition[] definitions = LocalGpuWorkloadDefinitions.CreateSuite(
             workloadSeconds,

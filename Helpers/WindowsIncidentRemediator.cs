@@ -173,28 +173,48 @@ namespace Optimisation_Tool.Helpers
             if (services.Count == 0)
                 return Blocked("Aucun service VSS n'a été validé par le diagnostic.");
 
-            foreach (string service in services)
+            var stoppedByTweakly = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
             {
-                var state = QueryService(service);
-                if (state == null)
-                    return Blocked($"Le service {service} n'existe pas sur cette installation de Windows.");
-                if (state.Value.StartMode.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
-                    return Blocked($"Le service {service} est désactivé. Tweakly ne modifie pas son type de démarrage sans preuve supplémentaire.");
-
-                if (state.Value.State.Equals("Running", StringComparison.OrdinalIgnoreCase))
+                foreach (string service in services)
                 {
+                    var state = QueryService(service);
+                    if (state == null)
+                        return Blocked($"Le service {service} n'existe pas sur cette installation de Windows.");
+                    if (state.Value.StartMode.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
+                        return Blocked($"Le service {service} est désactivé. Tweakly ne modifie pas son type de démarrage sans preuve supplémentaire.");
+                    if (!state.Value.State.Equals("Running", StringComparison.OrdinalIgnoreCase))
+                        return Blocked($"Le service {service} était arrêté avant l'opération. Tweakly conserve cet état et refuse de le démarrer automatiquement.");
+
                     var stop = await RunAsync("sc.exe", $"stop \"{service}\"", TimeSpan.FromSeconds(30), cancellationToken);
                     if (stop.ExitCode != 0 && !stop.Output.Contains("SERVICE_NOT_ACTIVE", StringComparison.OrdinalIgnoreCase))
                         return Blocked($"Windows a refusé l'arrêt contrôlé du service {service}.");
                     if (!await WaitForServiceStateAsync(service, "Stopped", TimeSpan.FromSeconds(20), cancellationToken))
                         return Blocked($"Le service {service} ne s'est pas arrêté dans le délai prévu.");
-                }
+                    stoppedByTweakly.Add(service);
 
-                var start = await RunAsync("sc.exe", $"start \"{service}\"", TimeSpan.FromSeconds(30), cancellationToken);
-                if (start.ExitCode != 0 && !start.Output.Contains("SERVICE_ALREADY_RUNNING", StringComparison.OrdinalIgnoreCase))
-                    return Blocked($"Windows a refusé le redémarrage du service {service}.");
-                if (!await WaitForServiceStateAsync(service, "Running", TimeSpan.FromSeconds(20), cancellationToken))
-                    return Blocked($"Le service {service} n'est pas revenu à l'état actif.");
+                    var start = await RunAsync("sc.exe", $"start \"{service}\"", TimeSpan.FromSeconds(30), cancellationToken);
+                    if (start.ExitCode != 0 && !start.Output.Contains("SERVICE_ALREADY_RUNNING", StringComparison.OrdinalIgnoreCase))
+                        return Blocked($"Windows a refusé le redémarrage du service {service}.");
+                    if (!await WaitForServiceStateAsync(service, "Running", TimeSpan.FromSeconds(20), cancellationToken))
+                        return Blocked($"Le service {service} n'est pas revenu à l'état actif.");
+                    stoppedByTweakly.Remove(service);
+                }
+            }
+            finally
+            {
+                foreach (string service in stoppedByTweakly)
+                {
+                    try
+                    {
+                        _ = await RunAsync(
+                            "sc.exe", $"start \"{service}\"", TimeSpan.FromSeconds(30), CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppLog.Error("Réparation VSS : restauration du service " + service, ex);
+                    }
+                }
             }
 
             await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
@@ -434,6 +454,8 @@ namespace Optimisation_Tool.Helpers
             TimeSpan timeout,
             CancellationToken cancellationToken)
         {
+            if (!System.IO.Path.IsPathFullyQualified(fileName))
+                fileName = WindowsSystemTools.PathFor(fileName);
             var psi = new ProcessStartInfo(fileName, arguments)
             {
                 UseShellExecute = false,

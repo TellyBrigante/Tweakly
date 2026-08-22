@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 
@@ -50,6 +51,9 @@ namespace Optimisation_Tool.Helpers
         private const uint TPM_RIGHTBUTTON    = 0x0002;
         private const uint TPM_RETURNCMD      = 0x0100;
 
+        private const int SM_CXSMICON         = 49;
+        private const int SM_CYSMICON         = 50;
+
         private const int IDM_OPEN            = 1;
         private const int IDM_MINI            = 2;
         private const int IDM_QUIT            = 3;
@@ -82,6 +86,19 @@ namespace Optimisation_Tool.Helpers
 
         [DllImport("user32.dll")]
         private static extern bool DestroyIcon(IntPtr hIcon);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr CreateIconFromResourceEx(
+            byte[] presbits,
+            uint dwResSize,
+            bool fIcon,
+            uint dwVer,
+            int cxDesired,
+            int cyDesired,
+            uint flags);
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
 
         [DllImport("user32.dll")]
         private static extern IntPtr CreatePopupMenu();
@@ -121,13 +138,24 @@ namespace Optimisation_Tool.Helpers
 
             try
             {
-                // 1) Charger l'icone de l'exe (ApplicationIcon embarquee dans le PE).
+                // 1) Charger la variante tray dediee, simplifiee pour rester lisible
+                //    a 16-32 px. En cas d'echec, conserver l'icone de l'exe comme
+                //    fallback afin que le tray ne depende jamais de cette ressource.
                 try
                 {
-                    var exe = Process.GetCurrentProcess().MainModule!.FileName;
-                    _hIcon = ExtractIcon(IntPtr.Zero, exe, 0);
+                    _hIcon = LoadEmbeddedTrayIcon();
                 }
                 catch { _hIcon = IntPtr.Zero; }
+
+                if (_hIcon == IntPtr.Zero)
+                {
+                    try
+                    {
+                        var exe = Process.GetCurrentProcess().MainModule!.FileName;
+                        _hIcon = ExtractIcon(IntPtr.Zero, exe, 0);
+                    }
+                    catch { _hIcon = IntPtr.Zero; }
+                }
 
                 // 2) Enregistrer l'icone tray attachee au HWND de MainWindow.
                 //    Les messages WM_TRAYCALLBACK seront recus par le WindowProc de
@@ -149,6 +177,76 @@ namespace Optimisation_Tool.Helpers
             {
                 Dispose();
             }
+        }
+
+        private static IntPtr LoadEmbeddedTrayIcon()
+        {
+            var resource = Application.GetResourceStream(
+                new Uri("TweaklyTray.ico", UriKind.Relative));
+            if (resource?.Stream is null)
+                return IntPtr.Zero;
+
+            byte[] ico;
+            using (resource.Stream)
+            using (var memory = new MemoryStream())
+            {
+                resource.Stream.CopyTo(memory);
+                ico = memory.ToArray();
+            }
+
+            if (ico.Length < 6 ||
+                BitConverter.ToUInt16(ico, 0) != 0 ||
+                BitConverter.ToUInt16(ico, 2) != 1)
+                return IntPtr.Zero;
+
+            int count = BitConverter.ToUInt16(ico, 4);
+            int desiredWidth = Math.Max(16, GetSystemMetrics(SM_CXSMICON));
+            int desiredHeight = Math.Max(16, GetSystemMetrics(SM_CYSMICON));
+            int selectedOffset = -1;
+            int selectedLength = 0;
+            int selectedScore = int.MaxValue;
+
+            for (int index = 0; index < count; index++)
+            {
+                int entryOffset = 6 + (index * 16);
+                if (entryOffset < 0 || entryOffset > ico.Length - 16)
+                    return IntPtr.Zero;
+
+                int width = ico[entryOffset] == 0 ? 256 : ico[entryOffset];
+                int height = ico[entryOffset + 1] == 0 ? 256 : ico[entryOffset + 1];
+                int dataLength = checked((int)BitConverter.ToUInt32(ico, entryOffset + 8));
+                int dataOffset = checked((int)BitConverter.ToUInt32(ico, entryOffset + 12));
+                if (dataLength <= 0 ||
+                    dataOffset < 0 ||
+                    dataOffset > ico.Length - dataLength)
+                    return IntPtr.Zero;
+
+                int undersizedPenalty =
+                    width < desiredWidth || height < desiredHeight ? 10_000 : 0;
+                int score = undersizedPenalty +
+                            Math.Abs(width - desiredWidth) +
+                            Math.Abs(height - desiredHeight);
+                if (score >= selectedScore)
+                    continue;
+
+                selectedScore = score;
+                selectedOffset = dataOffset;
+                selectedLength = dataLength;
+            }
+
+            if (selectedOffset < 0)
+                return IntPtr.Zero;
+
+            byte[] iconBits = new byte[selectedLength];
+            Buffer.BlockCopy(ico, selectedOffset, iconBits, 0, selectedLength);
+            return CreateIconFromResourceEx(
+                iconBits,
+                checked((uint)iconBits.Length),
+                true,
+                0x00030000,
+                desiredWidth,
+                desiredHeight,
+                0);
         }
 
         /// <summary>

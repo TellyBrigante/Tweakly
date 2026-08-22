@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
+using Optimisation_Tool.Helpers;
 
 namespace Optimisation_Tool.Pages
 {
@@ -516,27 +517,16 @@ namespace Optimisation_Tool.Pages
 
         private static void RunCmd(string exe, string args, params int[] acceptedExitCodes)
         {
-            using var p = Process.Start(new ProcessStartInfo(exe, args)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
-            if (p == null) throw new InvalidOperationException($"{exe} n'a pas démarré");
+            ProcessCommandResult result = ProcessCommand.Run(WindowsSystemTools.PathFor(exe), args, 10_000);
+            if (result.Started && !result.TimedOut &&
+                (result.ExitCode == 0 || Array.IndexOf(acceptedExitCodes, result.ExitCode) >= 0))
+                return;
 
-            string output = p.StandardOutput.ReadToEnd();
-            string error = p.StandardError.ReadToEnd();
-            if (!p.WaitForExit(10_000))
-            {
-                try { p.Kill(entireProcessTree: true); } catch { }
-                throw new TimeoutException($"{exe} n'a pas répondu sous 10 s");
-            }
-            if (p.ExitCode == 0 || Array.IndexOf(acceptedExitCodes, p.ExitCode) >= 0) return;
-
-            string detail = string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim();
+            string detail = string.IsNullOrWhiteSpace(result.Error)
+                ? result.Output.Trim()
+                : result.Error.Trim();
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(detail)
-                ? $"{exe} a retourné le code {p.ExitCode}"
+                ? $"{exe} a retourné le code {result.ExitCode}"
                 : detail);
         }
     }

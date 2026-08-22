@@ -23,6 +23,7 @@ namespace Optimisation_Tool
         public  bool         ShuttingDown { get; private set; }
         private WindowState   _lastWindowState = WindowState.Normal;
         private bool          _restoreAfterTaskbarQueued;
+        private bool          _userRequestedMinimize;
 
         // Tray icon (zone de notification Windows) — gérée par TrayIconManager.
         // Null si l'init a échoué (cas rare : RDP sans tray, etc.) → on retombe sur le
@@ -78,7 +79,6 @@ namespace Optimisation_Tool
                 ["Privacy"]   = new Lazy<UserControl>(() => new PagePrivacy(this)),
                 ["Apps"]      = new Lazy<UserControl>(() => new PageApps(this)),
                 ["Fresh"]     = new Lazy<UserControl>(() => new PageFresh(this)),
-                ["WinRepair"] = new Lazy<UserControl>(() => new PageWindowsRepair(this)),
                 ["Registry"]  = new Lazy<UserControl>(() => new PageRegistryInspection()),
                 ["Info"]      = new Lazy<UserControl>(() => new PageSpecs(this)),
                 ["Monitoring"]= new Lazy<UserControl>(() => new PageMonitoring(this)),
@@ -99,7 +99,7 @@ namespace Optimisation_Tool
                 new NavGroup { Header = BtnNavOptimizeGroup, Panel = OptimizeGroupPanel, Label = "Optimiser",
                                Tags = new HashSet<string> { "Windows", "Battery", "CPU", "Fans", "Nvidia", "GpuTuning", "Reseau", "Privacy" } },
                 new NavGroup { Header = BtnNavRepairGroup, Panel = RepairGroupPanel, Label = "Maintenance",
-                               Tags = new HashSet<string> { "WinRepair", "Nettoyage", "Registry", "Apps" } },
+                               Tags = new HashSet<string> { "Nettoyage", "Registry", "Apps" } },
                 new NavGroup { Header = BtnNavPrepareGroup, Panel = PrepareGroupPanel, Label = "Réinstaller",
                                Tags = new HashSet<string> { "Fresh" } },
             };
@@ -114,7 +114,11 @@ namespace Optimisation_Tool
                 // Répare en arrière-plan les tâches « démarrer avec Windows » créées par
                 // d'anciennes versions (sans le flag --startup) — sinon l'app s'ouvrirait en
                 // grand au boot au lieu de rester minimisée. Best-effort, ne bloque pas l'UI.
-                _ = Task.Run(() => { try { Helpers.StartupManager.EnsureStartupArg(); } catch { } });
+                _ = Task.Run(() =>
+                {
+                    try { Helpers.StartupManager.EnsureStartupArg(); }
+                    catch (Exception ex) { Helpers.AppLog.Error("Démarrage Windows : vérification de la tâche", ex); }
+                });
 
                 // Charger + appliquer les settings sauvegardés
                 Settings = AppSettings.Load();
@@ -131,7 +135,7 @@ namespace Optimisation_Tool
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        try { _ = Helpers.FanRuntimeController.TryStartSavedProfileAsync(); }
+                        try { _ = TryStartSavedFanProfileSafelyAsync(); }
                         catch { Helpers.FanRuntimeController.StopAndRestore(); }
                     }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 }
@@ -222,6 +226,8 @@ namespace Optimisation_Tool
                         }), System.Windows.Threading.DispatcherPriority.ContextIdle);
                     }
                     catch { }
+
+                    ScheduleManualLaunchVisibilityGuard();
                 }
 
 #if DEBUG
@@ -259,6 +265,19 @@ namespace Optimisation_Tool
                 }
 #endif
             };
+        }
+
+        private static async Task TryStartSavedFanProfileSafelyAsync()
+        {
+            try
+            {
+                await Helpers.FanRuntimeController.TryStartSavedProfileAsync();
+            }
+            catch (Exception ex)
+            {
+                Helpers.FanRuntimeController.StopAndRestore();
+                Helpers.AppLog.Error("Ventilation : profil automatique de démarrage", ex);
+            }
         }
 
         private void ResumeActiveBatteryCalibrationIfNeeded()
@@ -606,6 +625,7 @@ namespace Optimisation_Tool
         {
             // Comportement validé avec l'utilisateur (v1.3.0) : le bouton _ envoie dans
             // la tray icon (cache fenêtre + barre des tâches). Fallback si tray indispo.
+            _userRequestedMinimize = true;
             if (_tray?.IsAvailable == true) _tray.HideToTray();
             else                            WindowState = WindowState.Minimized;
         }
@@ -818,6 +838,45 @@ namespace Optimisation_Tool
             t.Start();
         }
 
+        private void ScheduleManualLaunchVisibilityGuard()
+        {
+            try
+            {
+                QueueManualLaunchVisibilityGuard(TimeSpan.FromMilliseconds(900));
+                QueueManualLaunchVisibilityGuard(TimeSpan.FromMilliseconds(2400));
+            }
+            catch { }
+        }
+
+        private void QueueManualLaunchVisibilityGuard(TimeSpan delay)
+        {
+            var timer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = delay,
+            };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                try
+                {
+                    if (ShuttingDown || _userRequestedMinimize) return;
+                    if (App.ShouldStartMinimized(Settings.StartMinimized)) return;
+                    if (WindowState != WindowState.Minimized) return;
+
+                    TraceWindowRestore("manual-launch-visibility-guard restore");
+                    WindowState = WindowState.Normal;
+                    ShowInTaskbar = true;
+                    if (!IsVisible) Show();
+                    ForceForeground();
+                }
+                catch (Exception ex)
+                {
+                    Helpers.AppLog.Error("Fenêtre : garde-fou visibilité démarrage manuel", ex);
+                }
+            };
+            timer.Start();
+        }
+
         /// <summary>
         /// Passation depuis le SPLASH (v1.3.5) : quand le splash se ferme, Windows peut
         /// rendre le foreground à explorer au lieu de MainWindow → l'app « restait dans la
@@ -987,11 +1046,6 @@ namespace Optimisation_Tool
                     && batteryPage.Value is PageBatteryCalibration battery)
                     battery.PrepareForAppShutdown();
 
-                if (_pages.TryGetValue("WinRepair", out var repairPage)
-                    && repairPage.IsValueCreated
-                    && repairPage.Value is PageWindowsRepair repair)
-                    repair.CancelForAppShutdown();
-
                 if (_pages.TryGetValue("Fans", out var fanPage)
                     && fanPage.IsValueCreated
                     && fanPage.Value is PageVentilation ventilation)
@@ -1102,6 +1156,12 @@ namespace Optimisation_Tool
             {
                 var ts = DateTime.Now.ToString("HH:mm:ss");
                 TxtLog.Text += $"[{ts}] {message}\n";
+                const int maxLogCharacters = 50_000;
+                if (TxtLog.Text.Length > maxLogCharacters)
+                {
+                    int cut = TxtLog.Text.IndexOf('\n', TxtLog.Text.Length - maxLogCharacters);
+                    TxtLog.Text = cut >= 0 ? TxtLog.Text[(cut + 1)..] : TxtLog.Text[^maxLogCharacters..];
+                }
                 LogScroll.ScrollToBottom();
             });
         }

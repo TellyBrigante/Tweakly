@@ -14,12 +14,21 @@
     <RootNamespace>Optimisation_Tool</RootNamespace>
     <AssemblyName>Tweakly</AssemblyName>
     <ApplicationIcon>Tweakly.ico</ApplicationIcon>
-    <Version>1.5.2</Version>
+    <Version>1.5.3</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <!-- App Windows-only (WPF + WMI) : CA1416 "API Windows uniquement" = faux positifs -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!--
+      Visual Studio peut générer un projet WPF temporaire avec un dossier
+      intermédiaire "obj\Any CPU". Le SDK réévalue alors les fichiers générés
+      comme des éléments de projet et fait échouer le build DesignTime/MSB4248.
+      Les sorties d'audit et de validation ne font pas partie des sources de
+      Tweakly et ne doivent pas être parcourues par le projet.
+    -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**;.candidate-repair-*\**;_audit_validation\**;_gpu_audit_build\**;_icon_build\**;_registry_build\**;_repair_output\**;_repair_test_build\**;_repair_wim_tool\**;_codex_metadata_probe\**;_psf_marker_test_*\**;_uup_audit\**;_uup_payload_26200_8973\**</DefaultItemExcludes>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,6 +41,16 @@
   <!-- Icône embarquée comme ressource (pour l'icône de fenêtre / barre des tâches) -->
   <ItemGroup>
     <Resource Include="Tweakly.ico" />
+    <Resource Include="TweaklyTray.ico" />
+    <Resource Include="Resources\Fonts\InstrumentSans-VariableFont_wdth,wght.ttf" />
+  </ItemGroup>
+
+  <!-- Licence de la police embarquée (SIL Open Font License 1.1) -->
+  <ItemGroup>
+    <Content Include="Resources\Fonts\OFL-InstrumentSans.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
   <!-- Dossier data/ — copié au build ET au publish -->
@@ -43,13 +62,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Tweakly.RegistryTests\**\*.cs" />
-    <Compile Remove="FanControl.Tests\**\*.cs" />
-    <Compile Remove="FanControl.Core\**\*.cs" />
-    <Compile Remove="GpuTuningLab.Tests\**\*.cs" />
-    <Compile Remove="GpuTuningLab.Core\**\*.cs" />
-    <Compile Remove="GpuTuningLab.Workloads\**\*.cs" />
-    <Compile Remove="Labs\**\*.cs" />
+    <Compile Include="**\*.cs"
+             Exclude="bin\**;obj\**;.candidate-repair-*\**;Tweakly.RegistryTests\**;FanControl.Tests\**;FanControl.Core\**;GpuTuningLab.Tests\**;GpuTuningLab.Core\**;GpuTuningLab.Workloads\**;Labs\**;_audit_validation\**;_gpu_audit_build\**;_icon_build\**;_registry_build\**;_repair_output\**;_repair_test_build\**;_repair_wim_tool\**;_codex_metadata_probe\**;_uup_audit\**;_uup_payload_26200_8973\**" />
   </ItemGroup>
 
   <ItemGroup>

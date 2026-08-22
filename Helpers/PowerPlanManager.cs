@@ -251,7 +251,7 @@ namespace Optimisation_Tool.Helpers
 
         private static CommandResult RunPowerCfg(string arguments)
         {
-            ProcessCommandResult result = ProcessCommand.Run("powercfg", arguments, 15_000);
+            ProcessCommandResult result = ProcessCommand.Run(WindowsSystemTools.PathFor("powercfg.exe"), arguments, 15_000);
             return new CommandResult(result.Success, result.Output, result.Error, result.ExitCode);
         }
 

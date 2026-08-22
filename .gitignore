@@ -27,6 +27,23 @@ installer/
 release-stage/
 _watchdog_publish_test/
 
+# Artefacts locaux d'audit et de réparation — jamais versionnés.
+# Les images WIM/UUP et les sorties de tests restent hors du dépôt propre.
+_repair_output/
+RepairCache/
+.candidate-repair*
+_uup_payload_*/
+_uup_audit/
+_audit_validation/
+_codex_*/
+_codex_*.ps1
+_gpu_audit_build/
+_icon_build/
+_registry_build/
+_repair_test_build/
+_psf_marker_test_*/
+_repair_wim_tool/
+
 # OS
 Thumbs.db
 .DS_Store

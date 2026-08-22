@@ -531,7 +531,7 @@ namespace Optimisation_Tool.Helpers
             }
             else
             {
-                steps.Add("Ouvre Réparation Windows pour lancer DISM puis SFC dans le bon ordre.");
+                steps.Add("Vérifie l'intégrité de Windows avec les outils système hors Tweakly.");
                 steps.Add("Teste la RAM avec MemTest86 — un module système qui plante TRÈS souvent = barrette qui se trompe sur 1 bit de temps en temps.");
                 steps.Add("Force les dernières mises à jour Windows.");
             }
@@ -546,8 +546,6 @@ namespace Optimisation_Tool.Helpers
             }
             else if (isSysModule)
             {
-                actions.Add(new() { Label = "Réparation Windows", Tooltip = "Lance DISM puis SFC dans le bon ordre.",
-                                    Kind = LogActionKind.Navigate, Target = "WinRepair" });
                 actions.Add(new() { Label = "MemTest86", Tooltip = "Test de RAM bootable.",
                                     Kind = LogActionKind.Url, Target = "https://www.memtest86.com/" });
             }
@@ -608,10 +606,10 @@ namespace Optimisation_Tool.Helpers
                     new() { Label = "Ouvrir services.msc",
                             Tooltip = "Console des services Windows.",
                             Kind = LogActionKind.Diag, Target = "services.msc" },
-                    new() { Label = "Désactiver ce service",
-                            Tooltip = $"sc stop + sc config start=disabled sur « {svc} ». Réversible via services.msc.",
-                            Kind = LogActionKind.Command, Confirm = true,
-                            Target = $"cmd /k sc stop \"{svc}\" & sc config \"{svc}\" start= disabled" },
+                    new() { Label = "Examiner ce service",
+                            Tooltip = $"Ouvre services.msc pour vérifier « {svc} ». Tweakly ne désactive pas automatiquement un service à partir d'une simple corrélation d'événements.",
+                            Kind = LogActionKind.Diag, Confirm = false,
+                            Target = "services.msc" },
                 },
             };
         }

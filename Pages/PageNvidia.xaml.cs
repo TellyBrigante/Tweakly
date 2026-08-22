@@ -369,6 +369,7 @@ namespace Optimisation_Tool.Pages
             {
                 try
                 {
+                    using IDisposable inspectorLease = Helpers.BundledFileTrust.OpenVerifiedLease(inspectorPath);
                     using var p = Process.Start(new ProcessStartInfo(
                         inspectorPath, $"-importProfile \"{profilePath}\"")
                     {

@@ -7,7 +7,7 @@ namespace Optimisation_Tool.Helpers
 {
     /// <summary>
     /// Installe / désinstalle le pilote PawnIO (requis pour lire la température CPU) via l'installeur
-    /// OFFICIEL signé Microsoft, bundlé dans data\PawnIO_setup.exe. L'application tournant déjà en
+    /// fourni par le projet PawnIO et verrouillé par empreinte SHA-256 dans data\drivers. L'application tournant déjà en
     /// administrateur (manifest requireAdministrator), l'installation se fait EN SILENCE et SANS prompt
     /// UAC supplémentaire. Tout est best-effort : aucune exception ne remonte.
     /// </summary>
@@ -41,8 +41,18 @@ namespace Optimisation_Tool.Helpers
             if (IsInstalled()) return (true, "pilote déjà présent");
             if (!File.Exists(SetupPath)) return (false, "installeur PawnIO introuvable dans data\\");
 
-            ProcessCommandResult install = await Task.Run(() =>
-                ProcessCommand.Run(SetupPath, "-install -silent", 120_000));
+            ProcessCommandResult install;
+            try
+            {
+                using IDisposable trustLease = BundledFileTrust.OpenVerifiedLease(SetupPath);
+                install = await Task.Run(() =>
+                    ProcessCommand.Run(SetupPath, "-install -silent", 120_000));
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("pawnio-install-trust", "PawnIO : installeur non fiable", ex);
+                return (false, "empreinte de l'installeur PawnIO invalide");
+            }
 
             // Le service peut apparaître avec un léger délai après la fin de l'installeur.
             for (int i = 0; i < 12 && !IsInstalled(); i++) await Task.Delay(300);
@@ -63,8 +73,18 @@ namespace Optimisation_Tool.Helpers
         public static async Task<bool> UninstallAsync()
         {
             if (!IsInstalled()) return true;
-            ProcessCommandResult uninstall = await Task.Run(() =>
-                ProcessCommand.Run(SetupPath, "-uninstall -silent", 120_000));
+            ProcessCommandResult uninstall;
+            try
+            {
+                using IDisposable trustLease = BundledFileTrust.OpenVerifiedLease(SetupPath);
+                uninstall = await Task.Run(() =>
+                    ProcessCommand.Run(SetupPath, "-uninstall -silent", 120_000));
+            }
+            catch (Exception ex)
+            {
+                AppLog.ErrorOnce("pawnio-uninstall-trust", "PawnIO : installeur non fiable", ex);
+                return false;
+            }
             bool removed = !IsInstalled();
             if (!uninstall.Success && !removed)
                 AppLog.WriteOnce("pawnio-uninstall", "PawnIO : désinstallation échouée : " + uninstall.FailureDescription);
